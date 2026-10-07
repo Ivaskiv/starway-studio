@@ -11,6 +11,27 @@ type StartupLogger = Pick<typeof console, 'log' | 'warn' | 'error'>
 
 type ZoomRole = 'user' | 'coach'
 
+type PersistentZoomCalendarMenu = {
+  type: 'web_app'
+  text: 'ZOOM КАЛЕНДАР'
+  web_app: { url: string }
+}
+
+const MENU_VERIFICATION_ATTEMPTS = 7
+const MENU_VERIFICATION_RETRY_DELAY_MS = 400
+const PRIVATE_MENU_ENSURE_TTL_MS = 60_000
+
+type ZoomMenuVerificationTarget = {
+  chatId?: number
+}
+
+type CachedPrivateMenu = {
+  url: string
+  expiresAt: number
+}
+
+const privateMenuCache = new WeakMap<Telegraf, Map<string, CachedPrivateMenu>>()
+
 type MainTelegramConsumerInput = {
   bot: Telegraf
   botName: string
@@ -51,6 +72,10 @@ function resolveLogger(logger?: StartupLogger): StartupLogger {
   return logger ?? console
 }
 
+function isDevelopmentRuntime(): boolean {
+  return process.env.NODE_ENV === 'development'
+}
+
 export function safeStartupErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message
@@ -59,7 +84,11 @@ export function safeStartupErrorMessage(error: unknown): string {
   return String(error)
 }
 
-function buildPersistentZoomCalendarMenu(zoomRole: ZoomRole) {
+/*
+ * USER ZOOM MENU CONTRACT — FROZEN
+ * Conversation flows must never replace or remove this menu.
+ */
+function buildPersistentZoomCalendarMenu(zoomRole: ZoomRole): PersistentZoomCalendarMenu {
   const calendarUrl = new URL(buildZoomCalendarUrl())
   calendarUrl.searchParams.set('zoomRole', zoomRole)
 
@@ -72,49 +101,174 @@ function buildPersistentZoomCalendarMenu(zoomRole: ZoomRole) {
   }
 }
 
+function isExpectedPersistentZoomCalendarMenu(
+  actualMenu: unknown,
+  expectedMenu: PersistentZoomCalendarMenu,
+): boolean {
+  if (!actualMenu || typeof actualMenu !== 'object') return false
+
+  const actual = actualMenu as {
+    type?: unknown
+    text?: unknown
+    web_app?: { url?: unknown }
+  }
+
+  return actual.type === expectedMenu.type
+    && actual.text === expectedMenu.text
+    && actual.web_app?.url === expectedMenu.web_app.url
+}
+
+function waitForMenuVerification(delayMs: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, delayMs))
+}
+
+async function setPersistentZoomCalendarMenu(
+  bot: Telegraf,
+  expectedMenu: PersistentZoomCalendarMenu,
+  target: ZoomMenuVerificationTarget = {},
+): Promise<void> {
+  await bot.telegram.setChatMenuButton({
+    ...(target.chatId === undefined ? {} : { chatId: target.chatId }),
+    menuButton: expectedMenu,
+  })
+}
+
+function getPersistentZoomCalendarMenu(
+  bot: Telegraf,
+  target: ZoomMenuVerificationTarget = {},
+) {
+  return target.chatId === undefined
+    ? bot.telegram.getChatMenuButton()
+    : bot.telegram.getChatMenuButton({ chatId: target.chatId })
+}
+
+export async function verifyPersistentZoomCalendarMenu(
+  bot: Telegraf,
+  expectedMenu: PersistentZoomCalendarMenu,
+  options: { attempts?: number; retryDelayMs?: number; chatId?: number } = {},
+): Promise<void> {
+  const attempts = options.attempts ?? MENU_VERIFICATION_ATTEMPTS
+  const retryDelayMs = options.retryDelayMs ?? MENU_VERIFICATION_RETRY_DELAY_MS
+  let lastMenu: unknown = null
+  let lastError: unknown = null
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      lastMenu = await getPersistentZoomCalendarMenu(bot, { chatId: options.chatId })
+      lastError = null
+      if (isExpectedPersistentZoomCalendarMenu(lastMenu, expectedMenu)) return
+    } catch (error) {
+      lastError = error
+    }
+
+    if (attempt < attempts) {
+      await setPersistentZoomCalendarMenu(bot, expectedMenu, { chatId: options.chatId })
+      await waitForMenuVerification(retryDelayMs * attempt)
+    }
+  }
+
+  const observed = lastMenu && typeof lastMenu === 'object'
+    ? JSON.stringify(lastMenu)
+    : null
+  const reason = lastError ? safeStartupErrorMessage(lastError) : observed
+  throw new Error(
+    `Telegram did not persist the expected Zoom Calendar default menu after ${attempts} readbacks; expected=${expectedMenu.web_app.url}; observed=${reason ?? 'no menu returned'}`,
+  )
+}
+
+function isPrivateChatWithId(ctx: { chat?: { id?: string | number; type?: string } }): ctx is {
+  chat: { id: string | number; type: 'private' }
+} {
+  return ctx.chat?.type === 'private' && Number.isFinite(Number(ctx.chat.id))
+}
+
+export async function applyZoomMenuForChat(
+  bot: Telegraf,
+  chatId: string | number | undefined,
+  logger: StartupLogger,
+  options: { zoomRole?: ZoomRole; force?: boolean } = {},
+): Promise<void> {
+  const zoomRole = options.zoomRole ?? 'user'
+  const normalizedChatId = chatId === undefined ? undefined : String(chatId)
+  const expectedMenu = buildPersistentZoomCalendarMenu(zoomRole)
+
+  if (normalizedChatId && !options.force) {
+    const cachedMenu = privateMenuCache.get(bot)?.get(normalizedChatId)
+    if (cachedMenu?.url === expectedMenu.web_app.url && cachedMenu.expiresAt > Date.now()) {
+      return
+    }
+  }
+
+  try {
+    const target = normalizedChatId ? { chatId: Number(normalizedChatId) } : {}
+    await setPersistentZoomCalendarMenu(bot, expectedMenu, target)
+
+    if (normalizedChatId && (options.force || process.env.NODE_ENV !== 'production')) {
+      await verifyPersistentZoomCalendarMenu(bot, expectedMenu, {
+        ...target,
+        attempts: options.force ? MENU_VERIFICATION_ATTEMPTS : 2,
+        retryDelayMs: options.force ? MENU_VERIFICATION_RETRY_DELAY_MS : 0,
+      })
+      logger.log('[ZOOM_MENU_VERIFY]', {
+        type: expectedMenu.type,
+        text: expectedMenu.text,
+        urlHost: new URL(expectedMenu.web_app.url).host,
+        matchesExpectedMenu: true,
+      })
+    }
+
+    if (normalizedChatId) {
+      const cache = privateMenuCache.get(bot) ?? new Map<string, CachedPrivateMenu>()
+      cache.set(normalizedChatId, {
+        url: expectedMenu.web_app.url,
+        expiresAt: Date.now() + PRIVATE_MENU_ENSURE_TTL_MS,
+      })
+      privateMenuCache.set(bot, cache)
+    }
+  } catch (error) {
+    if (normalizedChatId) {
+      logger.warn('[TELEGRAM_ZOOM_MENU_CHAT_REFRESH_FAILED]', {
+        chatId: normalizedChatId,
+        error: safeStartupErrorMessage(error),
+      })
+      return
+    }
+    throw error
+  }
+}
+
 async function configurePersistentZoomCalendarMenu(
   bot: Telegraf,
   zoomRole: ZoomRole,
   logger: StartupLogger,
 ): Promise<void> {
   const expectedMenu = buildPersistentZoomCalendarMenu(zoomRole)
-
   try {
-    /*
-     * No chatId intentionally.
-     *
-     * This configures the bot-level default menu button.
-     * It must not depend on /start, a particular chat, Focus state,
-     * reply keyboards, or persisted application state.
-     */
-    await bot.telegram.setChatMenuButton({
-      menuButton: expectedMenu,
-    })
+    await applyZoomMenuForChat(bot, undefined, logger, { zoomRole })
 
     /*
      * Do not treat a successful SET request as proof.
      * Read the state back from Telegram immediately.
      */
-    const actualMenu = await bot.telegram.getChatMenuButton()
-
-    const matchesExpectedMenu =
-      actualMenu.type === 'web_app'
-      && actualMenu.text === expectedMenu.text
-      && actualMenu.web_app.url === expectedMenu.web_app.url
-
-    if (!matchesExpectedMenu) {
-      throw new Error(
-        `Telegram did not persist the expected ${zoomRole} Zoom Calendar default menu button`,
-      )
-    }
+    await verifyPersistentZoomCalendarMenu(bot, expectedMenu)
 
     logger.log('[TELEGRAM_ZOOM_MENU_READY]', {
       role: zoomRole,
-      type: actualMenu.type,
-      text: actualMenu.text,
-      url: actualMenu.web_app.url,
+      type: expectedMenu.type,
+      text: expectedMenu.text,
+      url: expectedMenu.web_app.url,
     })
   } catch (error) {
+    if (isDevelopmentRuntime()) {
+      logger.warn('[TELEGRAM_ZOOM_MENU_CONFIGURATION_WARNING]', {
+        role: zoomRole,
+        environment: process.env.NODE_ENV,
+        expectedUrl: expectedMenu.web_app.url,
+        observedMenu: safeStartupErrorMessage(error),
+      })
+      return
+    }
+
     logger.error('[TELEGRAM_ZOOM_MENU_CONFIGURATION_ERROR]', {
       role: zoomRole,
       error: safeStartupErrorMessage(error),
@@ -127,6 +281,30 @@ async function configurePersistentZoomCalendarMenu(
      */
     throw error
   }
+}
+
+function isStartCommand(ctx: { message?: unknown }): boolean {
+  const message = ctx.message
+  if (!message || typeof message !== 'object' || !('text' in message)) return false
+
+  const text = (message as { text?: unknown }).text
+  return typeof text === 'string' && /^\/start(?:\s|$)/.test(text.trim())
+}
+
+export function registerZoomMenuAfterHandlerEnforcement(
+  bot: Telegraf,
+  options: { zoomRole: ZoomRole },
+  logger: StartupLogger = console,
+): void {
+  bot.use(async (ctx, next) => {
+    if (isPrivateChatWithId(ctx)) {
+      await applyZoomMenuForChat(bot, ctx.chat.id, logger, {
+        ...options,
+        force: isStartCommand(ctx),
+      })
+    }
+    await next()
+  })
 }
 
 async function configureMainBotCommands(

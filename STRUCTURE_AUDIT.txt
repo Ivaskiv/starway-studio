@@ -1,0 +1,1372 @@
+=== STARWAY REPOSITORY STRUCTURE ===
+вторник, 22 сентября 2026 г. 19:28:30 (CEST)
+
+--- GIT BRANCH & STATUS ---
+main
+ M apps/web/public/telegram-legacy/telegram-webview.js
+ M apps/web/src/app/router/AppRouter.tsx
+ M apps/web/src/app/router/AppRouter.zoom-route.test.tsx
+ M apps/web/src/components/miniapp/BottomNav.tsx
+ M apps/web/src/components/miniapp/MiniAppLayout.tsx
+ M apps/web/src/env.d.ts
+ M apps/web/src/features/auth/context/SessionOrchestratorContext.tsx
+ M apps/web/src/features/auth/utils/sessionSync.ts
+ M apps/web/src/features/zoom/CoachZoomPanel.tsx
+ M apps/web/src/features/zoom/UserZoomPanel.tsx
+ M apps/web/src/features/zoom/components/calendar/Calendar.tsx
+ M apps/web/src/features/zoom/components/calendar/SessionCard.tsx
+ M apps/web/src/features/zoom/components/calendar/SessionForm.tsx
+ M apps/web/src/features/zoom/hooks/useCalendar.ts
+ M apps/web/src/features/zoom/pages/ZoomCalendarPage.tsx
+ M apps/web/src/features/zoom/routes/MiniAppCalendarRoute.tsx
+ M apps/web/src/features/zoom/zoom.api.ts
+ M apps/web/src/features/zoom/zoom.types.ts
+ M apps/web/src/features/zoom/zoom.utils.ts
+ M apps/web/src/layout/MainLayout.tsx
+ M apps/web/src/layout/MainLayout.zoom-shell.test.tsx
+ M apps/web/src/services/api.ts
+RD apps/web/src/features/zoom/CoachZoomPanel.test.tsx -> apps/web/tests/features/zoom/CoachZoomPanel.test.tsx
+RM apps/web/src/features/zoom/UserZoomPanel.test.tsx -> apps/web/tests/features/zoom/UserZoomPanel.test.tsx
+R  apps/web/src/features/zoom/components/BattleInstruction.test.tsx -> apps/web/tests/features/zoom/components/BattleInstruction.test.tsx
+RM apps/web/src/features/zoom/components/calendar/Calendar.test.tsx -> apps/web/tests/features/zoom/components/calendar/Calendar.test.tsx
+R  apps/web/src/features/zoom/components/calendar/DaySessionsSheet.test.tsx -> apps/web/tests/features/zoom/components/calendar/DaySessionsSheet.test.tsx
+RM apps/web/src/features/zoom/components/calendar/SessionCard.test.tsx -> apps/web/tests/features/zoom/components/calendar/SessionCard.test.tsx
+RM apps/web/src/features/zoom/components/calendar/SessionForm.test.tsx -> apps/web/tests/features/zoom/components/calendar/SessionForm.test.tsx
+R  apps/web/src/features/zoom/hooks/useCalendar.test.tsx -> apps/web/tests/features/zoom/hooks/useCalendar.test.tsx
+RM apps/web/src/features/zoom/pages/ZoomCalendarPage.test.tsx -> apps/web/tests/features/zoom/pages/ZoomCalendarPage.test.tsx
+ M backend/src/bot/content/coachBot.content.ts
+ M backend/src/bot/flows/contentPlanner.flow.ts
+ M backend/src/bot/handlers/coach-content/audio.ts
+ M backend/src/bot/handlers/coach-content/shared.ts
+ M backend/src/bot/handlers/coach/menu.ts
+ M backend/src/bot/handlers/coach/register.ts
+ M backend/src/bot/handlers/coach/runtime.ts
+ M backend/src/bot/handlers/coach/schedule.ts
+ M backend/src/bot/handlers/coach/zoom.ts
+ M backend/src/core/rendering/telegramRenderer.ts
+ M backend/src/core/transport/telegramReply.ts
+ M backend/src/lib/telegram.ts
+ M backend/src/lib/telegram/messageFormatter.ts
+ M backend/src/modules/auth/api/controller.ts
+ M backend/src/modules/auth/service/credentials.ts
+ M backend/src/modules/auth/service/social.ts
+ M backend/src/modules/auth/service/tokens.ts
+ M backend/src/modules/auth/telegram.ts
+ M backend/src/modules/content-pipeline/pipeline.controller.ts
+ M backend/src/modules/daily-cycle/telegram.ts
+ M backend/src/modules/deeplinks/service.ts
+ M backend/src/modules/subscriptions/api/checkout.ts
+ M backend/src/modules/subscriptions/payments/business/processing.ts
+ M backend/src/modules/subscriptions/payments/callback/focus-onboarding.ts
+ M backend/src/modules/subscriptions/payments/callback/focus.ts
+ M backend/src/modules/subscriptions/payments/callback/handler.ts
+ M backend/src/modules/subscriptions/payments/callback/notifications.ts
+ M backend/src/modules/subscriptions/payments/callback/processing.ts
+ M backend/src/modules/subscriptions/payments/callback/success.ts
+ M backend/src/modules/subscriptions/payments/callback/targets.ts
+ M backend/src/modules/subscriptions/payments/wayforpay/checkout.ts
+ M backend/src/modules/subscriptions/payments/wayforpay/service.ts
+ M backend/src/modules/telegram-mentor/bot/callback.ts
+ M backend/src/modules/telegram-mentor/bot/messages.ts
+ M backend/src/modules/telegram-mentor/bot/register.ts
+ M backend/src/modules/telegram-mentor/bot/zoom-admin.ts
+ M backend/src/modules/telegram-mentor/conversation/delivery/planDelivery.ts
+ M backend/src/modules/telegram-mentor/handlers/homeScreen.builder.ts
+ M backend/src/modules/telegram-mentor/handlers/start.menu.ts
+ M backend/src/modules/telegram-mentor/handlers/start.ts
+ M backend/src/modules/telegram-mentor/runtime/botConfig.ts
+ M backend/src/modules/telegram-mentor/services/delivery/event-bus/zoom.ts
+ M backend/src/modules/telegram-mentor/session.ts
+ M backend/src/modules/zoom/api/routes.ts
+ M backend/src/modules/zoom/api/zoom.admin.handler.ts
+ M backend/src/modules/zoom/attendance/zoom.attendance.service.ts
+ M backend/src/modules/zoom/battle/battle.service.ts
+ M backend/src/modules/zoom/booking/zoom.availability.service.ts
+ M backend/src/modules/zoom/booking/zoom.booking.service.ts
+ M backend/src/modules/zoom/calendar/zoom.calendar.service.ts
+ M backend/src/modules/zoom/index.ts
+ M backend/src/modules/zoom/notifications/zoom.reminders.service.ts
+ M backend/src/modules/zoom/private/zoom.private-booking.service.ts
+ M backend/src/modules/zoom/reports/zoomPostReport.types.ts
+ M backend/src/products/ab-system/content/abTest.results.test-drive.ts
+ M backend/src/products/ab-system/content/abTest.results.ts
+ M backend/src/products/ab-system/content/abTest.shared.ts
+ M backend/src/products/ab-system/content/focusContent.sync.ts
+ M backend/src/products/ab-system/telegram/handler.ts
+ M backend/src/products/ab-system/telegram/keyboard-policy.ts
+ M backend/src/products/ab-system/telegram/view-practice.ts
+ M backend/src/products/ab-system/telegram/view-result.ts
+ M backend/src/services/notifications/NotificationService.queue.ts
+ M backend/src/services/scheduler/zoom.ts
+ M backend/tests/integration/modules/telegram-mentor/handlers/start.integration.test.ts
+ M backend/tests/unit/bot/content/coach-buttons.test.ts
+ M backend/tests/unit/bot/handlers/coach/menu.test.ts
+ M backend/tests/unit/bot/handlers/coach/register.test.ts
+ M backend/tests/unit/bot/handlers/coach/start-registration.test.ts
+ M backend/tests/unit/interactive/telegram-ngrok-sync.test.ts
+ M backend/tests/unit/lib/telegram/delivery.architecture.test.ts
+ M backend/tests/unit/lib/telegram/message-formatter.test.ts
+ M backend/tests/unit/modules/auth/service/telegram-miniapp.test.ts
+ M backend/tests/unit/modules/auth/telegram.test.ts
+ M backend/tests/unit/modules/deeplinks/service.test.ts
+ M backend/tests/unit/modules/subscriptions/payments/business/processing.test.ts
+ M backend/tests/unit/modules/subscriptions/payments/callback/handler.test.ts
+ M backend/tests/unit/modules/subscriptions/payments/callback/notifications.test.ts
+ M backend/tests/unit/modules/subscriptions/payments/callback/processing.test.ts
+ M backend/tests/unit/modules/telegram-mentor/handlers/home-screen.builder.test.ts
+ M backend/tests/unit/modules/telegram-mentor/handlers/start.menu.access.test.ts
+ M backend/tests/unit/modules/zoom/api.individual-session.test.ts
+ M backend/tests/unit/modules/zoom/availability.service.test.ts
+ M backend/tests/unit/modules/zoom/booking.access-guard.test.ts
+ M backend/tests/unit/modules/zoom/private-booking.test.ts
+ M backend/tests/unit/modules/zoom/service.booking.test.ts
+ M backend/tests/unit/products/ab-system/telegram/views.test.ts
+ M package.json
+ M packages/db/prisma/schema.prisma
+ M scripts/dev/cloudflare-dev.mjs
+?? STARWAY_FINAL_CONVERSATION_AUDIT.txt
+?? STRUCTURE_AUDIT.txt
+?? apps/web/src/features/zoom/ZoomAvailabilityEditor.tsx
+?? apps/web/src/features/zoom/components/calendar/UserZoomStatusBadge.tsx
+?? apps/web/tests/features/zoom/CoachZoomPanel.test.ts
+?? apps/web/tests/features/zoom/UserZoomActions.recovery.test.tsx
+?? apps/web/tests/features/zoom/calendar-source.test.ts
+?? apps/web/tests/features/zoom/components/calendar/SessionForm.error.test.ts
+?? apps/web/tests/features/zoom/routes/
+?? apps/web/tests/features/zoom/sessionStatusVariant.test.ts
+?? backend/src/lib/telegram/formatting.ts
+?? backend/src/lib/telegram/html.ts
+?? backend/src/lib/telegram/index.ts
+?? backend/src/lib/telegram/media.ts
+?? backend/src/lib/telegram/send.ts
+?? backend/src/lib/telegram/types.ts
+?? backend/src/modules/telegram-mentor/conversation/queue/perChatFlowQueue.ts
+?? backend/src/modules/zoom/commerce/
+?? backend/src/modules/zoom/domain/
+?? backend/src/modules/zoom/reports/zoomCompletionDraft.service.ts
+?? backend/src/scripts/legacy-individual-commerce-cleanup.ts
+?? backend/tests/integration/zoom-commerce-request.test.ts
+?? backend/tests/unit/bot/content/coach-buttons.test.test.ts.bak-step3
+?? backend/tests/unit/bot/handlers/coach/register.test.test.ts.bak-step3
+?? backend/tests/unit/modules/auth/service/credentials.test.ts
+?? backend/tests/unit/modules/subscriptions/payments/callback/focus.test.ts
+?? backend/tests/unit/modules/subscriptions/payments/wayforpay/service.test.ts
+?? backend/tests/unit/modules/zoom/commerce-payment-terms.test.ts
+?? backend/tests/unit/modules/zoom/commerce-telegram.test.ts
+?? backend/tests/unit/modules/zoom/completion-draft.service.test.ts
+?? backend/tests/unit/modules/zoom/individual-session-lifecycle.test.ts
+?? backend/tests/unit/modules/zoom/service.completion.test.ts
+?? packages/db/prisma/migrations/20260910120000_zoom_commerce_request/
+?? packages/db/prisma/migrations/20260912120000_zoom_commerce_request_cancelled/
+?? packages/db/prisma/migrations/20260920150000_zoom_commerce_positive_amount/
+
+--- FILE TREE ---
+backend
+backend/.DS_Store
+backend/.env.local
+backend/vercel.json
+backend/dist
+backend/node_modules
+backend/tests
+backend/tests/unit
+backend/tests/unit/products
+backend/tests/unit/products/ab-system
+backend/tests/unit/core
+backend/tests/unit/core/state-machine
+backend/tests/unit/config
+backend/tests/unit/config/webapp.coach.test.ts
+backend/tests/unit/utils
+backend/tests/unit/utils/latency.test.ts
+backend/tests/unit/scripts
+backend/tests/unit/scripts/user-sync-test-state.test.ts
+backend/tests/unit/scripts/legacy-focus-gift-import.test.ts
+backend/tests/unit/interactive
+backend/tests/unit/interactive/telegram-ngrok-sync.test.ts
+backend/tests/unit/interactive/app.telegram-webhook.test.ts
+backend/tests/unit/lib
+backend/tests/unit/lib/telegram.launch.test.ts
+backend/tests/unit/lib/telegram
+backend/tests/unit/lib/telegram.test.ts
+backend/tests/unit/bot
+backend/tests/unit/bot/content
+backend/tests/unit/bot/handlers
+backend/tests/unit/modules
+backend/tests/unit/modules/assistant
+backend/tests/unit/modules/auth
+backend/tests/unit/modules/platform
+backend/tests/unit/modules/admin
+backend/tests/unit/modules/flow-control
+backend/tests/unit/modules/subscriptions
+backend/tests/unit/modules/content-pipeline
+backend/tests/unit/modules/ai
+backend/tests/unit/modules/telegram-mentor
+backend/tests/unit/modules/zoom
+backend/tests/unit/modules/deeplinks
+backend/tests/unit/modules/coach-content
+backend/tests/unit/modules/ai-operator
+backend/tests/unit/modules/sales-assistant
+backend/tests/unit/modules/ab-test
+backend/tests/unit/services
+backend/tests/unit/services/scheduler
+backend/tests/integration
+backend/tests/integration/zoom-commerce-request.test.ts
+backend/tests/integration/modules
+backend/tests/integration/modules/assistant
+backend/tests/integration/modules/telegram-mentor
+backend/tests/fixtures
+backend/tests/e2e
+backend/tests/e2e/modules
+backend/tests/e2e/modules/assistant
+backend/.env.test
+backend/backup-2026-05-23T10-45-05-325Z.json
+backend/.node-version
+backend/tsconfig.test.json
+backend/logs
+backend/logs/error.log
+backend/logs/all.log
+backend/package.json
+backend/.env
+backend/scripts
+backend/scripts/generate-test-webhook.ts
+backend/scripts/merge-users.ts
+backend/tsconfig.json
+backend/.env.example
+backend/tmp
+backend/tmp/reassign_users_to_hope.ts
+backend/.env.local.bak
+backend/src
+backend/src/routers
+backend/src/routers/salesAssistant.router.ts
+backend/src/background
+backend/src/background/index.ts
+backend/src/middleware
+backend/src/middleware/rateLimiter.ts
+backend/src/middleware/rateLimiter.redis.ts
+backend/src/middleware/performance.ts
+backend/src/middleware/securityHeaders.ts
+backend/src/middleware/requestLogger.ts
+backend/src/middleware/salesAssistantGuard.ts
+backend/src/middleware/productOwnerGuard.ts
+backend/src/middleware/coachOnly.middleware.ts
+backend/src/middleware/lmOnlyMode.ts
+backend/src/database
+backend/src/database/schema.ts
+backend/src/types
+backend/src/types/bcryptjs.d.ts
+backend/src/types/shared-platform.d.ts
+backend/src/types/express.d.ts
+backend/src/types/shared-payments.d.ts
+backend/src/types/globalTypes.ts
+backend/src/types/ai-assistant.d.ts
+backend/src/types/pdfmake.d.ts
+backend/src/products
+backend/src/products/stankey
+backend/src/products/stankey/product.manifest.ts
+backend/src/products/stankey/config
+backend/src/products/stankey/progress.service.ts
+backend/src/products/stankey/index.ts
+backend/src/products/stankey/media
+backend/src/products/shared
+backend/src/products/shared/payments
+backend/src/products/shared/subscriptions
+backend/src/products/shared/ai
+backend/src/products/shared/telegram
+backend/src/products/shared/prompts
+backend/src/products/shared/engine
+backend/src/products/shared/onboarding
+backend/src/products/shared/analytics
+backend/src/products/ab-system
+backend/src/products/ab-system/content
+backend/src/products/ab-system/telegram
+backend/src/products/focus
+backend/src/products/focus/product.manifest.ts
+backend/src/products/focus/payments
+backend/src/products/focus/types
+backend/src/products/focus/config
+backend/src/products/focus/content
+backend/src/products/focus/ai
+backend/src/products/focus/telegram
+backend/src/products/focus/prompts
+backend/src/products/focus/index.ts
+backend/src/products/focus/routes
+backend/src/products/focus/onboarding
+backend/src/products/focus/analytics
+backend/src/products/absystem
+backend/src/products/absystem/config
+backend/src/core
+backend/src/core/behavior
+backend/src/core/behavior/behaviorProcessor.ts
+backend/src/core/behavior/patternEngine.ts
+backend/src/core/behavior/eventEmitter.ts
+backend/src/core/behavior/types.ts
+backend/src/core/behavior/scoringEngine.ts
+backend/src/core/behavior/deliveryBuilder.ts
+backend/src/core/behavior/featureExtractor.ts
+backend/src/core/continuity
+backend/src/core/continuity/continuitySignals.ts
+backend/src/core/continuity/continuityResolver.ts
+backend/src/core/continuity/movementInterpreter.ts
+backend/src/core/continuity/behavioralContinuity.ts
+backend/src/core/transport
+backend/src/core/transport/telegramReply.ts
+backend/src/core/transport/telegramTransport.ts
+backend/src/core/transport/telegramKeyboard.ts
+backend/src/core/memory
+backend/src/core/memory/relationshipMemory.ts
+backend/src/core/memory/memory.service.ts
+backend/src/core/state-machine
+backend/src/core/state-machine/ctaFoundation.ts
+backend/src/core/state-machine/stateMachine.ts
+backend/src/core/state-machine/securityFoundation.ts
+backend/src/core/state-machine/selfTest.tiebreaker.ts
+backend/src/core/state-machine/testFoundation.ts
+backend/src/core/state-machine/selfTest.ts
+backend/src/core/state-machine/selfTest.core.ts
+backend/src/core/state-machine/types.ts
+backend/src/core/state-machine/selfTest.flow.ts
+backend/src/core/state-machine/conversationPresentation.ts
+backend/src/core/state-machine/flowOrchestration.registry.ts
+backend/src/core/state-machine/flowTimingFoundation.ts
+backend/src/core/state-machine/service.ts
+backend/src/core/state-machine/abTestFoundation.ts
+backend/src/core/state-machine/paymentReminderFoundation.ts
+backend/src/core/state-machine/flowOrchestrationFoundation.ts
+backend/src/core/access
+backend/src/core/access/behavioralAccess.ts
+backend/src/core/runtime
+backend/src/core/runtime/outbox.ts
+backend/src/core/runtime/resilience.ts
+backend/src/core/runtime/redis.ts
+backend/src/core/runtime/idempotency.ts
+backend/src/core/runtime/zoom
+backend/src/core/runtime/loadValidation.ts
+backend/src/core/flow-builder
+backend/src/core/flow-builder/ctaResolver.ts
+backend/src/core/flow-builder/flowTemplates.ts
+backend/src/core/flow-builder/flowRegistry.ts
+backend/src/core/flow-builder/flowComposition.ts
+backend/src/core/flow-builder/flowBuilder.ts
+backend/src/core/lifecycle
+backend/src/core/lifecycle/lifecycle.adapter.ts
+backend/src/core/behavioral
+backend/src/core/behavioral/behavioralAnalyzer.ts
+backend/src/core/behavioral/behavioralNarrative.ts
+backend/src/core/behavioral/behavioralMovement.ts
+backend/src/core/behavioral/behavioralPriority.ts
+backend/src/core/behavioral/behavioralPatterns.ts
+backend/src/core/behavioral/behavioralInterpreter.ts
+backend/src/core/behavioral/behavioralContinuity.ts
+backend/src/core/behavioral/behavioralSnapshot.ts
+backend/src/core/behavioral/buildBehavioralNarrative.ts
+backend/src/core/behavioral/behavioralSignals.ts
+backend/src/core/mentor
+backend/src/core/mentor/messageGenerator.ts
+backend/src/core/mentor/templates.ts
+backend/src/core/mentor/interventionSelector.ts
+backend/src/core/mentor/types.ts
+backend/src/core/mentor/mentorEngine.ts
+backend/src/core/mentor/intentResolver.ts
+backend/src/core/growth
+backend/src/core/growth/conversionTimingEngine.ts
+backend/src/core/growth/paywallEngine.ts
+backend/src/core/growth/conversionHandler.ts
+backend/src/core/growth/strategyEngine.ts
+backend/src/core/growth/conversionEmitter.ts
+backend/src/core/growth/feedbackEngine.ts
+backend/src/core/growth/conversionMessageGenerator.ts
+backend/src/core/engagement
+backend/src/core/engagement/engagement.service.ts
+backend/src/core/governance
+backend/src/core/governance/productIntelligence.ts
+backend/src/core/governance/productIntelligence.analytics.ts
+backend/src/core/governance/featureFlags.ts
+backend/src/core/governance/releaseGovernance.ts
+backend/src/core/governance/productIntelligence.governance.ts
+backend/src/core/governance/governanceValidation.ts
+backend/src/core/governance/releaseGovernanceValidation.ts
+backend/src/core/delivery
+backend/src/core/delivery/webSocketSender.ts
+backend/src/core/delivery/deliveryDispatcher.ts
+backend/src/core/delivery/runtimeHub.ts
+backend/src/core/delivery/telegramSender.ts
+backend/src/core/delivery/miniappSender.ts
+backend/src/core/rendering
+backend/src/core/rendering/telegramRenderer.ts
+backend/src/core/rendering/textRenderer.ts
+backend/src/core/rendering/uxComposition.ts
+backend/src/core/rendering/buttonRenderer.ts
+backend/src/core/decision
+backend/src/core/decision/decision.engine.ts
+backend/src/core/decision/decision.resolver.ts
+backend/src/core/dna
+backend/src/core/dna/contracts
+backend/src/core/dna/providers
+backend/src/core/dna/runtime
+backend/src/core/dna/agents
+backend/src/core/dna/pipelines
+backend/src/core/dna/storage
+backend/src/core/dna/queues
+backend/src/core/dna/index.ts
+backend/src/core/dna/validators
+backend/src/core/dna/telemetry
+backend/src/core/dna/routing
+backend/src/core/dna/presets
+backend/src/core/dna/orchestrator
+backend/src/core/monetization
+backend/src/core/monetization/monetization.service.ts
+backend/src/core/paywall
+backend/src/core/paywall/paywallEngine.ts
+backend/src/core/paywall/paywall.types.ts
+backend/src/core/orchestrator
+backend/src/core/orchestrator/testOrchestrator.ts
+backend/src/core/orchestrator/decisionResolver.ts
+backend/src/core/orchestrator/webMapAdaptation.ts
+backend/src/core/orchestrator/orchestrator.ts
+backend/src/core/orchestrator/channelRouter.ts
+backend/src/core/orchestrator/decisionEngine.ts
+backend/src/core/orchestrator/userState.ts
+backend/src/core/orchestrator/stateResolver.ts
+backend/src/core/orchestrator/actionMapper.ts
+backend/src/core/orchestrator/marketplaceOrchestrator.ts
+backend/src/core/orchestrator/eventRouter.ts
+backend/src/config
+backend/src/config/prompts.ts
+backend/src/config/webapp.ts
+backend/src/app.ts
+backend/src/platform
+backend/src/platform/cron.registry.ts
+backend/src/platform/ai.registry.ts
+backend/src/platform/bot.registry.ts
+backend/src/platform/index.ts
+backend/src/runtime
+backend/src/runtime/runtimeBootstrap.ts
+backend/src/PromptProvider.ts
+backend/src/content
+backend/src/content/subscriptions.content.ts
+backend/src/content/telegram.product-context.ts
+backend/src/utils
+backend/src/utils/keyboard.ts
+backend/src/utils/requireUser.ts
+backend/src/utils/logger.ts
+backend/src/utils/serverError.ts
+backend/src/utils/checkEmail.ts
+backend/src/scripts
+backend/src/scripts/user-consolidation-backfill.ts
+backend/src/scripts/legacy-individual-commerce-cleanup.ts
+backend/src/scripts/legacy-focus-gift-import.ts
+backend/src/scripts/user-sync-test-state.ts
+backend/src/packages
+backend/src/packages/abTestActions.ts
+backend/src/interactive
+backend/src/interactive/index.ts
+backend/src/interactive/telegramWebhookSync.ts
+backend/src/interactive/telegramConsumerStartup.ts
+backend/src/lib
+backend/src/lib/payments
+backend/src/lib/payments/registry.ts
+backend/src/lib/cache
+backend/src/lib/cache/index.ts
+backend/src/lib/bot-manager.ts
+backend/src/lib/cloudinary.ts
+backend/src/lib/secrets.ts
+backend/src/lib/openai.ts
+backend/src/lib/openaiModels.ts
+backend/src/lib/telegram
+backend/src/lib/telegram/messageFormatter.ts
+backend/src/lib/telegram/types.ts
+backend/src/lib/telegram/formatting.ts
+backend/src/lib/telegram/html.ts
+backend/src/lib/telegram/send.ts
+backend/src/lib/telegram/index.ts
+backend/src/lib/telegram/media.ts
+backend/src/lib/telegram.ts
+backend/src/lib/db
+backend/src/lib/db/userCache.ts
+backend/src/lib/db/dailyCache.ts
+backend/src/lib/db/weeklyReportCache.ts
+backend/src/lib/publicDeliverables.ts
+backend/src/lib/funnel
+backend/src/lib/funnel/getUserFunnelStage.ts
+backend/src/lib/funnel/stage.ts
+backend/src/lib/funnel/winBackSequence.ts
+backend/src/lib/notifications
+backend/src/lib/notifications/templates.ts
+backend/src/db
+backend/src/db/client.ts
+backend/src/bot
+backend/src/bot/content
+backend/src/bot/content/coachContent.content.ts
+backend/src/bot/content/coachBot.content.ts
+backend/src/bot/flows
+backend/src/bot/flows/contentPlanner.flow.ts
+backend/src/bot/handlers
+backend/src/bot/handlers/coach
+backend/src/bot/handlers/coach-content
+backend/src/index.ts
+backend/src/modules
+backend/src/modules/journal
+backend/src/modules/journal/routes.ts
+backend/src/modules/journal/types.ts
+backend/src/modules/journal/journal.service.ts
+backend/src/modules/journal/controller.ts
+backend/src/modules/mini-app
+backend/src/modules/assistant
+backend/src/modules/assistant/routes.ts
+backend/src/modules/assistant/engine.ts
+backend/src/modules/assistant/recommendation.ts
+backend/src/modules/assistant/types.ts
+backend/src/modules/assistant/decision-engine.ts
+backend/src/modules/assistant/mentor-quality-dataset.ts
+backend/src/modules/assistant/mentor-quality-report.ts
+backend/src/modules/assistant/index.ts
+backend/src/modules/assistant/controller.ts
+backend/src/modules/assistant/service.ts
+backend/src/modules/settings
+backend/src/modules/settings/routes.ts
+backend/src/modules/landing
+backend/src/modules/landing/routes.ts
+backend/src/modules/landing/cards
+backend/src/modules/product-members
+backend/src/modules/product-members/routes.ts
+backend/src/modules/products
+backend/src/modules/products/routes.ts
+backend/src/modules/products/types.ts
+backend/src/modules/products/controller.ts
+backend/src/modules/products/service.ts
+backend/src/modules/progress
+backend/src/modules/progress/routes.ts
+backend/src/modules/progress/types.ts
+backend/src/modules/progress/controller.ts
+backend/src/modules/progress/service.ts
+backend/src/modules/access
+backend/src/modules/access/routes.ts
+backend/src/modules/access/system.service.ts
+backend/src/modules/access/control.service.ts
+backend/src/modules/access/snapshot.service.ts
+backend/src/modules/access/guard.ts
+backend/src/modules/access/trial.service.ts
+backend/src/modules/access/types.ts
+backend/src/modules/access/index.ts
+backend/src/modules/access/controller.ts
+backend/src/modules/access/service.ts
+backend/src/modules/access/product.service.ts
+backend/src/modules/goals
+backend/src/modules/goals/routes.ts
+backend/src/modules/goals/types.ts
+backend/src/modules/goals/controller.ts
+backend/src/modules/goals/service.ts
+backend/src/modules/auth
+backend/src/modules/auth/middleware
+backend/src/modules/auth/server-user.ts
+backend/src/modules/auth/access
+backend/src/modules/auth/errors.ts
+backend/src/modules/auth/types.ts
+backend/src/modules/auth/human-verification.ts
+backend/src/modules/auth/telegram.ts
+backend/src/modules/auth/api
+backend/src/modules/auth/service
+backend/src/modules/auth/services
+backend/src/modules/streak
+backend/src/modules/streak/types.ts
+backend/src/modules/streak/controller.ts
+backend/src/modules/streak/service.ts
+backend/src/modules/gamification
+backend/src/modules/gamification/routes.ts
+backend/src/modules/gamification/level.system.ts
+backend/src/modules/gamification/types.ts
+backend/src/modules/gamification/reward.engine.ts
+backend/src/modules/gamification/triggers.ts
+backend/src/modules/gamification/controller.ts
+backend/src/modules/gamification/service.ts
+backend/src/modules/gamification/gamificationService.ts
+backend/src/modules/trial
+backend/src/modules/trial/routes.ts
+backend/src/modules/trial/scheduler.ts
+backend/src/modules/trial/types.ts
+backend/src/modules/trial/controller.ts
+backend/src/modules/trial/service.ts
+backend/src/modules/user-state
+backend/src/modules/user-state/routes.ts
+backend/src/modules/user-state/crossChannelState.service.ts
+backend/src/modules/user-state/controller.ts
+backend/src/modules/mini-courses
+backend/src/modules/mini-courses/routes.ts
+backend/src/modules/mini-courses/types.ts
+backend/src/modules/mini-courses/servise.ts
+backend/src/modules/mini-courses/controller.ts
+backend/src/modules/five-points
+backend/src/modules/five-points/routes.ts
+backend/src/modules/five-points/module.ts
+backend/src/modules/five-points/repo.ts
+backend/src/modules/five-points/types.ts
+backend/src/modules/five-points/admin.service.ts
+backend/src/modules/five-points/controller.ts
+backend/src/modules/five-points/service.ts
+backend/src/modules/platform
+backend/src/modules/platform/platform.dailyCycle.service.ts
+backend/src/modules/platform/platform.access.ts
+backend/src/modules/platform/platform.guard.ts
+backend/src/modules/platform/platform.reports.service.ts
+backend/src/modules/platform/platform.wheel.service.ts
+backend/src/modules/platform/platform.routes.ts
+backend/src/modules/marketplace
+backend/src/modules/marketplace/service.ts
+backend/src/modules/admin
+backend/src/modules/admin/routes.ts
+backend/src/modules/admin/insights
+backend/src/modules/admin/payments
+backend/src/modules/admin/content-studio
+backend/src/modules/admin/content-research
+backend/src/modules/admin/users
+backend/src/modules/admin/prompts
+backend/src/modules/admin/guards.ts
+backend/src/modules/admin/notifications
+backend/src/modules/consultation
+backend/src/modules/consultation/routes.ts
+backend/src/modules/consultation/types.ts
+backend/src/modules/consultation/controller.ts
+backend/src/modules/consultation/service.ts
+backend/src/modules/lifecycle
+backend/src/modules/lifecycle/service.ts
+backend/src/modules/microTask
+backend/src/modules/microTask/routes.ts
+backend/src/modules/microTask/helpers.ts
+backend/src/modules/microTask/repository.ts
+backend/src/modules/microTask/engine.ts
+backend/src/modules/microTask/followup.ts
+backend/src/modules/microTask/types.ts
+backend/src/modules/microTask/actions.ts
+backend/src/modules/microTask/ai.ts
+backend/src/modules/microTask/controller.ts
+backend/src/modules/microTask/responses.ts
+backend/src/modules/microTask/service.ts
+backend/src/modules/wheel
+backend/src/modules/wheel/routes.ts
+backend/src/modules/wheel/types.ts
+backend/src/modules/wheel/pdf.ts
+backend/src/modules/wheel/ai.ts
+backend/src/modules/wheel/telegram.ts
+backend/src/modules/wheel/controller.ts
+backend/src/modules/wheel/service.ts
+backend/src/modules/flow-control
+backend/src/modules/flow-control/types.ts
+backend/src/modules/flow-control/service.ts
+backend/src/modules/user
+backend/src/modules/user/routes.ts
+backend/src/modules/user/identity
+backend/src/modules/user/userCreation.service.ts
+backend/src/modules/user/types.ts
+backend/src/modules/user/resolveOrCreateUser.ts
+backend/src/modules/vision
+backend/src/modules/vision/routes.ts
+backend/src/modules/vision/types.ts
+backend/src/modules/vision/controller.ts
+backend/src/modules/vision/system.ts
+backend/src/modules/vision/service.ts
+backend/src/modules/banners
+backend/src/modules/banners/banner.service.ts
+backend/src/modules/mentor
+backend/src/modules/mentor/mentor.debug.router.ts
+backend/src/modules/mentor/orchestrator.debug.controller.ts
+backend/src/modules/mentor/mentor.debug.controller.ts
+backend/src/modules/mentor/mentor.controller.ts
+backend/src/modules/mentor/mentor.debug.validator.ts
+backend/src/modules/subscriptions
+backend/src/modules/subscriptions/routes.ts
+backend/src/modules/subscriptions/payments
+backend/src/modules/subscriptions/utils.ts
+backend/src/modules/subscriptions/types.ts
+backend/src/modules/subscriptions/bonus-request.ts
+backend/src/modules/subscriptions/mapper.ts
+backend/src/modules/subscriptions/api
+backend/src/modules/subscriptions/index.ts
+backend/src/modules/subscriptions/service.ts
+backend/src/modules/integrations
+backend/src/modules/integrations/sendpulse
+backend/src/modules/content-pipeline
+backend/src/modules/content-pipeline/pipeline.controller.ts
+backend/src/modules/content-pipeline/pipeline.types.ts
+backend/src/modules/content-pipeline/pipeline.service.ts
+backend/src/modules/content-pipeline/steps
+backend/src/modules/content-pipeline/pipeline.content.ts
+backend/src/modules/social
+backend/src/modules/social/routes.ts
+backend/src/modules/social/types.ts
+backend/src/modules/social/facebook
+backend/src/modules/social/controller.ts
+backend/src/modules/social/instagram
+backend/src/modules/social/service.ts
+backend/src/modules/audio
+backend/src/modules/audio/routes.ts
+backend/src/modules/daily-cycle
+backend/src/modules/daily-cycle/routes.ts
+backend/src/modules/daily-cycle/recoveryPolicy.ts
+backend/src/modules/daily-cycle/helpers.ts
+backend/src/modules/daily-cycle/microtasks.ts
+backend/src/modules/daily-cycle/scheduler.ts
+backend/src/modules/daily-cycle/weeklyReports.ts
+backend/src/modules/daily-cycle/entry.ts
+backend/src/modules/daily-cycle/types.ts
+backend/src/modules/daily-cycle/session.ts
+backend/src/modules/daily-cycle/ai.ts
+backend/src/modules/daily-cycle/telegram.ts
+backend/src/modules/daily-cycle/index.ts
+backend/src/modules/daily-cycle/subscription.ts
+backend/src/modules/daily-cycle/controller.ts
+backend/src/modules/daily-cycle/support.ts
+backend/src/modules/daily-cycle/sessionSync.service.ts
+backend/src/modules/daily-cycle/service.ts
+backend/src/modules/voice
+backend/src/modules/voice/emotion.engine.ts
+backend/src/modules/voice/types.ts
+backend/src/modules/voice/memory.engine.ts
+backend/src/modules/voice/voice.service.ts
+backend/src/modules/ai
+backend/src/modules/ai/routes.ts
+backend/src/modules/ai/agentRegistry.ts
+backend/src/modules/ai/gateway
+backend/src/modules/users
+backend/src/modules/users/runtime
+backend/src/modules/telegram-mentor
+backend/src/modules/telegram-mentor/renderers
+backend/src/modules/telegram-mentor/commands.ts
+backend/src/modules/telegram-mentor/core
+backend/src/modules/telegram-mentor/runtime
+backend/src/modules/telegram-mentor/start
+backend/src/modules/telegram-mentor/content
+backend/src/modules/telegram-mentor/roles
+backend/src/modules/telegram-mentor/runtime.ts
+backend/src/modules/telegram-mentor/types.ts
+backend/src/modules/telegram-mentor/session.ts
+backend/src/modules/telegram-mentor/keyboards.ts
+backend/src/modules/telegram-mentor/api
+backend/src/modules/telegram-mentor/bot
+backend/src/modules/telegram-mentor/appAccess.ts
+backend/src/modules/telegram-mentor/flows
+backend/src/modules/telegram-mentor/handlers
+backend/src/modules/telegram-mentor/services
+backend/src/modules/telegram-mentor/conversation
+backend/src/modules/telegram-mentor/router
+backend/src/modules/mentorship
+backend/src/modules/mentorship/routes.ts
+backend/src/modules/mentorship/types.ts
+backend/src/modules/mentorship/controller.ts
+backend/src/modules/mentorship/service.ts
+backend/src/modules/lead-magnet
+backend/src/modules/lead-magnet/routes.ts
+backend/src/modules/lead-magnet/types.ts
+backend/src/modules/lead-magnet/controller.ts
+backend/src/modules/lead-magnet/service.ts
+backend/src/modules/zoom
+backend/src/modules/zoom/attendance
+backend/src/modules/zoom/battle
+backend/src/modules/zoom/commerce
+backend/src/modules/zoom/calendar
+backend/src/modules/zoom/urls.ts
+backend/src/modules/zoom/core
+backend/src/modules/zoom/booking
+backend/src/modules/zoom/swaps
+backend/src/modules/zoom/shared
+backend/src/modules/zoom/types.ts
+backend/src/modules/zoom/audio
+backend/src/modules/zoom/private
+backend/src/modules/zoom/api
+backend/src/modules/zoom/index.ts
+backend/src/modules/zoom/domain
+backend/src/modules/zoom/service.ts
+backend/src/modules/zoom/notifications
+backend/src/modules/zoom/reports
+backend/src/modules/web-map
+backend/src/modules/web-map/utils
+backend/src/modules/web-map/web-map.router.ts
+backend/src/modules/web-map/web-map.controller.ts
+backend/src/modules/web-map/ai
+backend/src/modules/web-map/web-map.service.ts
+backend/src/modules/web-map/notifications
+backend/src/modules/ai-assistant
+backend/src/modules/ai-assistant/utils
+backend/src/modules/ai-assistant/promptCompiler.ts
+backend/src/modules/ai-mentor
+backend/src/modules/ai-mentor/routes.ts
+backend/src/modules/ai-mentor/helpers.ts
+backend/src/modules/ai-mentor/prompt.ts
+backend/src/modules/ai-mentor/weekly-analysis
+backend/src/modules/ai-mentor/generation.service.ts
+backend/src/modules/ai-mentor/types.ts
+backend/src/modules/ai-mentor/controllers.ts
+backend/src/modules/ai-mentor/state.service.ts
+backend/src/modules/ai-mentor/services.ts
+backend/src/modules/experts
+backend/src/modules/experts/routes.ts
+backend/src/modules/experts/ownership.service.ts
+backend/src/modules/experts/types.ts
+backend/src/modules/experts/controller.ts
+backend/src/modules/experts/service.ts
+backend/src/modules/affiliate
+backend/src/modules/affiliate/routes.ts
+backend/src/modules/affiliate/controller.ts
+backend/src/modules/affiliate/service.ts
+backend/src/modules/deeplinks
+backend/src/modules/deeplinks/routes.ts
+backend/src/modules/deeplinks/types.ts
+backend/src/modules/deeplinks/controller.ts
+backend/src/modules/deeplinks/service.ts
+backend/src/modules/quota
+backend/src/modules/quota/routes.ts
+backend/src/modules/quota/generation.middleware.ts
+backend/src/modules/quota/service.ts
+backend/src/modules/coach-content
+backend/src/modules/coach-content/contentPlanner.service.ts
+backend/src/modules/events
+backend/src/modules/events/routes.ts
+backend/src/modules/events/contentAttribution.service.ts
+backend/src/modules/events/controller.ts
+backend/src/modules/events/service.ts
+backend/src/modules/ai-operator
+backend/src/modules/ai-operator/operator.foundation.ts
+backend/src/modules/ai-operator/operator.service.ts
+backend/src/modules/sales-assistant
+backend/src/modules/sales-assistant/pipeline
+backend/src/modules/sales-assistant/sales-assistant.types.ts
+backend/src/modules/sales-assistant/sales-assistant.service.ts
+backend/src/modules/sales-assistant/agents
+backend/src/modules/sales-assistant/sales-assistant.providers.ts
+backend/src/modules/sales-assistant/sales-assistant.validation.ts
+backend/src/modules/sales-assistant/sales-assistant.alert.ts
+backend/src/modules/sales-assistant/sales-assistant.constants.ts
+backend/src/modules/sales-assistant/prompts
+backend/src/modules/sales-assistant/sales-assistant.helpers.ts
+backend/src/modules/sales-assistant/index.ts
+backend/src/modules/sales-assistant/orchestrator
+backend/src/modules/start-flow
+backend/src/modules/start-flow/routes.ts
+backend/src/modules/start-flow/controller.ts
+backend/src/modules/start-flow/service.ts
+backend/src/modules/sendpulse
+backend/src/modules/sendpulse/sendpulse.service.ts
+backend/src/modules/funnel
+backend/src/modules/funnel/routes.ts
+backend/src/modules/funnel/smart-offer.service.ts
+backend/src/modules/funnel/types.ts
+backend/src/modules/funnel/policy.ts
+backend/src/modules/funnel/ai.ts
+backend/src/modules/funnel/controller.ts
+backend/src/modules/funnel/service.ts
+backend/src/modules/paywall
+backend/src/modules/paywall/paywall.router.ts
+backend/src/modules/paywall/paywall.controller.ts
+backend/src/modules/notifications
+backend/src/modules/notifications/reminder.service.ts
+backend/src/modules/notifications/routes.ts
+backend/src/modules/notifications/controller.ts
+backend/src/modules/stats
+backend/src/modules/stats/routes.ts
+backend/src/modules/billing
+backend/src/modules/billing/billing.module.ts
+backend/src/modules/billing/webhook.handler.ts
+backend/src/modules/billing/billing.controller.ts
+backend/src/modules/billing/billing.service.ts
+backend/src/modules/billing/subscription.entity.ts
+backend/src/modules/onboarding
+backend/src/modules/onboarding/routes.ts
+backend/src/modules/onboarding/middleware
+backend/src/modules/onboarding/types.ts
+backend/src/modules/onboarding/onboarding.utils.ts
+backend/src/modules/onboarding/index.ts
+backend/src/modules/onboarding/controller.ts
+backend/src/modules/onboarding/services.ts
+backend/src/modules/ab-test
+backend/src/modules/ab-test/routes.ts
+backend/src/modules/analytics
+backend/src/modules/analytics/routes.ts
+backend/src/modules/analytics/behavioral.ts
+backend/src/modules/analytics/revenue.service.ts
+backend/src/modules/analytics/overview.service.ts
+backend/src/modules/analytics/shared.ts
+backend/src/modules/analytics/behavioral.enrichment.ts
+backend/src/modules/analytics/types.ts
+backend/src/modules/analytics/behavioral.catalog.ts
+backend/src/modules/analytics/behavioral.snapshot.ts
+backend/src/modules/analytics/tracking.utils.ts
+backend/src/modules/analytics/insights.service.ts
+backend/src/modules/analytics/controller.ts
+backend/src/modules/analytics/tracking.service.ts
+backend/src/modules/analytics/service.ts
+backend/src/modules/analytics/behavioral.utils.ts
+backend/src/modules/debug
+backend/src/modules/debug/db.audit.router.ts
+backend/src/modules/debug/db.audit.controller.ts
+backend/src/assets
+backend/src/assets/fonts
+backend/src/assets/fonts/Inter-Medium.ttf
+backend/src/assets/fonts/Inter-Bold.ttf
+backend/src/assets/fonts/Inter-Regular.ttf
+backend/src/routes
+backend/src/routes/intelligence.routes.ts
+backend/src/routes/health.ts
+backend/src/routes/index.ts
+backend/src/services
+backend/src/services/claude-intelligence.service.ts
+backend/src/services/runtimeOutbox
+backend/src/services/runtimeOutbox/worker.ts
+backend/src/services/salesAssistant
+backend/src/services/scheduler
+backend/src/services/scheduler/lifecycle.ts
+backend/src/services/scheduler/common.ts
+backend/src/services/scheduler/operations.ts
+backend/src/services/scheduler/daily
+backend/src/services/scheduler/index.ts
+backend/src/services/scheduler/zoom.ts
+backend/src/services/scheduler/daily-briefing.ai.ts
+backend/src/services/scheduler/billing.ts
+backend/src/services/scheduler/ai-seller.ts
+backend/src/services/scheduler/lifecycle-reminders.ts
+backend/src/services/aiGuard.service.ts
+backend/src/services/aiQueue.service.ts
+backend/src/services/aiTaskRunner.service.ts
+backend/src/services/notifications
+backend/src/services/notifications/NotificationService.telegram.ts
+backend/src/services/notifications/NotificationService.foundation.ts
+backend/src/services/notifications/scheduler.ts
+backend/src/services/notifications/NotificationService.ts
+backend/src/services/notifications/NotificationService.base.ts
+backend/src/services/notifications/NotificationService.message.ts
+backend/src/services/notifications/repositories
+backend/src/services/notifications/NotificationEvent.ts
+backend/src/services/notifications/NotificationService.queue.ts
+backend/src/services/notifications/NotificationService.scheduler.ts
+backend/src/services/notifications/mentorLifecycle.ts
+backend/src/services/notifications/delivery
+backend/src/services/notifications/domain
+backend/src/services/notifications/services
+backend/src/services/notifications/worker.ts
+apps
+apps/web
+apps/web/.vercel
+apps/web/.vercel/project.json
+apps/web/.vercel/README.txt
+apps/web/.env.production
+apps/web/tsconfig.node.json
+apps/web/index.html
+apps/web/.DS_Store
+apps/web/vercel.json
+apps/web/dist
+apps/web/node_modules
+apps/web/tests
+apps/web/tests/unit
+apps/web/tests/unit/features
+apps/web/tests/features
+apps/web/tests/features/zoom
+apps/web/tailwind.config.ts
+apps/web/public
+apps/web/public/.DS_Store
+apps/web/public/images
+apps/web/public/images/arrow_bottom.png
+apps/web/public/images/img5tochok
+apps/web/public/telegram-legacy
+apps/web/public/telegram-legacy/telegram-webview.js
+apps/web/public/coach-schedule.html
+apps/web/public/vite.svg
+apps/web/public/focus
+apps/web/public/focus/favicon.ico
+apps/web/public/focus/manifest.webmanifest
+apps/web/public/focus/favicon.svg
+apps/web/public/deliverables
+apps/web/public/deliverables/ai-seller
+apps/web/public/deliverables/ai-seller-agents-test-guide.html
+apps/web/public/deliverables/starway-agents-test-guide.html
+apps/web/public/deliverables/storyboard-mizh-rishennyam-i-dieyu.html
+apps/web/public/icons
+apps/web/public/icons/icons8-instagram-100.svg
+apps/web/public/icons/.DS_Store
+apps/web/public/icons/icons8-facebook-messenger-100.svg
+apps/web/public/icons/icons8-google.svg
+apps/web/public/icons/icons8-tiktok-100.svg
+apps/web/public/icons/icons8-facebook-100.svg
+apps/web/public/icons/icons8-pinterest-100.svg
+apps/web/public/icons/icons8-telegram-app-100.svg
+apps/web/public/icons/icons8-youtube-100.svg
+apps/web/public/icons/icons8-whatsapp-100.svg
+apps/web/public/icons/icons8-discord-100.svg
+apps/web/public/icons/icons8-linkedin-100.svg
+apps/web/public/icons/icons8-twitter-100.svg
+apps/web/.gitignore
+apps/web/package.json
+apps/web/.env
+apps/web/scripts
+apps/web/scripts/check-color-rgb-usage.mjs
+apps/web/scripts/check-sass-imports.mjs
+apps/web/scripts/check-design-system.mjs
+apps/web/tsconfig.json
+apps/web/.telegram-legacy-dev
+apps/web/.telegram-legacy-dev/telegram-webview.js
+apps/web/.env.example
+apps/web/vite.config.ts
+apps/web/postcss.config.js
+apps/web/vite.telegram.config.ts
+apps/web/src
+apps/web/src/index.tsx
+apps/web/src/ui
+apps/web/src/ui/PasswordStrength.tsx
+apps/web/src/ui/InfoHint.tsx
+apps/web/src/ui/GlassCard.tsx
+apps/web/src/ui/PasswordField.tsx
+apps/web/src/ui/Tabs.tsx
+apps/web/src/ui/Card.tsx
+apps/web/src/ui/Slider.tsx
+apps/web/src/ui/Progress.tsx
+apps/web/src/ui/Icon.tsx
+apps/web/src/ui/FormField.tsx
+apps/web/src/ui/ThemeSelector.tsx
+apps/web/src/ui/EditableCard.tsx
+apps/web/src/ui/GenerationCurtain.tsx
+apps/web/src/ui/ComponentsSuite.tsx
+apps/web/src/ui/Label.tsx
+apps/web/src/ui/TryButton.tsx
+apps/web/src/ui/Alert.tsx
+apps/web/src/ui/CountdownTimer.tsx
+apps/web/src/ui/StarwayMark.tsx
+apps/web/src/ui/Avatar.tsx
+apps/web/src/ui/ErrorAlert.tsx
+apps/web/src/ui/Badge.tsx
+apps/web/src/ui/FormFieldController.tsx
+apps/web/src/ui/index.ts
+apps/web/src/ui/Button.tsx
+apps/web/src/ui/Checkbox.tsx
+apps/web/src/ui/Select.tsx
+apps/web/src/ui/Textarea.tsx
+apps/web/src/ui/Input.tsx
+apps/web/src/ui/Skeleton.tsx
+apps/web/src/App.tsx
+apps/web/src/types
+apps/web/src/types/globalTypes.ts
+apps/web/src/.DS_Store
+apps/web/src/core
+apps/web/src/core/navigation
+apps/web/src/app
+apps/web/src/app/config
+apps/web/src/app/uiSlice.ts
+apps/web/src/app/(public)
+apps/web/src/app/tagTypes.ts
+apps/web/src/app/hooks.ts
+apps/web/src/app/store.ts
+apps/web/src/app/router
+apps/web/src/config
+apps/web/src/config/routes.ts
+apps/web/src/config/menu.ts
+apps/web/src/config/runtime.ts
+apps/web/src/layout
+apps/web/src/layout/DashboardSideRails.tsx
+apps/web/src/layout/types
+apps/web/src/layout/ViewSwitcher.tsx
+apps/web/src/layout/config
+apps/web/src/layout/MainLayout.tsx
+apps/web/src/layout/Footer.tsx
+apps/web/src/layout/Breadcrumb.tsx
+apps/web/src/layout/SidebarNav.tsx
+apps/web/src/layout/MainLayout.zoom-shell.test.tsx
+apps/web/src/layout/Header.tsx
+apps/web/src/layout/Sidebar.tsx
+apps/web/src/layout/SidebarUpgrade.tsx
+apps/web/src/contracts
+apps/web/src/contracts/api.contracts.ts
+apps/web/src/features
+apps/web/src/features/journal
+apps/web/src/features/assistant
+apps/web/src/features/ads
+apps/web/src/features/settings
+apps/web/src/features/landing
+apps/web/src/features/superadmin-owner-intake
+apps/web/src/features/ai-funnel-landing
+apps/web/src/features/journal-mini
+apps/web/src/features/.DS_Store
+apps/web/src/features/products
+apps/web/src/features/app
+apps/web/src/features/progress
+apps/web/src/features/chat
+apps/web/src/features/goals
+apps/web/src/features/landings
+apps/web/src/features/auth
+apps/web/src/features/gamification
+apps/web/src/features/trial
+apps/web/src/features/mini-courses
+apps/web/src/features/content-studio
+apps/web/src/features/platform
+apps/web/src/features/marketplace
+apps/web/src/features/admin
+apps/web/src/features/consultation
+apps/web/src/features/microTask
+apps/web/src/features/wheel
+apps/web/src/features/modals
+apps/web/src/features/user
+apps/web/src/features/vision
+apps/web/src/features/mirrors
+apps/web/src/features/subscription
+apps/web/src/features/ab-test-landing
+apps/web/src/features/dashboard
+apps/web/src/features/social
+apps/web/src/features/daily-cycle
+apps/web/src/features/support
+apps/web/src/features/telegram
+apps/web/src/features/actions
+apps/web/src/features/mentorship
+apps/web/src/features/zoom
+apps/web/src/features/web-map
+apps/web/src/features/ai-mentor
+apps/web/src/features/reportsPdf
+apps/web/src/features/experts
+apps/web/src/features/miniApp
+apps/web/src/features/affiliate
+apps/web/src/features/quota
+apps/web/src/features/nav
+apps/web/src/features/pattern
+apps/web/src/features/funnels
+apps/web/src/features/modules
+apps/web/src/features/sales-assistant
+apps/web/src/features/ai-engine
+apps/web/src/features/paywall
+apps/web/src/features/notifications
+apps/web/src/features/content-preview
+apps/web/src/features/ab-test
+apps/web/src/features/analytics
+apps/web/src/features/welcome-test
+apps/web/src/features/media
+apps/web/src/env.d.ts
+apps/web/src/utils
+apps/web/src/utils/payments.ts
+apps/web/src/shared
+apps/web/src/shared/telegram
+apps/web/src/shared/Toast.tsx
+apps/web/src/styles
+apps/web/src/styles/index.scss
+apps/web/src/styles/layout
+apps/web/src/styles/index.css
+apps/web/src/styles/utilities
+apps/web/src/styles/index.css.map
+apps/web/src/styles/components
+apps/web/src/styles/css.d.ts
+apps/web/src/styles/tokens
+apps/web/src/styles/design-system.ts
+apps/web/src/components
+apps/web/src/components/layout
+apps/web/src/components/miniapp
+apps/web/src/components/orchestrator
+apps/web/src/layouts
+apps/web/src/theme
+apps/web/src/theme/theme.utils.ts
+apps/web/src/theme/accent.utils.ts
+apps/web/src/theme/theme.slice.ts
+apps/web/src/theme/ThemeProvider.tsx
+apps/web/src/hooks
+apps/web/src/hooks/useLockBodyScroll.ts
+apps/web/src/hooks/usePermissions.ts
+apps/web/src/hooks/useSmartNavigation.ts
+apps/web/src/lib
+apps/web/src/lib/utils.ts
+apps/web/src/lib/utils
+apps/web/src/lib/theme
+apps/web/src/lib/api
+apps/web/src/lib/miniapp
+apps/web/src/dev
+apps/web/src/dev/enableMiniAppDevReload.ts
+apps/web/src/pages
+apps/web/src/pages/LoginPage.tsx
+apps/web/src/pages/sections
+apps/web/src/pages/auth
+apps/web/src/pages/InfoPage.tsx
+apps/web/src/pages/components
+apps/web/src/pages/dev
+apps/web/src/pages/onboarding
+apps/web/src/pages/HomePage.tsx
+apps/web/src/services
+apps/web/src/services/api.ts
+apps/web/src/services/api.test.ts
+apps/web/src/router
+apps/web/src/router/RouteGate.tsx
+apps/bot
+apps/bot/dist
+apps/bot/node_modules
+apps/bot/logs
+apps/bot/logs/error.log
+apps/bot/logs/all.log
+apps/bot/package.json
+apps/bot/tsconfig.json
+apps/bot/src
+apps/bot/src/index.ts
+packages
+packages/shared
+packages/shared/dist
+packages/shared/package.json
+packages/shared/tsconfig.json
+packages/shared/src
+packages/shared/src/payments
+packages/shared/src/payments/wayforpay.urls.ts
+packages/shared/src/payments/payments.catalog.ts
+packages/shared/src/types
+packages/shared/src/types/auth.ts
+packages/shared/src/auth
+packages/shared/src/auth/abilities.ts
+packages/shared/src/constants
+packages/shared/src/utils
+packages/shared/src/platform.registry.ts
+packages/shared/src/payments.ts
+packages/ai
+packages/ai/dist
+packages/ai/node_modules
+packages/ai/package.json
+packages/ai/tsconfig.json
+packages/ai/src
+packages/ai/src/tools
+packages/ai/src/tools/telegram.tool.ts
+packages/ai/src/tools/types.ts
+packages/ai/src/tools/registry.ts
+packages/ai/src/types
+packages/ai/src/types/salesAssistant.types.ts
+packages/ai/src/providers
+packages/ai/src/providers/usageLedger.ts
+packages/ai/src/providers/usageLedger.test.ts
+packages/ai/src/providers/gemini
+packages/ai/src/providers/openrouter
+packages/ai/src/providers/pricing.ts
+packages/ai/src/providers/routing.ts
+packages/ai/src/providers/spendGuard.ts
+packages/ai/src/providers/registry
+packages/ai/src/providers/anthropic
+packages/ai/src/providers/spendGuard.test.ts
+packages/ai/src/providers/index.ts
+packages/ai/src/providers/models.ts
+packages/ai/src/providers/ollama
+packages/ai/src/providers/openai
+packages/ai/src/runtime
+packages/ai/src/runtime/planningAgent.test.ts
+packages/ai/src/runtime/prompt-registry
+packages/ai/src/runtime/summarizerAgent.test.ts
+packages/ai/src/runtime/summarizerAgent.ts
+packages/ai/src/runtime/mentorAgent.test.ts
+packages/ai/src/runtime/capability-registry
+packages/ai/src/runtime/echoAgent.test.ts
+packages/ai/src/runtime/extractionAgent.test.ts
+packages/ai/src/runtime/classificationAgent.ts
+packages/ai/src/runtime/planningAgent.ts
+packages/ai/src/runtime/classificationAgent.test.ts
+packages/ai/src/runtime/agent-registry
+packages/ai/src/runtime/routing-engine
+packages/ai/src/runtime/echoAgent.ts
+packages/ai/src/runtime/smokeTestAgent.test.ts
+packages/ai/src/runtime/context-loader
+packages/ai/src/runtime/extractionAgent.ts
+packages/ai/src/runtime/human-approval
+packages/ai/src/runtime/agent-runner
+packages/ai/src/runtime/smokeTestAgent.ts
+packages/ai/src/runtime/repository-analyzer
+packages/ai/src/runtime/artifact-engine
+packages/ai/src/runtime/orchestrator
+packages/ai/src/runtime/mentorAgent.ts
+packages/ai/src/roles
+packages/ai/src/roles/index.ts
+packages/ai/src/prompts
+packages/ai/src/prompts/salesPsychologist.prompts.ts
+packages/ai/src/prompts/salesPsychologist.claude.prompt.ts
+packages/ai/src/prompts/salesPsychologist.gemini.prompt.ts
+packages/ai/src/prompts/salesPsychologist.gpt.prompt.ts
+packages/ai/src/skills
+packages/ai/src/skills/types.ts
+packages/ai/src/skills/registry.ts
+packages/ai/src/skills/notify.skill.ts
+packages/ai/src/index.ts
+packages/db
+packages/db/generated
+packages/db/generated/client
+packages/db/generated/client/wasm-edge-light-loader.mjs
+packages/db/generated/client/client.js
+packages/db/generated/client/edge.d.ts
+packages/db/generated/client/schema.prisma
+packages/db/generated/client/wasm.d.ts
+packages/db/generated/client/wasm-worker-loader.mjs
+packages/db/generated/client/runtime
+packages/db/generated/client/index.js
+packages/db/generated/client/edge.js
+packages/db/generated/client/index-browser.js
+packages/db/generated/client/package.json
+packages/db/generated/client/libquery_engine-darwin-arm64.dylib.node
+packages/db/generated/client/wasm.js
+packages/db/generated/client/default.js
+packages/db/generated/client/index.d.ts
+packages/db/generated/client/default.d.ts
+packages/db/generated/client/client.d.ts
+packages/db/dist
+packages/db/node_modules
+packages/db/prisma
+packages/db/prisma/migrations
+packages/db/prisma/migrations/20260529200000_zoom_slot_recovery
+packages/db/prisma/migrations/20260602120000_add_zoom_session_type_prereq
+packages/db/prisma/migrations/20260529170000_phase3_zoom_swap_unify
+packages/db/prisma/migrations/20260526094018_add_checkout_session
+packages/db/prisma/migrations/20260314112250_add_gamification_and_mentor_question_set
+packages/db/prisma/migrations/20260316122741_update
+packages/db/prisma/migrations/migration_lock.toml
+packages/db/prisma/migrations/20260604001000_add_content_plan_scope
+packages/db/prisma/migrations/20260706222732_add_first_touch_attribution
+packages/db/prisma/migrations/20260320215541_add_event_table
+packages/db/prisma/migrations/20260910120000_zoom_commerce_request
+packages/db/prisma/migrations/20260712190000_add_ai_spend_ledger
+packages/db/prisma/migrations/20260318083000_add_user_state_machine_foundation
+packages/db/prisma/migrations/20260318153000_repair_user_state_columns
+packages/db/prisma/migrations/20260603000000_add_zoom_session_types
+packages/db/prisma/migrations/20260531153000_add_user_creation_audit
+packages/db/prisma/migrations/20260523_add_active_role
+packages/db/prisma/migrations/20260527120000_add_zoom_slot_swap_request
+packages/db/prisma/migrations/20260920150000_zoom_commerce_positive_amount
+packages/db/prisma/migrations/20260410113000_add_annual_strategy_manual
+packages/db/prisma/migrations/20260523_user_legacy_cleanup_plan
+packages/db/prisma/migrations/20260401124000_add_market_research_cache
+packages/db/prisma/migrations/20260608190000_add_user_phone
+packages/db/prisma/migrations/20260408101500_add_user_funnel_stage
+packages/db/prisma/migrations/20260325143000_repair_notification_tables
+packages/db/prisma/migrations/20260325170000_notification_preference_detail_flags
+packages/db/prisma/migrations/20260518_add_focus_welcomed_at
+packages/db/prisma/migrations/20260605110000_fix_schema_mismatches
+packages/db/prisma/migrations/20260330221500_add_product_access
+packages/db/prisma/migrations/20260604000000_add_coach_content_plan_and_notes
+packages/db/prisma/migrations/20260605123000_add_abtest_notification_types_and_telegram_linked_at
+packages/db/prisma/migrations/20260531120000_add_daily_answer
+packages/db/prisma/migrations/20260513_add_lifecycle_fields
+packages/db/prisma/migrations/20260407123000_add_late_completion
+packages/db/prisma/migrations/20260324173000_normalize_notifications_ssot
+packages/db/prisma/migrations/20260410152000_extend_annual_strategy_for_web_map_manual
+packages/db/prisma/migrations/20260522_add_channel_joined_at
+packages/db/prisma/migrations/20260726213000_add_bonus_subscription_request
+packages/db/prisma/migrations/20260519_add_lexicon_and_campaign_memory
+packages/db/prisma/migrations/20260601182000_add_payment_issue_and_manual_grant
+packages/db/prisma/migrations/20260523_user_legacy_drop_ready
+packages/db/prisma/migrations/20260325203500_repair_notification_columns
+packages/db/prisma/migrations/20260319183145_update
+packages/db/prisma/migrations/20260311201717_add_telegram_link_fields
+packages/db/prisma/migrations/20260519_add_ai_workspace_and_profiles
+packages/db/prisma/migrations/20260407150000_add_voice_flow
+packages/db/prisma/migrations/20260530163000_add_content_pipeline
+packages/db/prisma/migrations/20260317120000_add_product_owner_role
+packages/db/prisma/migrations/20260325182000_microtask_rich_fields
+packages/db/prisma/migrations/20260912120000_zoom_commerce_request_cancelled
+packages/db/prisma/migrations/20260615123000_add_message_log
+packages/db/prisma/migrations/20260907114500_add_battle_attendee_goal_progress
+packages/db/prisma/migrations/20260408214500_add_user_telegram_enabled
+packages/db/prisma/migrations/20260530100000_repair_user_lifecycle_columns
+packages/db/prisma/migrations/20260615143000_zoom_swap_payment_log_link
+packages/db/prisma/migrations/20260311054634_init
+packages/db/prisma/migrations/20260527133000_add_zoom_channel_post
+packages/db/prisma/.DS_Store
+packages/db/prisma/schema.prisma
+packages/db/prisma/seed.ts
+packages/db/prisma/schema.backup.prisma
+packages/db/package.json
+packages/db/.env
+packages/db/tsconfig.json
+packages/db/.env.example
+packages/db/src
+packages/db/src/client.ts
+packages/buttonsRegistry.ts
+
+--- PRISMA SCHEMAS ---
+./packages/db/generated/client/schema.prisma
+./packages/db/prisma/schema.prisma

@@ -48,19 +48,31 @@ export function buildCanonicalResultKeyboard(
   state: CanonicalResultKeyboardState,
 ): InlineKeyboardMarkup {
   const actionPolicy = resolveCanonicalResultActionPolicy(state)
+  if (!state.hasFocus) {
+    return {
+      inline_keyboard: [
+        [{ text: 'ZOOM КАЛЕНДАР', web_app: { url: state.zoomCalendarUrl } }],
+        [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
+        ...(state.includeProgramDescription === false
+          ? []
+          : [[{
+              text: AB_TEST_RESULT_CONTINUE_BUTTON_TEXT,
+              callback_data: `show_inside_${state.resultKey.toUpperCase()}`,
+            }]]),
+      ],
+    }
+  }
+
   const primaryButton = actionPolicy
     ? {
         text: actionPolicy.label,
         web_app: { url: actionPolicy.route },
       }
-    : {
-        text: 'ОБРАТИ ФОРМАТ У ФОКУСІ',
-        callback_data: 'open_focus_payment',
-      }
+    : null
 
   return {
     inline_keyboard: [
-      [primaryButton],
+      primaryButton ? [primaryButton] : [],
       ...(state.includeProgramDescription === false
         ? []
         : [[{

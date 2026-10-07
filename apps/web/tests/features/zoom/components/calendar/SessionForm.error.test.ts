@@ -4,6 +4,10 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
   useGetAttendeesQuery: () => ({ data: [], isFetching: false }),
 }))
 
+vi.mock('@/features/zoom/zoom.api', () => ({
+  useGetAvailabilityQuery: () => ({ data: [] }),
+}))
+
 import {
   getSessionFormSubmitErrorClassName,
   getSessionFormSubmitErrorMessage,
@@ -26,6 +30,13 @@ describe('SessionForm submit errors', () => {
         message: 'Цей учасник уже має Zoom-сесію на вибраний час. Оберіть інший час.',
       },
     }
+    const unavailableSlot = {
+      status: 409,
+      data: {
+        error: 'COMMERCE_SLOT_UNAVAILABLE',
+        message: 'Цей час уже зайнятий. Обери інший доступний час.',
+      },
+    }
 
     expect(getSessionFormSubmitErrorMessage(coachConflict)).toBe(
       'На цей час уже запланована інша Zoom-сесія. Оберіть інший час.',
@@ -36,7 +47,8 @@ describe('SessionForm submit errors', () => {
     expect(getSessionFormSubmitErrorMessage(userConflict)).not.toBe('[object Object]')
     expect(isSessionSchedulingConflictError(coachConflict)).toBe(true)
     expect(isSessionSchedulingConflictError(userConflict)).toBe(true)
-    expect(getSessionFormSubmitErrorClassName(true)).toContain('var(--semantic-warning-rgb)')
-    expect(getSessionFormSubmitErrorClassName(true)).toContain('var(--semantic-warning)')
+    expect(isSessionSchedulingConflictError(unavailableSlot)).toBe(true)
+    expect(getSessionFormSubmitErrorClassName(true)).toContain('border-red-300')
+    expect(getSessionFormSubmitErrorClassName(true)).toContain('text-red-100')
   })
 })

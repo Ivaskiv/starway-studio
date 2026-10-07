@@ -130,7 +130,7 @@ export function useAccessActions(input: Input) {
         productId: 'focus',
         planCode: '1month',
         source: 'web',
-        targetPath: '/miniapp/zoom-calendar?payment=success',
+        targetPath: '/miniapp/zoom-calendar?zoomRole=user&payment=success',
       }).unwrap()
 
       if (response.status === 'already_active') {

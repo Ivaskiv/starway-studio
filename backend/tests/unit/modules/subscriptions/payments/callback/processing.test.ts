@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const processEcosystemPaymentMock = vi.fn()
 const sendOpsTelegramMessageMock = vi.fn()
 const notifyPrivateSessionPaymentMock = vi.fn()
+const resolveByPaymentReferenceMock = vi.fn()
+const markRequestPaidMock = vi.fn()
 
 vi.mock('@/lib/payments/registry.js', () => ({
   findByAmount: vi.fn(() => null),
@@ -22,6 +24,11 @@ vi.mock('../../../zoom/service.ts', () => ({
 
 vi.mock('../../../zoom/private/zoom.private-booking.service.js', () => ({
   notifyPrivateSessionPayment: (...args: unknown[]) => notifyPrivateSessionPaymentMock(...args),
+}))
+
+vi.mock('@/modules/zoom/commerce/zoom.commerce-request.service.js', () => ({
+  resolveByPaymentReference: (...args: unknown[]) => resolveByPaymentReferenceMock(...args),
+  markRequestPaid: (...args: unknown[]) => markRequestPaidMock(...args),
 }))
 
 vi.mock('@/modules/subscriptions/payments/business/service.js', () => ({
@@ -89,6 +96,73 @@ describe('processPaymentWebhook', () => {
       enrollmentId: null,
       expertId: 'expert-1',
     })
+    resolveByPaymentReferenceMock.mockResolvedValue(null)
+    markRequestPaidMock.mockResolvedValue({ duplicate: false })
+  })
+
+  it('routes the exact Individual commerce invoice reference to the verified paid transition', async () => {
+    const requestId = '22222222-2222-4222-8222-222222222222'
+    const orderReference = `zoom_commerce_individual_${requestId}`
+    const db = createDb()
+    resolveByPaymentReferenceMock.mockResolvedValue({
+      id: requestId,
+      kind: 'INDIVIDUAL',
+      requesterUserId: userId,
+      zoomSessionId: 'session-1',
+      status: 'APPROVED_PENDING_PAYMENT',
+    })
+    markRequestPaidMock.mockResolvedValue({ duplicate: false })
+
+    const result = await processPaymentWebhook({
+      order_reference: orderReference,
+      amount: 1,
+      currency: 'UAH',
+      clientAccountId: userId,
+      transaction_status: 'Approved',
+    }, db)
+
+    expect(resolveByPaymentReferenceMock).toHaveBeenCalledWith(orderReference, db)
+    expect(markRequestPaidMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderReference,
+        userId,
+        zoomSessionId: 'session-1',
+        paymentKind: 'zoom_individual',
+        amount: 1,
+        currency: 'UAH',
+      }),
+      db,
+      undefined,
+    )
+    expect(result).toMatchObject({
+      duplicate: false,
+      scope: 'zoom',
+      productId: 'zoom_individual',
+      payRef: orderReference,
+    })
+  })
+
+  it('does not mark an Individual commerce request paid before an approved callback', async () => {
+    const requestId = '22222222-2222-4222-8222-222222222222'
+    const orderReference = `zoom_commerce_individual_${requestId}`
+    const db = createDb()
+    resolveByPaymentReferenceMock.mockResolvedValue({
+      id: requestId,
+      kind: 'INDIVIDUAL',
+      requesterUserId: userId,
+      zoomSessionId: 'session-1',
+      status: 'APPROVED_PENDING_PAYMENT',
+    })
+
+    await expect(processPaymentWebhook({
+      order_reference: orderReference,
+      amount: 1,
+      currency: 'UAH',
+      clientAccountId: userId,
+      transaction_status: 'Declined',
+    }, db)).rejects.toThrow('COMMERCE_PAYMENT_NOT_APPROVED')
+
+    expect(markRequestPaidMock).not.toHaveBeenCalled()
   })
 
   it('confirms only the exact individual checkout attendee and is idempotent', async () => {

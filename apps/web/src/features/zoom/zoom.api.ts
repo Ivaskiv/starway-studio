@@ -17,6 +17,34 @@ import type {
   ZoomSwapRequest,
 } from './zoom.types';
 
+type IndividualAvailabilityQueryError = {
+  error?: {
+    status?: unknown;
+    data?: unknown;
+    error?: unknown;
+  };
+};
+
+function safeIndividualAvailabilityErrorMessage(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return null;
+
+  const payload = value as { message?: unknown; error?: unknown };
+  if (typeof payload.message === 'string') return payload.message;
+  if (typeof payload.error === 'string') return payload.error;
+  return null;
+}
+
+export function logIndividualAvailabilityQueryFailure(date: string, failure: unknown): void {
+  const error = (failure as IndividualAvailabilityQueryError | null)?.error;
+  console.warn('[ZOOM_INDIVIDUAL_AVAILABILITY_REQUEST_FAILED]', {
+    date,
+    status: error?.status ?? null,
+    message: safeIndividualAvailabilityErrorMessage(error?.data)
+      ?? safeIndividualAvailabilityErrorMessage(error?.error),
+  });
+}
+
 export const zoomCalendarApi = api.injectEndpoints({
   endpoints: build => ({
 
@@ -45,6 +73,13 @@ export const zoomCalendarApi = api.injectEndpoints({
     getIndividualAvailability: build.query<IndividualAvailabilityCandidate[], string>({
       query: date => `/zoom/individual-availability?date=${encodeURIComponent(date)}`,
       providesTags: ['ZoomSession'],
+      async onQueryStarted(date, { queryFulfilled }) {
+        try {
+          await queryFulfilled;
+        } catch (failure) {
+          logIndividualAvailabilityQueryFailure(date, failure);
+        }
+      },
     }),
 
     getIndividualAvailabilitySummary: build.query<
@@ -99,6 +134,17 @@ export const zoomCalendarApi = api.injectEndpoints({
       query: requestId => ({
         url: `/zoom/commerce/requests/${requestId}/reject`,
         method: 'POST',
+      }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    cancelZoomCommerceRequest: build.mutation<
+      { request: { id: string; status: string } },
+      string
+    >({
+      query: requestId => ({
+        url: `/zoom/commerce/requests/${requestId}`,
+        method: 'DELETE',
       }),
       invalidatesTags: ['ZoomSession'],
     }),
@@ -283,6 +329,7 @@ export const {
   useCancelZoomSessionMutation,
   useApproveZoomCommerceRequestMutation,
   useRejectZoomCommerceRequestMutation,
+  useCancelZoomCommerceRequestMutation,
   useGetLeaderboardQuery,
   useInitiateBattleMutation,
   useAcceptBattleMutation,

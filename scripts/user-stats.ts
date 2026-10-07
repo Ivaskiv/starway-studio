@@ -1,11 +1,13 @@
 /// <reference types="node" />
 import { prisma } from '../backend/src/db/client.js'
+import { assertCanonicalDbOperationAllowed } from './canonical-db-guard.mjs'
 
 const TELEGRAM_USERNAME = 'vira_333'
 const TELEGRAM_USER_ID = '630111093'
 const TELEGRAM_CHAT_ID = '630111093'
 
 async function resetGuestUser(userId: string) {
+  assertCanonicalDbOperationAllowed('reset-guest-user')
   await prisma.user.update({
     where: { id: userId },
     data: {

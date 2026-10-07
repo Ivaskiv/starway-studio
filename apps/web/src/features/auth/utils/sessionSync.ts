@@ -23,6 +23,8 @@ type SyncAuthSessionOptions = {
   theme: ThemeSyncApi
 }
 
+export const SESSION_RESTORE_REQUEST_TIMEOUT_MS = 15_000
+
 type TelegramRuntimeUser = {
   id: number
   username?: string
@@ -37,6 +39,20 @@ function applyUserTheme(theme: ThemeSyncApi, user: User) {
   theme.setAccent(safeAccent(user.settings?.accentColor))
   theme.setMode(normalizeUiMode(user.settings?.theme))
   theme.setBgColor(user.settings?.bgColor ?? undefined)
+}
+
+function traceSessionSync(event: string, payload: Record<string, unknown> = {}) {
+  if (!import.meta.env.DEV) return
+
+  void fetch('/api/debug/client-trace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel: 'SESSION_SYNC_TRACE',
+      event,
+      payload,
+    }),
+  }).catch(() => undefined)
 }
 
 function isLikelyTelegramMiniAppRuntime(): boolean {
@@ -145,6 +161,37 @@ async function readJsonSafely(response: Response) {
   return response.json()
 }
 
+/**
+ * Session restoration is the shared Mini App bootstrap boundary. A tunnel or
+ * proxy request must settle; otherwise both USER and COACH remain permanently
+ * in their restoring state with no route-level retry path.
+ */
+async function fetchSessionRestore(
+  input: RequestInfo | URL,
+  init: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController()
+  let timeoutId: number | null = null
+
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = window.setTimeout(() => {
+      controller.abort()
+      reject(new Error('SESSION_RESTORE_REQUEST_TIMEOUT'))
+    }, SESSION_RESTORE_REQUEST_TIMEOUT_MS)
+  })
+
+  try {
+    return await Promise.race([
+      fetch(input, { ...init, signal: controller.signal }),
+      timeout,
+    ])
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId)
+    }
+  }
+}
+
 export function isTelegramMiniAppAuthContext(): boolean {
   return isLikelyTelegramMiniAppRuntime()
 }
@@ -162,6 +209,13 @@ export async function syncAuthSession({
 
   if (isTelegramMiniAppRuntime) {
     await waitForTelegramRuntimeReady()
+
+    traceSessionSync('TELEGRAM_RUNTIME_READY', {
+      isTelegramRuntime: isTelegramMiniAppRuntime,
+      hasTelegramWebApp: Boolean(window.Telegram?.WebApp),
+      hasTelegramInitData: Boolean(getTelegramRuntimeInitData()),
+      telegramUserId: getTelegramRuntimeUser()?.id ?? null,
+    })
   }
 
   if (import.meta.env.DEV) {
@@ -179,6 +233,15 @@ export async function syncAuthSession({
   const sessionHint = hasSessionHint()
   const telegramUser = getTelegramRuntimeUser()
   const telegramInitData = getTelegramRuntimeInitData()
+
+  traceSessionSync('AUTH_EVIDENCE', {
+    hasToken: Boolean(token),
+    hasRefreshToken: Boolean(refreshToken),
+    hasSessionHint: sessionHint,
+    telegramUserId: telegramUser?.id ?? null,
+    hasTelegramInitData: Boolean(telegramInitData),
+  })
+
   const canTryRefresh =
     Boolean(refreshToken) ||
     sessionHint ||
@@ -203,7 +266,7 @@ export async function syncAuthSession({
   if (telegramInitData && isTelegramMiniAppRuntime) {
     console.info('[MINIAPP_AUTH_INITDATA]', { present: true })
     try {
-      const socialRes = await fetch(resolveApiUrl('/auth/telegram'), {
+      const socialRes = await fetchSessionRestore(resolveApiUrl('/auth/telegram'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
@@ -215,6 +278,13 @@ export async function syncAuthSession({
           initData: telegramInitData,
         }),
       })
+
+      traceSessionSync('TELEGRAM_AUTH_RESPONSE', {
+        status: socialRes.status,
+        ok: socialRes.ok,
+        contentType: socialRes.headers.get('content-type'),
+      })
+
       console.info('[MINIAPP_SESSION_RESTORE]', {
         status: socialRes.status,
         contentType: socialRes.headers.get('content-type'),
@@ -251,7 +321,7 @@ export async function syncAuthSession({
 
   if (canTryRefresh) {
     try {
-      const refreshRes = await fetch(resolveApiUrl('/auth/refresh'), {
+      const refreshRes = await fetchSessionRestore(resolveApiUrl('/auth/refresh'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
@@ -288,7 +358,7 @@ export async function syncAuthSession({
 
   if (token) {
     try {
-      const meRes = await fetch(resolveApiUrl('/auth/me'), {
+      const meRes = await fetchSessionRestore(resolveApiUrl('/auth/me'), {
         method: 'GET',
         credentials: 'include',
         cache: 'no-store',
@@ -319,7 +389,7 @@ export async function syncAuthSession({
 
   if (telegramUser?.id && !telegramInitData && isTelegramMiniAppRuntime && isTelegramDevFallbackAllowed()) {
     try {
-      const socialRes = await fetch(resolveApiUrl('/auth/social'), {
+      const socialRes = await fetchSessionRestore(resolveApiUrl('/auth/social'), {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
@@ -356,6 +426,14 @@ export async function syncAuthSession({
       console.warn('[sessionSync] Telegram dev fallback restore failed', error)
     }
   }
+
+  traceSessionSync('FINAL_FAILURE', {
+    isTelegramRuntime: isTelegramMiniAppRuntime,
+    telegramUserId: telegramUser?.id ?? null,
+    hasTelegramInitData: Boolean(telegramInitData),
+    canTryRefresh,
+    hasToken: Boolean(token),
+  })
 
   return markGuest()
 }

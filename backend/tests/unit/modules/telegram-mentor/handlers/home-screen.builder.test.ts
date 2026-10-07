@@ -175,7 +175,7 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(JSON.stringify(screen.reply_markup)).toMatch(/тест/i)
   })
 
-  it('TEST_DONE with completed result renders separated, escaped returning-home sections', async () => {
+  it('TEST_DONE with NO_ACCESS renders the approved Zoom calendar entry without legacy actions', async () => {
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
       result_key: 'goal',
@@ -183,23 +183,25 @@ describe('buildHomeScreen — /start funnel regression', () => {
     const snapshot = makeSnapshot({ lifecycleState: 'TEST_DONE', testResultType: 'action' })
     const screen = await buildHomeScreen(snapshot, fakeCtx)
 
-    expect(screen.text).toContain('Рада бачити тебе знову.')
-    expect(screen.text).toContain('✨ <b>Твій результат — ЦІЛЬ</b>')
-    expect(screen.text).toContain('Ти хочеш змін, але не розумієш, з чого почати.')
-    expect(screen.text).toContain('📅 <b>НАЙБЛИЖЧА ZOOM-ПРАКТИКА</b>')
-    expect(screen.text).toContain('🔒 <b>ФОКУС</b>')
-    expect(screen.text).toContain('Зараз активного доступу до Zoom-практик немає.')
-    expect(screen.text).toContain('Найближча групова Zoom-практика ще не запланована.')
-    expect(screen.text).toMatch(/Твій результат — ЦІЛЬ[\s\S]*?📅 <b>НАЙБЛИЖЧА ZOOM-ПРАКТИКА<\/b>[\s\S]*?🔒 <b>ФОКУС<\/b>/)
-    const flat = JSON.stringify(screen.reply_markup)
-    expect(flat).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
-    expect(flat).toMatch(/ПРО ПРОГРАМУ/)
-    expect(flat).not.toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/show_inside_GOAL/)
-    expect(flat).toMatch(/open_focus_payment/)
+    expect(screen.text).toContain('<b>ТВІЙ ZOOM-КАЛЕНДАР</b>')
+    expect(screen.text).toContain('Тут ти можеш переглядати розклад групових та індивідуальних Zoom-сесій.')
+    expect(screen.text).toContain('Щоб записатися на Zoom-сесію, активуй доступ.')
+    expect(screen.reply_markup.inline_keyboard).toEqual([
+      [{ text: 'ZOOM КАЛЕНДАР', web_app: { url: expect.stringMatching(/\/miniapp\/zoom-calendar\?zoomRole=user$/) } }],
+      [
+        { text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' },
+        { text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_GOAL' },
+      ],
+    ])
+    const buttonLabels = screen.reply_markup.inline_keyboard.flat().map((button) => button.text)
+    expect(buttonLabels).not.toContain('ЗАПИСАТИСЯ')
+    expect(buttonLabels).not.toContain('ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ')
+    expect(buttonLabels).not.toContain('ПРОЙТИ ТЕСТ ЩЕ РАЗ')
+    expect(buttonLabels).not.toContain('КАНАЛ ФОКУСУ')
+    expect(buttonLabels.join('')).not.toMatch(/[\p{Extended_Pictographic}]/u)
   })
 
-  it('keeps dynamic name and nearest Zoom date escaped and separated', async () => {
+  it('keeps the NO_ACCESS Zoom entry compact even when an upcoming Group practice exists', async () => {
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
       result_key: 'goal',
@@ -215,10 +217,9 @@ describe('buildHomeScreen — /start funnel regression', () => {
       fakeCtx,
     )
 
-    expect(screen.text.startsWith('&lt;Віра&gt;, рада бачити тебе знову.')).toBe(true)
-    expect(screen.text).toContain('&lt;Віра&gt;, Ти хочеш змін')
-    expect(screen.text).toContain('28 вересня о 19:00 за Києвом')
-    expect(screen.text).toContain('Ти ще не записувалась на неї.')
+    expect(screen.text).toContain('<b>ТВІЙ ZOOM-КАЛЕНДАР</b>')
+    expect(screen.text).not.toContain('&lt;Віра&gt;')
+    expect(screen.text).not.toContain('28 вересня о 19:00 за Києвом')
   })
 
   it('OFFER_SHOWN keeps offer CTA separate from TEST_DONE', async () => {
@@ -232,6 +233,10 @@ describe('buildHomeScreen — /start funnel regression', () => {
   })
 
   it('FOCUS_PAID: renders canonical Focus home with 3 CTA', async () => {
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'goal',
+    })
     mockGetUserAccessState.mockResolvedValue({
       state: 'FOCUS_ACTIVE',
       isActive: true,
@@ -247,17 +252,18 @@ describe('buildHomeScreen — /start funnel regression', () => {
       attendeesCount: 0,
     })
 
-    const snapshot = makeSnapshot({ lifecycleState: 'FOCUS_PAID' })
+    const snapshot = makeSnapshot({ lifecycleState: 'FOCUS_PAID', testResultType: 'goal' })
     const screen = await buildHomeScreen(snapshot, fakeCtx)
 
-    expect(screen.text).toContain('Твій доступ до ФОКУСУ активний до')
-    expect(screen.text).toContain('Ти ще не записана.')
-    expect(screen.reply_markup.inline_keyboard).toHaveLength(4)
-    const flat = JSON.stringify(screen.reply_markup)
-    expect(flat).toMatch(/ЗАПИСАТИСЯ/)
-    expect(flat).toMatch(/ПЕРЕГЛЯНУТИ РЕЗУЛЬТАТ/)
-    expect(flat).toMatch(/ПРОЙТИ ТЕСТ ЩЕ РАЗ/)
-    expect(flat).toMatch(/КАНАЛ ФОКУСУ/)
+    expect(screen.text).toContain('Зараз у тебе активна підписка ФОКУС до')
+    expect(screen.text).toContain('Ти ще не записувалась на неї.')
+    expect(screen.reply_markup.inline_keyboard).toEqual([
+      [{ text: 'ZOOM КАЛЕНДАР', web_app: { url: expect.stringMatching(/\/miniapp\/zoom-calendar\?zoomRole=user$/) } }],
+      [
+        { text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' },
+        { text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_GOAL' },
+      ],
+    ])
   })
 
   it('FOCUS_PAID with PREMIUM trial access keeps trial semantics instead of active Focus copy', async () => {
@@ -290,8 +296,11 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(screen.text).toContain('Найближча групова Zoom-практика — 27 серпня о 19:00 за Києвом.')
     expect(screen.text).toContain('Ти ще не записувалась на неї.')
     expect(screen.reply_markup.inline_keyboard).toEqual([
-      [{ text: 'ОБРАТИ ZOOM-ПРАКТИКУ', web_app: { url: expect.stringContaining('/miniapp/zoom-calendar?intent=booking') } }],
-      [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_STATE' }],
+      [{ text: 'ZOOM КАЛЕНДАР', web_app: { url: expect.stringMatching(/\/miniapp\/zoom-calendar\?zoomRole=user$/) } }],
+      [
+        { text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' },
+        { text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_STATE' },
+      ],
     ])
   })
 

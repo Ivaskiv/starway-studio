@@ -267,13 +267,19 @@ export async function scanZoomAvailabilityAutoGenerate(): Promise<{
 
   for (const expert of experts) {
     const slots = Array.isArray(expert.zoomAvailability) ? expert.zoomAvailability : [];
-    if (slots.length === 0) {
+    const hasCanonicalGroupPractice = slots.some((slot) => (
+      slot
+      && typeof slot === 'object'
+      && !Array.isArray(slot)
+      && (slot as { sessionType?: unknown }).sessionType === 'group_practice'
+    ));
+    if (!hasCanonicalGroupPractice) {
       try {
         const seeded = await seedDefaultAvailability(expert.id)
         expertsScanned += 1
         created += seeded.created
         skipped += seeded.skipped
-        console.info('[zoom.schedule.auto_generate.seeded_default]', {
+        console.info('[zoom.schedule.auto_generate.seeded_group_practice]', {
           expertId: expert.id,
           created: seeded.created,
           skipped: seeded.skipped,

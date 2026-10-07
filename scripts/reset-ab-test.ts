@@ -1,6 +1,8 @@
 import { prisma } from '../backend/src/db/client.js'
+import { assertCanonicalDbOperationAllowed } from './canonical-db-guard.mjs'
 
 async function resetAbTest(email: string) {
+  assertCanonicalDbOperationAllowed('reset-ab-test')
   const user = await prisma.user.findUnique({
     where: { email },
     select: {

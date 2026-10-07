@@ -1,5 +1,6 @@
 import { prisma } from '../db/client.js'
 import { Prisma } from '@starway/db/prisma-client'
+import { assertCanonicalDbOperationAllowed } from '../../../scripts/canonical-db-guard.mjs'
 
 type JsonRecord = Record<string, unknown>
 
@@ -28,6 +29,7 @@ function parseArgs() {
 
 async function main() {
   const { apply, limit } = parseArgs()
+  if (apply) assertCanonicalDbOperationAllowed('user-consolidation-apply')
   const users = await prisma.user.findMany({
     ...(limit > 0 ? { take: limit } : {}),
     orderBy: { createdAt: 'asc' },

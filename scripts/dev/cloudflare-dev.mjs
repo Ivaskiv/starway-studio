@@ -50,6 +50,7 @@ export function buildCloudflareDevEnvUpdates(publicUrl) {
   return {
     PUBLIC_API_URL: normalized,
     PUBLIC_FRONTEND_URL: normalized,
+    TELEGRAM_PUBLIC_FRONTEND_URL: normalized,
     TELEGRAM_WEBAPP_BASE_URL: normalized,
     WAYFORPAY_CALLBACK_URL: `${normalized}${wayforpayCallbackPath}`,
   }
@@ -104,7 +105,7 @@ export function classifyCloudflareProcessExit({ stopping, readyPublished }) {
     return 'ignore'
   }
 
-  return readyPublished ? 'preserve-dev-runtime' : 'shutdown'
+  return 'shutdown'
 }
 
 async function runCommand(command, args, { allowNonZero = false } = {}) {
@@ -150,7 +151,35 @@ async function killPids(signal, pids) {
   await runCommand('kill', [`-${signal}`, ...pids], { allowNonZero: true })
 }
 
+async function listStaleDevSupervisorPids() {
+  const result = await runCommand('ps', ['-ax', '-o', 'pid=,command='])
+  const pids = []
+
+  for (const rawLine of result.stdout.split(/\r?\n/)) {
+    const match = rawLine.trim().match(/^(\d+)\s+(.+)$/)
+    if (!match) continue
+
+    const [, pid, command] = match
+    if (
+      command.includes(rootDir)
+      && command.includes('concurrently')
+      && command.includes('pnpm -s --dir backend dev')
+    ) {
+      pids.push(pid)
+    }
+  }
+
+  return pids
+}
+
 async function cleanupStaleProcesses() {
+  const staleSupervisorPids = await listStaleDevSupervisorPids()
+  if (staleSupervisorPids.length > 0) {
+    await killPids('TERM', staleSupervisorPids)
+    await sleep(shutdownGraceMs)
+    await killPids('KILL', await listStaleDevSupervisorPids())
+  }
+
   const stalePortPids = Array.from(new Set([
     ...(await listPortPids(3001)),
     ...(await listPortPids(5173)),
@@ -200,6 +229,23 @@ function startDev(publicUrl) {
     console.error(`[DEV] failed to start: ${error.message}`)
     shutdown(1)
   })
+}
+
+/**
+ * The backend initializes Telegram WebApp menus during startup. Keep the
+ * public tunnel URL and generated child environment ahead of that boundary.
+ */
+export async function startRuntimeAfterTunnelReady({
+  startTunnelFn = startTunnel,
+  waitForTunnelUrlFn = waitForTunnelUrl,
+  updateLocalEnvFn = updateLocalEnv,
+  startDevFn = startDev,
+} = {}) {
+  startTunnelFn()
+  const publicUrl = await waitForTunnelUrlFn()
+  await updateLocalEnvFn(publicUrl)
+  startDevFn(publicUrl)
+  return publicUrl
 }
 
 async function waitForHttpOk(url, label, options = {}) {
@@ -312,10 +358,8 @@ function startTunnel() {
       return
     }
 
-    tunnel = null
-    console.warn(
-      `[CLOUDFLARE] exited after readiness with code=${code ?? 'null'}; backend/web stay alive`,
-    )
+    console.error(`[CLOUDFLARE] exited after readiness with code=${code ?? 'null'}; shutting down invalid local runtime`)
+    shutdown(1)
   })
   tunnel.once('error', error => {
     console.error(`[CLOUDFLARE] failed to start: ${error.message}`)
@@ -340,11 +384,7 @@ async function publishReady(publicUrl) {
 
 export async function main() {
   await cleanupStaleProcesses()
-  startTunnel()
-
-  const publicUrl = await waitForTunnelUrl()
-  await updateLocalEnv(publicUrl)
-  startDev(publicUrl)
+  const publicUrl = await startRuntimeAfterTunnelReady()
   await publishReady(publicUrl)
 
   await new Promise(() => undefined)

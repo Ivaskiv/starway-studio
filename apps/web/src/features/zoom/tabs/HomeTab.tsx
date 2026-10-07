@@ -29,7 +29,7 @@ export default function HomeTab({
   const handleOpenCalendar = () => {
     setActiveTab?.('calendar')
     onNavigateCalendar?.()
-    navigate('/miniapp/zoom-calendar')
+    navigate('/miniapp/zoom-calendar?zoomRole=user')
   }
 
   const role: ZoomCalendarMode = 'user'

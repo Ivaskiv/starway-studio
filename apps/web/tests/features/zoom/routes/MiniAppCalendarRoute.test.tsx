@@ -13,6 +13,11 @@ const routeState = {
           role: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
           activeRole: 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN'
           expertId?: string | null
+          access?: {
+            plan: 'free' | 'trial' | 'paid'
+            isPaid: boolean
+            isTrial: boolean
+          }
         },
     role: null as null | 'USER' | 'EXPERT' | 'ADMIN' | 'SUPERADMIN',
   },
@@ -109,6 +114,8 @@ describe('MiniAppCalendarRoute', () => {
     const markup = await renderMiniAppCalendarRoute()
 
     expect(markup).toContain('COACH_ZOOM_PANEL:expert-1')
+    expect(markup).not.toContain('COACH calendar')
+    expect(markup).not.toContain('USER calendar')
     expect(markup).toContain('data-miniapp-nav-variant="coach"')
     expect(markup).toContain('aria-label="Coach Mini App navigation"')
     expect(markup).toContain('Календар')
@@ -177,23 +184,49 @@ describe('MiniAppCalendarRoute', () => {
   })
 
   it('keeps every Coach nav item on a concrete calendar section route', () => {
-    const source = readFileSync(
+    const layoutSource = readFileSync(
       new URL('../../../../src/components/miniapp/MiniAppLayout.tsx', import.meta.url),
       'utf8',
     )
+    const routeSource = readFileSync(
+      new URL('../../../../src/features/zoom/routes/MiniAppCalendarRoute.tsx', import.meta.url),
+      'utf8',
+    )
+    const userHomeSource = readFileSync(
+      new URL('../../../../src/features/zoom/tabs/HomeTab.tsx', import.meta.url),
+      'utf8',
+    )
+    const accessActionSource = readFileSync(
+      new URL('../../../../src/features/zoom/hooks/useAccessActions.ts', import.meta.url),
+      'utf8',
+    )
 
-    expect(source).toContain("'#participants': 'participants'")
-    expect(source).toContain("'#analytics': 'analytics'")
-    expect(source).toContain("'#more': 'more'")
-    expect(source).toContain('navigate(`/miniapp/zoom-calendar#${tab}`)')
+    expect(layoutSource).toContain("'#participants': 'participants'")
+    expect(layoutSource).toContain("'#battle': 'battle'")
+    expect(layoutSource).toContain("'#analytics': 'analytics'")
+    expect(layoutSource).toContain("'#more': 'more'")
+    expect(layoutSource).toContain('navigate(`${COACH_ZOOM_ROUTE}#${tab}`)')
+    expect(layoutSource).toContain("const COACH_ZOOM_ROUTE = '/miniapp/zoom-calendar?zoomRole=coach'")
+    expect(layoutSource).toContain("return withZoomRole(route, 'user')")
+    expect(userHomeSource).toContain("navigate('/miniapp/zoom-calendar?zoomRole=user')")
+    expect(accessActionSource).toContain("targetPath: '/miniapp/zoom-calendar?zoomRole=user&payment=success'")
+    expect(routeSource).toContain("'#participants': 'participants'")
+    expect(routeSource).toContain("'#battle': 'battle'")
+    expect(routeSource).toContain("'#analytics': 'analytics'")
+    expect(routeSource).toContain("'#more': 'more'")
   })
 
-  it('renders the existing USER calendar owner for an authenticated user', async () => {
+  it('renders the existing USER calendar owner after Telegram auth restores a NO_ACCESS user', async () => {
     routeState.auth.user = {
       id: 'focus-user',
       role: 'USER',
       activeRole: 'USER',
       expertId: null,
+      access: {
+        plan: 'free',
+        isPaid: false,
+        isTrial: false,
+      },
     }
     routeState.auth.role = 'USER'
 
@@ -224,5 +257,14 @@ describe('MiniAppCalendarRoute', () => {
 
     expect(markup).toContain('Завантаження…')
     expect(markup).not.toContain('Спробувати ще раз')
+  })
+
+  it('keeps Telegram session restoration owned by the calendar route for an unauthenticated direct open', () => {
+    const source = readFileSync(
+      new URL('../../../../src/features/zoom/routes/MiniAppCalendarRoute.tsx', import.meta.url),
+      'utf8',
+    )
+
+    expect(source).toContain("if (!user?.id) void restoreSession('manual')")
   })
 })

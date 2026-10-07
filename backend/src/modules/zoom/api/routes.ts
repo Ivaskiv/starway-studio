@@ -57,6 +57,7 @@ import {
   handleGetCommerceRequest,
   handleApproveCommerceRequest,
   handleRejectCommerceRequest,
+  handleCancelCommerceRequest,
 } from './zoom.admin.handler.js';
 
 const router = Router();
@@ -98,8 +99,8 @@ router.patch('/battle/:sessionId/result',      authRequired, finalizeBattleResul
 router.get('/availability',                    authRequired, handleGetAvailability);
 router.get('/coach/participants',               authRequired, handleGetCoachParticipants);
 router.get('/availability/week',               authRequired, handleGetAvailabilityWeek);
-router.get('/individual-availability/summary', authRequired, handleGetIndividualAvailabilitySummary);
-router.get('/individual-availability',         authRequired, handleGetIndividualAvailability);
+router.get('/individual-availability/summary', telegramWebAppAuth(), handleGetIndividualAvailabilitySummary);
+router.get('/individual-availability',         telegramWebAppAuth(), handleGetIndividualAvailability);
 router.put('/availability',                    authRequired, handleSaveAvailability);
 router.put('/availability/week',               authRequired, handleSaveAvailabilityWeek);
 router.post('/availability/generate',          authRequired, handleGenerateSessions);
@@ -107,10 +108,11 @@ router.post('/availability/generate',          authRequired, handleGenerateSessi
 // ── Slot booking ──────────────────────────────────────────────────────────────
 router.get('/slots/available',                telegramWebAppAuth(), getAvailableSlots);
 router.post('/sessions/:id/book',             telegramWebAppAuth(), handleBookPrivateSlot);
-router.post('/individual-requests',           authRequired, handleCreateUserIndividualRequest);
+router.post('/individual-requests',           telegramWebAppAuth(), handleCreateUserIndividualRequest);
 router.get('/commerce/requests/:id',           authRequired, handleGetCommerceRequest);
 router.post('/commerce/requests/:id/approve',  authRequired, handleApproveCommerceRequest);
 router.post('/commerce/requests/:id/reject',   authRequired, handleRejectCommerceRequest);
+router.delete('/commerce/requests/:id',        telegramWebAppAuth(), handleCancelCommerceRequest);
 router.post('/sessions/:id/unbook',            authRequired, handleUnbookSlot);
 router.get('/sessions/private/available',      authRequired, handleGetAvailablePrivateSlots);
 router.delete('/sessions/:id/book',            authRequired, handleCancelPrivateSlotBooking);

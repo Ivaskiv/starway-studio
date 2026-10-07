@@ -63,8 +63,10 @@ describe('MiniAppCalendarRoute runtime', () => {
     )
 
     expect(markup).toContain('data-miniapp-nav-variant="user"')
+    expect(markup).toContain('min-h-[100dvh]')
+    expect(markup).toContain('bg-[#07111f]')
     expect(markup).toContain('data-zoom-week-view="user-vertical"')
-    expect(markup).toContain('Немає запланованих сесій')
+    expect(markup).toContain('Цього тижня сесій немає.')
     expect(markup).not.toContain('Цілі FOCUS недоступні')
     expect(markup).not.toContain('Персональний календар доступний тільки')
   })

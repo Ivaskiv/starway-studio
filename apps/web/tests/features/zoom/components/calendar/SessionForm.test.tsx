@@ -11,6 +11,25 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
   }),
 }))
 
+vi.mock('@/features/zoom/zoom.api', () => ({
+  useGetAvailabilityQuery: () => ({
+    data: [
+      {
+        id: 'thu-group',
+        dayOfWeek: 4,
+        hour: 19,
+        minute: 0,
+        timezone: 'Europe/Kyiv',
+        sessionType: 'group_practice',
+        maxSlots: 50,
+        priceCents: 0,
+        durationMinutes: 60,
+        active: true,
+      },
+    ],
+  }),
+}))
+
 describe('SessionForm', () => {
   it('prefills the existing form for coach edit flow', async () => {
     const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
@@ -48,7 +67,7 @@ describe('SessionForm', () => {
     expect(markup).toContain('value="2026-09-03"')
     expect(markup).toContain('type="time"')
     expect(markup).toContain('aria-label="Обрати час"')
-    expect(markup).toContain('value="18:30"')
+    expect(markup).toContain('value="19:30"')
     expect(markup).toContain('>Зберегти<')
     expect(markup).toContain('>Назад<')
     expect(markup).toContain('aria-pressed="true"')
@@ -57,7 +76,7 @@ describe('SessionForm', () => {
     expect(markup).toContain('selected')
   })
 
-  it('renders the new group form without a stale date and with capacity', async () => {
+  it('prefills a new group form from the selected calendar day and its normal schedule', async () => {
     const { SessionForm } = await import('@/features/zoom/components/calendar/SessionForm')
     const markup = renderToStaticMarkup(
       createElement(SessionForm, {
@@ -72,12 +91,12 @@ describe('SessionForm', () => {
     expect(markup).toContain('type="date"')
     expect(markup).toContain('aria-label="Обрати дату"')
     expect(markup).toContain('placeholder="Обрати дату"')
-    expect(markup).toContain('value=""')
+    expect(markup).toContain('value="2026-09-03"')
     expect(markup).toContain('type="time"')
     expect(markup).toContain('aria-label="Обрати час"')
     expect(markup).toContain('value="19:00"')
     expect(markup).toContain('Місткість')
-    expect(markup).not.toContain('09.2026')
+    expect(markup).toContain('Час відповідає звичному графіку: 19:00.')
   })
 
   it('renders the individual participant select for coach create flow', async () => {
@@ -230,12 +249,39 @@ describe('SessionForm', () => {
     expect(formatDatePickerValue('17.09.2026')).toBe('2026-09-17')
   })
 
-  it('keeps scheduledAt payload composition in the existing local date/time owner', async () => {
+  it('serializes the coach wall-clock time in Kyiv so availability receives the same instant', async () => {
     const { buildScheduledAtIso } = await import('@/features/zoom/components/calendar/SessionForm')
 
-    expect(buildScheduledAtIso('17.09.2026', '19:00')).toBe(
-      new Date(2026, 8, 17, 19, 0, 0).toISOString(),
-    )
+    expect(buildScheduledAtIso('17.09.2026', '19:00')).toBe('2026-09-17T16:00:00.000Z')
+  })
+
+  it('blocks only impossible creates: a busy conflict or an outside-schedule group slot', async () => {
+    const {
+      getGroupPracticeScheduleState,
+      isSessionFormCreationBlocked,
+    } = await import('@/features/zoom/components/calendar/SessionForm')
+    const schedule = [{
+      id: 'thu-group', dayOfWeek: 4, hour: 19, minute: 0,
+      timezone: 'Europe/Kyiv', sessionType: 'group_practice', maxSlots: 50,
+      priceCents: 0, durationMinutes: 60, active: true,
+    }] as never
+
+    expect(getGroupPracticeScheduleState('03.09.2026', '19:00', schedule, true)).toMatchObject({
+      kind: 'success', blocksCreation: false,
+    })
+    expect(getGroupPracticeScheduleState('03.09.2026', '18:00', schedule, true)).toMatchObject({
+      kind: 'warning', blocksCreation: true,
+    })
+    expect(isSessionFormCreationBlocked({
+      isLoading: false, isSubmitConflict: false, date: '03.09.2026', time: '19:00', topic: 'Фокус',
+      type: 'individual', maxAttendees: 1, groupScheduleBlocked: false,
+      participantUserId: 'user-1', participantUserIds: [],
+    })).toBe(false)
+    expect(isSessionFormCreationBlocked({
+      isLoading: false, isSubmitConflict: true, date: '03.09.2026', time: '19:00', topic: 'Фокус',
+      type: 'individual', maxAttendees: 1, groupScheduleBlocked: false,
+      participantUserId: 'user-1', participantUserIds: [],
+    })).toBe(true)
   })
 
   it('uses a Telegram WebView-compatible native date input tap target', async () => {

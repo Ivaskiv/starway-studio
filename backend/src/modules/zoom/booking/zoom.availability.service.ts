@@ -326,6 +326,7 @@ async function getBlockingCalendarEntries(db: AvailabilityDb, expertId: string, 
       where: {
         expertId,
         kind: 'INDIVIDUAL',
+        status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT', 'PAID'] },
         scheduledAt: { lt: candidateEnd },
       },
       select: { id: true, scheduledAt: true, status: true, approvedAt: true },
@@ -340,10 +341,11 @@ export function resolveIndividualPaymentDeadline(input: {
 }): Date {
   const HOUR = 60 * 60 * 1000;
   const MINUTE = 60 * 1000;
-  return new Date(Math.min(
-    input.approvedAt.getTime() + HOUR,
-    input.scheduledAt.getTime() - 30 * MINUTE,
-  ));
+  const sessionLimit = input.scheduledAt.getTime() - 30 * MINUTE;
+  const rawDeadline = Math.min(input.approvedAt.getTime() + HOUR, sessionLimit);
+  const roundedDeadline = Math.ceil(rawDeadline / (5 * MINUTE)) * 5 * MINUTE;
+
+  return new Date(Math.min(roundedDeadline, sessionLimit));
 }
 
 function commerceBlocksIndividualInventory(entry: {
@@ -351,7 +353,7 @@ function commerceBlocksIndividualInventory(entry: {
   approvedAt: Date | null;
   scheduledAt: Date;
 }, now: Date): boolean {
-  if (entry.status === 'PAID') return true;
+  if (entry.status === 'REQUESTED' || entry.status === 'PAID') return true;
   return entry.status === 'APPROVED_PENDING_PAYMENT'
     && entry.approvedAt !== null
     && resolveIndividualPaymentDeadline({
@@ -457,9 +459,25 @@ export async function getIndividualAvailabilitySummary(input: {
   if (rangeDays < 1 || rangeDays > 42) throw new Error('invalid_date_range');
 
   const db = input.db ?? prisma;
-  const slots = await loadAvailability(db, input.expertId);
   const dates = Array.from({ length: rangeDays }, (_, index) => addDays(input.from, index));
-  const candidateStartsByDate = new Map(dates.map((date) => [date, individualCandidateStarts(slots, date)]));
+  const [slots, overrides] = await Promise.all([
+    loadAvailability(db, input.expertId),
+    db.zoomAvailabilityOverride.findMany({
+      where: {
+        expertId: input.expertId,
+        date: { gte: dateForStorage(input.from), lte: dateForStorage(input.to) },
+      },
+      select: { date: true, windows: true },
+    }),
+  ]);
+  const overridesByDate = new Map(overrides.map((override) => [
+    dateKeyInTimeZone(override.date, 'UTC'),
+    override.windows as unknown as AvailabilitySlot[],
+  ]));
+  const candidateStartsByDate = new Map(dates.map((date) => {
+    const override = overridesByDate.get(date);
+    return [date, individualCandidateStarts(override ?? slots, date, override === undefined ? 'recurring' : 'override')];
+  }));
   const latestCandidateStart = Math.max(...[...candidateStartsByDate.values()].flat(), Number.NEGATIVE_INFINITY);
   const blocking = Number.isFinite(latestCandidateStart)
     ? await getBlockingCalendarEntries(
@@ -475,7 +493,11 @@ export async function getIndividualAvailabilitySummary(input: {
     const availableCount = availability.filter((candidate) => candidate.available).length;
     return {
       date,
-      hasIndividualWindow: individualWindowsForDate(slots, date).length > 0,
+      hasIndividualWindow: individualWindowsForDate(
+        overridesByDate.get(date) ?? slots,
+        date,
+        overridesByDate.has(date) ? 'override' : 'recurring',
+      ).length > 0,
       availableCount,
       hasAvailableIndividual: availableCount > 0,
     };
@@ -601,10 +623,25 @@ const DEFAULT_GROUP_PRACTICE_QUESTIONS = [
   'Повернення після відпустки',
 ] as const
 
+const DEFAULT_GROUP_PRACTICE_SLOT: AvailabilitySlot = {
+  id: 'mon-focus',
+  dayOfWeek: 1,
+  hour: 19,
+  minute: 0,
+  timezone: DEFAULT_ZOOM_TIMEZONE,
+  sessionType: 'group_practice',
+  maxSlots: 50,
+  priceCents: 0,
+  durationMinutes: 60,
+  active: true,
+  defaultTopic: 'ФОКУС · Zoom-практика',
+}
+
 export async function generateSessionsFromAvailability(
   expertId: string,
   weeksAhead = 4,
   now = new Date(),
+  sessionTypes?: readonly ZoomSessionType[],
 ): Promise<{ created: number; skipped: number }> {
   const slots = await getAvailability(expertId);
   let created = 0;
@@ -612,6 +649,7 @@ export async function generateSessionsFromAvailability(
 
   for (const slot of slots) {
     if (!slot.active) continue;
+    if (sessionTypes && !sessionTypes.includes(slot.sessionType)) continue;
 
     const dates = nextOccurrences(
       slot.dayOfWeek,
@@ -659,6 +697,11 @@ export async function generateSessionsFromAvailability(
         notifiedAt24h: null,
         notifiedAt2h: null,
       } as unknown as Prisma.InputJsonValue,
+    }, {
+      // Materialization creates future calendar inventory only. The existing
+      // reminder/notification policy delivers messages when they are due.
+      suppressAutomation: true,
+      suppressSessionNotification: true,
     });
       created++;
     }
@@ -673,7 +716,7 @@ export async function seedDefaultAvailability(expertId: string): Promise<{
   skipped: number
 }> {
   const slots = await getAvailability(expertId);
-  if (slots.length > 0) {
+  if (slots.some((slot) => slot.sessionType === 'group_practice')) {
     return {
       seeded: false,
       created: 0,
@@ -681,23 +724,14 @@ export async function seedDefaultAvailability(expertId: string): Promise<{
     }
   }
 
-  await saveAvailability(expertId, [
-    {
-      id: 'mon-focus',
-      dayOfWeek: 1,
-      hour: 19,
-      minute: 0,
-      timezone: 'Europe/Kyiv',
-      sessionType: 'group_practice',
-      maxSlots: 50,
-      priceCents: 0,
-      durationMinutes: 60,
-      active: true,
-      defaultTopic: 'ФОКУС · Zoom-практика',
-    },
-  ]);
+  await saveAvailability(expertId, [...slots, DEFAULT_GROUP_PRACTICE_SLOT]);
 
-  const result = await generateSessionsFromAvailability(expertId, 4);
+  const result = await generateSessionsFromAvailability(
+    expertId,
+    4,
+    new Date(),
+    ['group_practice'],
+  );
 
   return {
     seeded: true,

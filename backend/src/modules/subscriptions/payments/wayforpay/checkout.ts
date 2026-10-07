@@ -330,13 +330,14 @@ export async function getCheckoutSession(token: string) {
 export async function refreshCheckoutSessionPayload(
   token: string,
   payload: Record<string, unknown>,
+  tx?: Prisma.TransactionClient,
 ) {
   const meta = resolveSessionMetadata(payload)
   if (!meta.userId || !meta.orderReference || !Number.isFinite(meta.amount) || meta.amount <= 0) {
     throw new Error('CHECKOUT_SESSION_INVALID_PAYLOAD')
   }
 
-  await prisma.checkoutSession.update({
+  await (tx ?? prisma).checkoutSession.update({
     where: { token },
     data: {
       payload: payload as Prisma.InputJsonValue,

@@ -21,7 +21,7 @@ vi.mock('@/features/subscription/utils/openExternalPaymentUrl', () => ({
 
 const groupSession: ZoomCalendarSession = {
   id: 'group-session-1',
-  scheduledAt: '2026-09-21T16:00:00.000Z',
+  scheduledAt: new Date(Date.now() + 14 * 24 * 60 * 60_000).toISOString(),
   topic: 'Monday group practice',
   status: 'SCHEDULED',
   type: 'group_practice',
@@ -68,7 +68,7 @@ describe('USER Zoom action recovery', () => {
     expect(panel).toContain("setCreateAction('individual')")
     expect(panel).toContain("setCreateAction('battle')")
     expect(panel).toContain('createIndividualRequest({')
-    expect(panel).toContain('Створити запит')
+    expect(panel).toContain("'Продовжити'")
     expect(calendar).toContain('openUserSession(props.requestedUserSession)')
     expect(calendarHook).toContain('await bookPrivateSlot({ sessionId: bookingQuestionSession.id, questionText: normalizedQuestionText }).unwrap()')
     expect(calendarHook).toContain("errorCode === 'NO_ACTIVE_SUBSCRIPTION'")

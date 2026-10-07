@@ -124,6 +124,56 @@
   }
 }
 
+// Coach preview: compact tab bar. USER navigation keeps its existing styling.
+.miniapp-bottomnav-shell[data-miniapp-nav-variant='coach'] {
+  background: #07111f;
+
+  .miniapp-bottomnav {
+    max-width: 448px;
+    gap: 4px;
+    padding: 4px 12px;
+    background: #07111f;
+    border: 0;
+    border-top: 1px solid rgba(125, 211, 252, 0.12);
+    box-shadow: none;
+  }
+
+  .miniapp-bottomnav::before,
+  .miniapp-bottomnav__dot {
+    display: none;
+  }
+
+  .miniapp-bottomnav__item {
+    min-height: 54px;
+    gap: 4px;
+    padding: 6px 2px;
+    border-radius: 10px;
+    color: #b8c9db;
+    opacity: 1;
+  }
+
+  .miniapp-bottomnav__item--active {
+    color: #38bdf8;
+    background: rgba(14, 165, 233, 0.12);
+    box-shadow: none;
+  }
+
+  .miniapp-bottomnav__icon {
+    color: inherit;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .miniapp-bottomnav__label {
+    font-size: 9px;
+    font-weight: 400;
+  }
+}
+
 @keyframes miniapp-ai-pulse {
   0%,
   100% {

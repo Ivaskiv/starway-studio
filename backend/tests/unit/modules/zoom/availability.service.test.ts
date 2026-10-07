@@ -41,6 +41,7 @@ vi.mock('../../../../src/modules/zoom/index.js', () => ({
 
 import {
   generateSessionsFromAvailability,
+  seedDefaultAvailability,
   getIndividualAvailabilityForDate,
   getIndividualAvailabilityForScheduledAt,
   getIndividualAvailabilitySummary,
@@ -180,6 +181,55 @@ describe('generateSessionsFromAvailability', () => {
       },
     })
   })
+
+  it('adds and materializes the canonical Monday 19:00 Kyiv group practice beside existing individual availability', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-29T09:00:00.000Z'))
+    const individualSlot = {
+      id: 'individual-slot', dayOfWeek: 2, hour: 10, minute: 0,
+      timezone: 'Europe/Kyiv', sessionType: 'individual', maxSlots: 1,
+      priceCents: 0, durationMinutes: 60, active: true,
+    }
+    mockExpertFindUnique
+      .mockResolvedValueOnce({ zoomAvailability: [individualSlot] })
+      .mockResolvedValueOnce({
+        zoomAvailability: [individualSlot, {
+          id: 'mon-focus', dayOfWeek: 1, hour: 19, minute: 0,
+          timezone: 'Europe/Kyiv', sessionType: 'group_practice', maxSlots: 50,
+          priceCents: 0, durationMinutes: 60, active: true,
+          defaultTopic: 'ФОКУС · Zoom-практика',
+        }],
+      })
+    mockZoomSessionFindFirst.mockResolvedValue(null)
+    mockCreateFullSession.mockResolvedValue({ id: 'next-monday-group' })
+
+    const result = await seedDefaultAvailability('expert-1')
+
+    expect(mockExpertUpdate).toHaveBeenCalledWith({
+      where: { id: 'expert-1' },
+      data: { zoomAvailability: expect.arrayContaining([
+        expect.objectContaining({ id: 'individual-slot', sessionType: 'individual' }),
+        expect.objectContaining({
+          id: 'mon-focus', dayOfWeek: 1, hour: 19,
+          timezone: 'Europe/Kyiv', sessionType: 'group_practice', active: true,
+        }),
+      ]) },
+    })
+    expect(mockCreateFullSession).toHaveBeenCalledTimes(4)
+    expect(mockCreateFullSession).toHaveBeenCalledWith(expect.objectContaining({
+      scheduledAt: new Date('2026-10-05T16:00:00.000Z'),
+      requests: expect.objectContaining({ type: 'group_practice' }),
+    }), {
+      suppressAutomation: true,
+      suppressSessionNotification: true,
+    })
+    expect(mockCreateFullSession.mock.calls.every(([, options]) => (
+      options?.suppressAutomation === true
+      && options?.suppressSessionNotification === true
+    ))).toBe(true)
+    expect(result).toEqual({ seeded: true, created: 4, skipped: 0 })
+    vi.useRealTimers()
+  })
 })
 
 describe('Individual canonical availability', () => {
@@ -299,7 +349,7 @@ describe('Individual canonical availability', () => {
     expect(candidates.find((slot) => slot.scheduledAt === '2026-09-21T10:30:00.000Z')).toMatchObject({ available: true })
   })
 
-  it('does not reserve inventory for REQUESTED commerce but blocks an active payment hold or PAID request', async () => {
+  it('blocks REQUESTED, active payment holds, and PAID Individual requests', async () => {
     const scheduledAt = new Date('2030-01-07T12:00:00.000Z')
     mockExpertFindUnique.mockResolvedValue({
       zoomAvailability: [{ ...mondayIndividualWindow, timezone: 'UTC', hour: 12, endHour: 14 }],
@@ -308,7 +358,7 @@ describe('Individual canonical availability', () => {
       { scheduledAt, status: 'REQUESTED', approvedAt: null },
     ])
     expect((await getIndividualAvailabilityForDate({ expertId: 'expert-1', date: '2030-01-07' }))
-      .find((slot) => slot.scheduledAt === scheduledAt.toISOString())).toMatchObject({ available: true })
+      .find((slot) => slot.scheduledAt === scheduledAt.toISOString())).toMatchObject({ available: false, reason: 'Зайнято' })
 
     mockZoomCommerceRequestFindMany.mockResolvedValue([
       { scheduledAt, status: 'APPROVED_PENDING_PAYMENT', approvedAt: new Date() },
@@ -340,6 +390,30 @@ describe('Individual canonical availability', () => {
     }
   })
 
+  it('loads only active Individual request statuses when calculating availability', async () => {
+    const scheduledAt = new Date('2030-01-07T12:00:00.000Z')
+    mockExpertFindUnique.mockResolvedValue({
+      zoomAvailability: [{ ...mondayIndividualWindow, timezone: 'UTC', hour: 12, endHour: 13 }],
+    })
+    mockZoomCommerceRequestFindMany.mockResolvedValue([
+      { scheduledAt, status: 'CANCELLED', approvedAt: new Date() },
+    ])
+
+    await expect(getIndividualAvailabilitySummary({
+      expertId: 'expert-1', from: '2030-01-07', to: '2030-01-07',
+    })).resolves.toEqual([
+      { date: '2030-01-07', hasIndividualWindow: true, availableCount: 1, hasAvailableIndividual: true },
+    ])
+
+    expect(mockZoomCommerceRequestFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        expertId: 'expert-1',
+        kind: 'INDIVIDUAL',
+        status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT', 'PAID'] },
+      }),
+    }))
+  })
+
   it('summarizes a bounded date range from one loaded availability and blocker set', async () => {
     vi.clearAllMocks()
     mockExpertFindUnique.mockResolvedValue({ zoomAvailability: [mondayIndividualWindow] })
@@ -369,6 +443,25 @@ describe('Individual canonical availability', () => {
       expertId: 'expert-1', from: '2026-09-21', to: '2026-09-21',
     })).resolves.toEqual([
       { date: '2026-09-21', hasIndividualWindow: true, availableCount: 0, hasAvailableIndividual: false },
+    ])
+  })
+
+  it('uses the effective date override in the USER calendar summary', async () => {
+    const date = '2026-09-21'
+    const override = { ...mondayIndividualWindow, id: 'custom-monday', hour: 10, endHour: 12, timezone: 'UTC' }
+    mockAvailabilityOverrideFindMany.mockResolvedValue([
+      { date: new Date(`${date}T00:00:00.000Z`), windows: [override] },
+    ])
+
+    await expect(getIndividualAvailabilitySummary({ expertId: 'expert-1', from: date, to: date })).resolves.toEqual([
+      { date, hasIndividualWindow: true, availableCount: 5, hasAvailableIndividual: true },
+    ])
+
+    mockAvailabilityOverrideFindMany.mockResolvedValue([
+      { date: new Date(`${date}T00:00:00.000Z`), windows: [] },
+    ])
+    await expect(getIndividualAvailabilitySummary({ expertId: 'expert-1', from: date, to: date })).resolves.toEqual([
+      { date, hasIndividualWindow: false, availableCount: 0, hasAvailableIndividual: false },
     ])
   })
 

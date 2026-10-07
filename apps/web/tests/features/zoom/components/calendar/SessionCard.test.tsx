@@ -7,6 +7,7 @@ import type { ZoomCalendarSession } from '@/features/zoom/zoom.types'
 vi.mock('@/features/zoom/zoom.api', () => ({
   useBookPrivateSlotMutation: () => [vi.fn(), { isLoading: false }],
   useBookSlotMutation: () => [vi.fn(), { isLoading: false }],
+  useCancelZoomCommerceRequestMutation: () => [vi.fn(), { isLoading: false }],
   useCancelPrivateBookingMutation: () => [vi.fn(), { isLoading: false }],
   useCompleteZoomSessionMutation: () => [vi.fn(() => ({ unwrap: vi.fn() })), { isLoading: false }],
   useLazyGetZoomCompletionDraftQuery: () => [vi.fn(() => ({ unwrap: vi.fn() })), { isFetching: false }],
@@ -20,14 +21,14 @@ vi.mock('@/features/subscription/utils/openExternalPaymentUrl', () => ({
 
 describe('SessionCard', () => {
   it.each([
-    ['APPROVED_PENDING_PAYMENT', 'Очікує оплати', 'https://checkout.example/existing', true],
-    ['APPROVED_PENDING_PAYMENT', 'ОПЛАТУ НЕ ПІДТВЕРДЖЕНО', null, false],
-    ['REQUESTED', 'Очікує підтвердження', null, false],
-    ['PAID', 'Оплачено · Заброньовано', null, false],
-    ['EXPIRED', 'Час оплати вичерпано', null, false],
-    ['REJECTED', 'Відхилено', null, false],
-    ['CANCELLED', 'Скасовано', null, false],
-    [null, 'ОПЛАТУ НЕ ПІДТВЕРДЖЕНО', null, false],
+    ['APPROVED_PENDING_PAYMENT', 'ОЧІКУЄ ОПЛАТИ', 'https://checkout.example/existing', true],
+    ['APPROVED_PENDING_PAYMENT', 'ОЧІКУЄ ОПЛАТИ', null, false],
+    ['REQUESTED', 'ЗАПИТ СТВОРЕНО', null, false],
+    ['PAID', 'ОПЛАЧЕНО', null, false],
+    ['EXPIRED', 'ЧАС ОПЛАТИ ВИЧЕРПАНО', null, false],
+    ['REJECTED', 'ВІДХИЛЕНО', null, false],
+    ['CANCELLED', 'СКАСОВАНО', null, false],
+    [null, 'ВІЛЬНИЙ СЛОТ', null, false],
   ] as const)('renders Individual %s with checkout %s', async (commerceStatus, commerceLabel, checkoutUrl, showPayment) => {
     const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
     const session: ZoomCalendarSession = {
@@ -60,28 +61,54 @@ describe('SessionCard', () => {
         id: 'individual-dev-payment', type: 'individual', status: 'SCHEDULED', topic: 'Індивідуальна сесія',
         scheduledAt: new Date(Date.now() + 60_000).toISOString(), canEdit: false,
         attendeesCount: 0, isMyBooking: false, isMyPendingPayment: true,
-        commerceStatus: 'APPROVED_PENDING_PAYMENT', commerceLabel: '🟠 Очікує оплати',
+        commerceStatus: 'APPROVED_PENDING_PAYMENT', commerceLabel: 'ОЧІКУЄ ОПЛАТИ',
         checkoutUrl: 'https://checkout.example/one-uah', priceCents: 100, currency: 'UAH',
         paymentDeadline: '2026-09-21T10:30:00.000Z',
       },
       mode: 'user', userId: 'user-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
     }))
 
-    expect(markup).toContain('ОПЛАТИТИ 1 ГРН')
-    expect(markup).not.toContain('ОПЛАТИТИ 60')
+    expect(markup).toContain('ОПЛАТИТИ')
+    expect(markup).toContain('1 ГРН')
+    expect(markup).not.toContain('60 EUR')
     expect(markup).not.toContain('60 EUR')
     expect(markup).toContain('Цей час тимчасово заброньований за тобою.')
     expect(markup).toContain('Заверши оплату до 13:30.')
     expect(markup).toContain('Після цього бронювання автоматично скасується, а час стане доступним для інших.')
     expect(markup).toContain('Zoom-посилання стане доступним після підтвердження оплати.')
-    expect(markup.match(/Очікує оплати/g)?.length ?? 0).toBe(1)
+    expect(markup.match(/ОЧІКУЄ ОПЛАТИ/g)?.length ?? 0).toBe(1)
     expect(markup.match(/>1 ГРН<\/span>/g)?.length ?? 0).toBe(1)
     expect(markup.match(/Заверши оплату до/g)?.length ?? 0).toBe(1)
-    expect(markup.match(/ОПЛАТИТИ 1 ГРН/g)?.length ?? 0).toBe(1)
     expect(markup.match(/ОПЛАТИТИ/g)?.length ?? 0).toBe(1)
-    expect(markup).not.toContain('💳 ОПЛАТИТИ 1 ГРН')
+    expect(markup).not.toContain('💳')
     const source = readFileSync(new URL('../../../../../src/features/zoom/components/calendar/SessionCard.tsx', import.meta.url), 'utf8')
     expect(source).toContain('openExternalPaymentUrl(session.checkoutUrl!)')
+  })
+
+  it('renders real pending-request fields and uses commerce cancellation rather than attendee cancellation', async () => {
+    const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
+    const markup = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'individual-pending-card', type: 'individual', status: 'SCHEDULED', topic: 'Індивідуальна сесія',
+        scheduledAt: new Date(Date.now() + 60_000).toISOString(), canEdit: false,
+        attendeesCount: 0, isMyBooking: false, isMyPendingPayment: true,
+        commerceRequestId: 'commerce-1', commerceStatus: 'APPROVED_PENDING_PAYMENT',
+        checkoutUrl: 'https://checkout.example/one-uah', priceCents: 100, currency: 'UAH',
+        durationMinutes: 60, goalText: 'Потрібен план дій', coach: { id: 'expert-1', name: 'Надія Старвей' },
+      },
+      mode: 'user', userId: 'user-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
+    }))
+
+    expect(markup).toContain('ЗАПИТ СТВОРЕНО')
+    expect(markup).toContain('ОЧІКУЄ ОПЛАТИ')
+    expect(markup).toContain('Надія Старвей')
+    expect(markup).toContain('Потрібен план дій')
+    expect(markup).toContain('1 ГРН')
+    expect(markup).toContain('ОПЛАТИТИ')
+    expect(markup).toContain('СКАСУВАТИ ЗАПИТ')
+    const source = readFileSync(new URL('../../../../../src/features/zoom/components/calendar/SessionCard.tsx', import.meta.url), 'utf8')
+    expect(source).toContain('cancelCommerceRequest(session.commerceRequestId).unwrap()')
+    expect(source).not.toContain('cancelPrivateBooking(session.commerceRequestId)')
   })
 
   it('keeps a non-actionable pending Individual state human-readable without duplicate payment status or CTA', async () => {
@@ -91,13 +118,13 @@ describe('SessionCard', () => {
         id: 'individual-expired-checkout', type: 'individual', status: 'SCHEDULED', topic: 'Індивідуальна сесія',
         scheduledAt: new Date(Date.now() + 60_000).toISOString(), canEdit: false,
         attendeesCount: 0, isMyBooking: false, isMyPendingPayment: true,
-        commerceStatus: 'APPROVED_PENDING_PAYMENT', commerceLabel: '🟠 Очікує оплати',
+        commerceStatus: 'APPROVED_PENDING_PAYMENT', commerceLabel: 'ОЧІКУЄ ОПЛАТИ',
         checkoutUrl: null, priceCents: 100, currency: 'UAH',
       },
       mode: 'user', userId: 'user-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
     }))
 
-    expect(markup.match(/Очікує оплати/g)?.length ?? 0).toBe(1)
+    expect(markup.match(/ОЧІКУЄ ОПЛАТИ/g)?.length ?? 0).toBe(1)
     expect(markup.match(/ОПЛАТИТИ/g)?.length ?? 0).toBe(0)
   })
 
@@ -109,14 +136,15 @@ describe('SessionCard', () => {
         scheduledAt: new Date(Date.now() + 60_000).toISOString(), canEdit: false,
         attendeesCount: 0, isMyBooking: false, isMyPendingPayment: true,
         commerceRequestId: 'commerce-production',
-        commerceStatus: 'APPROVED_PENDING_PAYMENT', commerceLabel: '🟠 Очікує оплати',
+        commerceStatus: 'APPROVED_PENDING_PAYMENT', commerceLabel: 'ОЧІКУЄ ОПЛАТИ',
         checkoutUrl: 'https://checkout.example/production', priceCents: 6000, currency: 'EUR',
       },
       mode: 'user', userId: 'user-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
     }))
 
-    expect(markup).toContain('ОПЛАТИТИ 60 EUR')
-    expect(markup).not.toContain('ОПЛАТИТИ 1 ГРН')
+    expect(markup).toContain('ОПЛАТИТИ')
+    expect(markup).toContain('60 EUR')
+    expect(markup).not.toContain('1 ГРН')
   })
 
   it('opens the required question empty, without an invented answer', async () => {
@@ -159,7 +187,124 @@ describe('SessionCard', () => {
 
     expect(markup).toContain('Ти записана')
     expect(markup).toContain('Додати в календар')
-    expect(markup).toContain('Скасувати запис')
+    expect(markup).toContain('СКАСУВАТИ ЗАПИС')
+  })
+
+  it('uses the private booking cancellation owner for a future booked Individual session', async () => {
+    const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
+    const markup = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'coach-created-individual', type: 'individual', status: 'SCHEDULED', topic: 'Індивідуальна сесія',
+        scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), canEdit: false,
+        attendeesCount: 1, remainingSlots: 0, isMyBooking: true, zoomLink: '',
+      },
+      mode: 'user', userId: 'user-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
+    }))
+
+    expect(markup).toContain('СКАСУВАТИ ЗАПИС')
+    const source = readFileSync(new URL('../../../../../src/features/zoom/components/calendar/SessionCard.tsx', import.meta.url), 'utf8')
+    expect(source).toContain('if (isPrivate || isIndividual)')
+    expect(source).toContain('cancelPrivateBooking(session.id).unwrap()')
+  })
+
+  it('does not offer active cancellation for past, completed, or cancelled user sessions', async () => {
+    const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
+    const base = {
+      id: 'not-cancellable', type: 'group_practice' as const, topic: 'Групова практика',
+      zoomLink: '', attendeesCount: 1, remainingSlots: 4, canEdit: false, isMyBooking: true,
+    }
+
+    for (const session of [
+      { ...base, status: 'SCHEDULED' as const, scheduledAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() },
+      { ...base, status: 'COMPLETED' as const, scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() },
+      { ...base, status: 'CANCELLED' as const, scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() },
+    ]) {
+      const markup = renderToStaticMarkup(createElement(SessionCard, {
+        session, mode: 'user', userId: 'user-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
+      }))
+      expect(markup).not.toContain('СКАСУВАТИ ЗАПИС')
+    }
+  })
+
+  it('does not offer pending-request cancellation after the scheduled time has passed', async () => {
+    const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
+    const markup = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'past-pending-request', type: 'individual', status: 'SCHEDULED', topic: 'Індивідуальна сесія',
+        scheduledAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(), canEdit: false,
+        attendeesCount: 0, isMyPendingPayment: true, commerceRequestId: 'commerce-past',
+        commerceStatus: 'APPROVED_PENDING_PAYMENT', checkoutUrl: 'https://checkout.example/past',
+      },
+      mode: 'user', userId: 'user-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
+    }))
+
+    expect(markup).not.toContain('СКАСУВАТИ ЗАПИТ')
+  })
+
+  it('offers the coach cancellation action only for a future active session', async () => {
+    const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
+    const future = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'coach-future', type: 'group_practice', status: 'SCHEDULED', topic: 'Групова практика',
+        scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), canEdit: true,
+        attendeesCount: 0, remainingSlots: 10, zoomLink: '',
+      },
+      mode: 'coach', userId: 'coach-1', onClose: vi.fn(), onAddToCalendar: vi.fn(), onCancel: vi.fn(),
+    }))
+    const completed = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'coach-completed', type: 'group_practice', status: 'COMPLETED', topic: 'Групова практика',
+        scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), canEdit: true,
+        attendeesCount: 0, remainingSlots: 10, zoomLink: '',
+      },
+      mode: 'coach', userId: 'coach-1', onClose: vi.fn(), onAddToCalendar: vi.fn(), onCancel: vi.fn(),
+    }))
+
+    expect(future).toContain('СКАСУВАТИ СЕСІЮ')
+    expect(completed).not.toContain('СКАСУВАТИ СЕСІЮ')
+  })
+
+  it('keeps coach modal state and participant presentation consistent by session type', async () => {
+    const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
+    const cancelledIndividual = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'coach-cancelled-individual', type: 'individual', status: 'CANCELLED', topic: 'Стратегічна сесія',
+        scheduledAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(), canEdit: true,
+        attendeesCount: 0, remainingSlots: 50, participantNames: ['Олена'], zoomLink: '',
+      },
+      mode: 'coach', userId: 'coach-1', onClose: vi.fn(), onAddToCalendar: vi.fn(), onCancel: vi.fn(),
+    }))
+    const scheduledGroup = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'coach-scheduled-group', type: 'group_practice', status: 'SCHEDULED', topic: 'ФОКУС',
+        scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), canEdit: true,
+        attendeesCount: 0, remainingSlots: 50, zoomLink: '',
+      },
+      mode: 'coach', userId: 'coach-1', onClose: vi.fn(), onAddToCalendar: vi.fn(),
+    }))
+
+    expect(cancelledIndividual).toContain('СКАСОВАНО')
+    expect(cancelledIndividual).toContain('Учасник: Олена')
+    expect(cancelledIndividual).not.toContain('0 / 50 заброньовано')
+    expect(cancelledIndividual).not.toContain('Завершити сесію')
+    expect(scheduledGroup).toContain('0 / 50 заброньовано')
+    expect(scheduledGroup).not.toContain('Завершити сесію')
+  })
+
+  it('uses the supplied Focus access gate for an unbooked Group session', async () => {
+    const { SessionCard } = await import('@/features/zoom/components/calendar/SessionCard')
+    const markup = renderToStaticMarkup(createElement(SessionCard, {
+      session: {
+        id: 'group-no-access', type: 'group_practice', status: 'SCHEDULED', topic: 'Групова практика',
+        scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), canEdit: false,
+        attendeesCount: 1, remainingSlots: 9, zoomLink: '', isMyBooking: false,
+      },
+      mode: 'user', userId: 'user-1', onClose: vi.fn(), onRequestBooking: vi.fn(),
+      hasFocusAccess: false, onRestrictedGroupAction: vi.fn(), onAddToCalendar: vi.fn(),
+    }))
+
+    expect(markup).toContain('АКТИВУВАТИ ДОСТУП')
+    expect(markup).not.toContain('Записатися')
   })
 
   it('shows manual completion CTA for eligible coach sessions', async () => {
@@ -383,7 +528,7 @@ describe('SessionCard', () => {
       }),
     )
 
-    expect(markup).toContain('✅ Завершено')
+    expect(markup).toContain('ЗАВЕРШЕНО')
     expect(markup).toContain('1 були присутні')
     expect(markup).toContain('Тема: Воронка перед запуском')
     expect(markup).toContain('Підсумок: Перевірили структуру запуску.')

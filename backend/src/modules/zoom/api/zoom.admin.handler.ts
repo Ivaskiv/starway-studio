@@ -14,8 +14,10 @@ import {
 import type { BattleOutcome } from '../battle/battle.service.js';
 import {
   approveRequest as approveZoomCommerceRequest,
+  cancelRequest as cancelZoomCommerceRequest,
   createRequest as createZoomCommerceRequest,
   createUserIndividualRequest,
+  INDIVIDUAL_REQUEST_CONTEXT_ERROR,
   getCalendarRequests as getZoomCommerceCalendarRequests,
   getUserCalendarRequestsForWindow,
   getCommerceCheckoutUrl,
@@ -23,7 +25,7 @@ import {
   getRequestById as getZoomCommerceRequestById,
   rejectRequest as rejectZoomCommerceRequest,
 } from '../commerce/zoom.commerce-request.service.js';
-import { afterZoomOperation } from '../core/zoom.operations.service.js';
+import { collectCancellationAffectedUserIds } from '../core/zoom.operations.service.js';
 import {
   updateSession,
   completeZoomSession,
@@ -52,7 +54,6 @@ import {
   type AvailabilityWeekChange,
   getIndividualAvailabilityForDate,
   getIndividualAvailabilitySummary,
-  getIndividualAvailabilityForScheduledAt,
   hasCoachCalendarConflict,
   intervalsOverlap,
   saveAvailability,
@@ -72,6 +73,7 @@ import { Prisma, SwapStatus, ZoomSlotStatus, ZoomStatus } from '@starway/db/pris
 import { syncZoomRegistrationLifecycle } from './controller.js';
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js';
 import { getCoachParticipants } from '../participants/coach-participants.service.js';
+import { buildZoomCalendarUrl } from '../urls.js';
 
 const BATTLE_PARTICIPANTS_REQUIRED = 2;
 const DEFAULT_SESSION_DURATION_MINUTES = 60;
@@ -79,6 +81,8 @@ const USER_SESSION_CONFLICT_ERROR =
   'Цей учасник уже має Zoom-сесію на вибраний час. Оберіть інший час.';
 const COACH_SESSION_CONFLICT_ERROR =
   'На цей час уже запланована інша Zoom-сесія. Оберіть інший час.';
+const GROUP_SCHEDULE_UNAVAILABLE_ERROR =
+  'Час групової практики не відповідає звичному графіку коуча.';
 
 const COMMERCE_STATUS_LABELS = {
   user: {
@@ -196,6 +200,29 @@ function resolveDurationMinutes(requests: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? value
     : DEFAULT_SESSION_DURATION_MINUTES
+}
+
+function isGroupPracticeOnCoachSchedule(
+  scheduledAt: Date,
+  slots: AvailabilitySlot[],
+): boolean {
+  return slots.some((slot) => {
+    if (!slot.active || slot.sessionType !== 'group_practice') return false
+
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: slot.timezone || 'Europe/Kyiv',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(scheduledAt)
+    const weekday = parts.find((part) => part.type === 'weekday')?.value
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value)
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value)
+    const dayOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday ?? '')
+
+    return dayOfWeek === slot.dayOfWeek && hour === slot.hour && minute === slot.minute
+  })
 }
 
 async function findParticipantSessionConflict(args: {
@@ -358,16 +385,12 @@ export async function handleCreateSession(
       typeof req.body.durationMinutes === 'number' && Number.isFinite(req.body.durationMinutes) && req.body.durationMinutes > 0
         ? req.body.durationMinutes
         : DEFAULT_SESSION_DURATION_MINUTES
-    if (nextType === 'individual') {
-      const availability = await getIndividualAvailabilityForScheduledAt({
-        expertId: user.expertId,
-        scheduledAt: parsedAt,
-      })
-      if (!availability.candidate.available) {
+    if (nextType === 'group_practice') {
+      const slots = await getAvailability(user.expertId)
+      if (!isGroupPracticeOnCoachSchedule(parsedAt, slots)) {
         return res.status(409).json({
-          error: 'COMMERCE_SLOT_UNAVAILABLE',
-          message: 'Цей час уже зайнятий. Обери інший доступний час.',
-          alternatives: availability.alternatives,
+          error: 'group_schedule_unavailable',
+          message: GROUP_SCHEDULE_UNAVAILABLE_ERROR,
         })
       }
     }
@@ -580,8 +603,7 @@ export async function handleUpdateSession(
     }
 
     const updated = await updateSession(id, patch as Parameters<typeof updateSession>[1]);
-    const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? '';
-    const panelUrl = panelBase ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom` : '';
+    const panelUrl = buildZoomCalendarUrl({ zoomRole: 'ops' });
     void sendOpsTelegramMessage(
       `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n`
       + `Тип події: Редагування сесії\n`
@@ -589,7 +611,7 @@ export async function handleUpdateSession(
       + `Зміна: ${scheduledAt ? 'Час' : zoomLink !== undefined ? 'Zoom-посилання' : topic ? 'Тема' : 'Параметри'}\n`
       + `Нове значення: ${scheduledAt ?? zoomLink ?? topic ?? 'оновлено'}`,
       panelUrl
-        ? { reply_markup: { inline_keyboard: [[{ text: 'Панель керування', url: panelUrl }]] } }
+        ? { reply_markup: { inline_keyboard: [[{ text: 'ПАНЕЛЬ ZOOM', url: panelUrl }]] } }
         : undefined,
     ).catch((err) => console.error('[zoom.admin] ops update report:', err));
     return res.status(200).json(updated);
@@ -727,13 +749,13 @@ export async function handleCancelSession(
 ) {
   try {
     const { id } = req.params;
+    const affectedUserIds = await collectCancellationAffectedUserIds(id);
     const existing = await prisma.zoomSession.findUnique({
       where: { id },
       select: { topic: true, scheduledAt: true, attendees: { select: { id: true } } },
     });
-    const session = await cancelSession(id);
-    const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? '';
-    const panelUrl = panelBase ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom` : '';
+    const session = await cancelSession(id, { affectedUserIds });
+    const panelUrl = buildZoomCalendarUrl({ zoomRole: 'ops' });
     void sendOpsTelegramMessage(
       `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n`
       + `Тип події: Скасування сесії коучем\n`
@@ -741,7 +763,7 @@ export async function handleCancelSession(
       + `Дата: ${(existing?.scheduledAt ?? session.scheduledAt).toLocaleString('uk-UA')}\n`
       + `Причетних учасників: ${existing?.attendees.length ?? 0}`,
       panelUrl
-        ? { reply_markup: { inline_keyboard: [[{ text: 'Панель керування', url: panelUrl }]] } }
+        ? { reply_markup: { inline_keyboard: [[{ text: 'ПАНЕЛЬ ZOOM', url: panelUrl }]] } }
         : undefined,
     ).catch((err) => console.error('[zoom.admin] ops cancel report:', err));
     return res.status(200).json(session);
@@ -795,7 +817,10 @@ export async function handleGetCalendarSessions(
         });
     const commercePriority = { REQUESTED: 1, APPROVED_PENDING_PAYMENT: 2, PAID: 3, REJECTED: 0, EXPIRED: 0, CANCELLED: 0 } as const;
     type CalendarCommerceStatus = keyof typeof commercePriority;
-    type CalendarCommerceRequest = typeof commerceRequests[number] & { status: CalendarCommerceStatus };
+    type CalendarCommerceRequest = typeof commerceRequests[number] & {
+      status: CalendarCommerceStatus;
+      requester?: { firstName: string | null; lastName: string | null; email: string | null } | null;
+    };
     const commerceBySessionId = new Map<string, CalendarCommerceRequest>();
     for (const request of commerceRequests) {
       if (!request.zoomSessionId || !(request.status in commercePriority)) continue;
@@ -818,6 +843,12 @@ export async function handleGetCalendarSessions(
         || attendee.user?.email
         || null;
     };
+    const getCommerceRequesterName = (request: CalendarCommerceRequest | undefined) =>
+      request?.requester
+        ? [request.requester.firstName, request.requester.lastName].filter(Boolean).join(' ').trim()
+          || request.requester.email
+          || null
+        : null;
     const result = await Promise.all(sessions.map(async (s: SessionRow) => {
       const meta = (s.requests as Record<string, unknown>) ?? {};
       const isArray = Array.isArray(meta);
@@ -825,6 +856,7 @@ export async function handleGetCalendarSessions(
       const maxSlots = isArray ? 50 : typeof meta.maxSlots === 'number' ? meta.maxSlots : 50;
       const isIndividual = isLegacyIndividualSession(s)
       const commerceRequest = commerceBySessionId.get(s.id);
+      const commerceRequesterName = getCommerceRequesterName(commerceRequest);
       const commerceBlocksSlot = commerceRequest?.status === 'APPROVED_PENDING_PAYMENT'
         || commerceRequest?.status === 'PAID';
       const attendees = (s as {
@@ -850,6 +882,7 @@ export async function handleGetCalendarSessions(
       const canViewRecording = (role === 'coach' || individualPaid) && Boolean(recordingUrl) && (role === 'coach' || Boolean((s as { isMyBooking?: boolean }).isMyBooking));
       return {
         id: s.id,
+        coach: s.expert ? { id: s.expert.id, name: s.expert.displayName } : null,
         scheduledAt: s.scheduledAt.toISOString(),
         topic: s.topic,
         status: s.status,
@@ -862,7 +895,13 @@ export async function handleGetCalendarSessions(
         battleProgress: isArray ? [] : ownProgress,
         goalA: isArray ? null : (challenger?.goalText ?? null),
         goalB: isArray ? null : (opponent?.goalText ?? null),
-        participantNames: attendees.map((attendee) => getAttendeeName(attendee)).filter(Boolean),
+        participantNames: [
+          ...attendees.map((attendee) => getAttendeeName(attendee)).filter(Boolean),
+          ...(calendarRole === 'coach' && isIndividual && commerceRequesterName
+            && !attendees.some((attendee) => getAttendeeName(attendee) === commerceRequesterName)
+            ? [commerceRequesterName]
+            : []),
+        ],
         attendees: attendees.map((attendee) => ({
           userId: attendee.userId,
           name: getAttendeeName(attendee),
@@ -1462,6 +1501,23 @@ export async function handleBookPrivateSlot(
   }
 }
 
+export async function handleCancelCommerceRequest(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const request = await cancelZoomCommerceRequest(req.params.id, userId)
+    return res.status(200).json({ request })
+  } catch (err) {
+    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    next(err)
+  }
+}
+
 export async function handleCreateUserIndividualRequest(
   req: AuthenticatedRequest,
   res: Response,
@@ -1515,6 +1571,12 @@ export async function handleCreateUserIndividualRequest(
           error: err.message,
           message: 'Цей час уже зайнятий. Обери інший доступний час.',
           alternatives: availabilityError.alternatives ?? [],
+        })
+      }
+      if (err.message === 'COMMERCE_INVALID_REQUEST_CONTEXT') {
+        return res.status(400).json({
+          error: err.message,
+          message: INDIVIDUAL_REQUEST_CONTEXT_ERROR,
         })
       }
       return res.status(409).json({ error: err.message })

@@ -19,10 +19,16 @@ vi.mock('@/features/auth/services/token', () => ({
 }))
 
 vi.mock('@/services/api', () => ({
+  getTelegramMiniAppTransportHeaders: () => ({
+    'X-Telegram-Init-Data': 'signed-init-data',
+  }),
   resolveApiUrl: (path: string) => resolveApiUrlMock(path),
 }))
 
-import { syncAuthSession } from './sessionSync'
+import {
+  SESSION_RESTORE_REQUEST_TIMEOUT_MS,
+  syncAuthSession,
+} from './sessionSync'
 
 describe('syncAuthSession miniapp ownership', () => {
   const dispatch = vi.fn()
@@ -71,10 +77,8 @@ describe('syncAuthSession miniapp ownership', () => {
     })
   }
 
-  it('uses canonical telegram miniapp identity before stale web token restore', async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        jsonResponse({
+  it('restores a NO_ACCESS Telegram user before stale web token restore', async () => {
+    const telegramAuthResponse = jsonResponse({
           user: {
             id: 'focus-user',
             email: 'focus@example.com',
@@ -84,7 +88,7 @@ describe('syncAuthSession miniapp ownership', () => {
             isAdmin: false,
             isSuperAdmin: false,
             abilities: [],
-            access: { plan: 'paid', isPaid: true, isTrial: false },
+            access: { plan: 'free', isPaid: false, isTrial: false },
             stats: { totalPoints: 0, completedBlocks: 0, level: 1 },
             lastLoginAt: null,
             telegramUserId: '630111093',
@@ -92,13 +96,23 @@ describe('syncAuthSession miniapp ownership', () => {
           },
           accessToken: 'telegram-token',
           refreshToken: 'telegram-refresh',
-        }),
-      )
+        })
+
+    vi.mocked(fetch).mockImplementation((input) => {
+      if (String(input) === '/api/debug/client-trace') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+
+      if (String(input) === 'https://api.example.com/auth/telegram') {
+        return Promise.resolve(telegramAuthResponse)
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${String(input)}`))
+    })
 
     const restored = await syncAuthSession({ dispatch, theme })
 
     expect(restored).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
     expect(fetch).toHaveBeenCalledWith(
       'https://api.example.com/auth/telegram',
       expect.objectContaining({
@@ -110,6 +124,11 @@ describe('syncAuthSession miniapp ownership', () => {
         user: expect.objectContaining({
           id: 'focus-user',
           telegramUserId: '630111093',
+          access: {
+            plan: 'free',
+            isPaid: false,
+            isTrial: false,
+          },
         }),
         accessToken: 'telegram-token',
         refreshToken: 'telegram-refresh',
@@ -120,6 +139,30 @@ describe('syncAuthSession miniapp ownership', () => {
         type: 'auth/setCredentials',
       }),
     )
+  })
+
+  it('settles a stalled Telegram restore as failure instead of leaving shared Mini App bootstrap pending', async () => {
+    vi.useFakeTimers()
+    Object.assign(window, { setTimeout, clearTimeout })
+    vi.mocked(fetch).mockImplementation((input) => {
+      if (String(input) === '/api/debug/client-trace') {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+
+      if (String(input) === 'https://api.example.com/auth/telegram') {
+        return new Promise<Response>(() => undefined)
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${String(input)}`))
+    })
+
+    const restoring = syncAuthSession({ dispatch, theme })
+
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(SESSION_RESTORE_REQUEST_TIMEOUT_MS)
+
+    await expect(restoring).resolves.toBe(false)
+    expect(clearAuthMock).toHaveBeenCalled()
   })
 
   it('waits for delayed telegram initData before falling back to stale web auth', async () => {

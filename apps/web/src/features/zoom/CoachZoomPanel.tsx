@@ -7,7 +7,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Crosshair,
-  ExternalLink,
+  Info,
+  MoreHorizontal,
+  PencilLine,
+  Plus,
+  CalendarClock,
+  Ban,
+  CheckCircle2,
   Sparkles,
   User,
   Users,
@@ -22,22 +28,22 @@ import { SessionForm } from './components/calendar/SessionForm'
 import {
   useCreateZoomSessionMutation,
   useApproveZoomCommerceRequestMutation,
+  useCancelZoomSessionMutation,
   useFinalizeBattleMutation,
   useGetCalendarSessionsQuery,
   useGetCoachParticipantsQuery,
+  useGetAvailabilityWeekQuery,
   useRejectZoomCommerceRequestMutation,
   useUpdateZoomSessionMutation,
 } from './zoom.api'
 import type {
+  AvailabilityWeekDay,
   CreateSessionPayload,
   ZoomCalendarSession,
 } from './zoom.types'
 import {
   getNormalizedSessionType,
   getSessionMeta,
-  getZoomPaymentBadgeLabel,
-  isZoomLinkActive,
-  sessionStatusVariant,
 } from './zoom.utils'
 import { buildCalendarEvent } from './utils/calendar-event'
 import {
@@ -68,6 +74,7 @@ type CoachWeekDay = {
   isToday: boolean
   date: Date
   sessions: ZoomCalendarSession[]
+  availability: AvailabilityWeekDay | undefined
 }
 
 const UK_DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд']
@@ -165,6 +172,11 @@ function formatKyivTime(value: string): string {
   }).format(new Date(value))
 }
 
+function formatCoachSessionRange(session: ZoomCalendarSession): string {
+  const start = new Date(session.scheduledAt)
+  return `${formatKyivTime(session.scheduledAt)}–${formatKyivTime(new Date(start.getTime() + (session.durationMinutes ?? 60) * 60_000).toISOString())}`
+}
+
 function formatWeekRange(from: string): string {
   const fromKey = getKyivDateKey(new Date(from))
   const toKey = addKyivDays(fromKey, 6)
@@ -172,7 +184,7 @@ function formatWeekRange(from: string): string {
   const [, toMonth, toDay] = toKey.split('-').map(Number)
 
   if (fromMonth === toMonth) {
-    return `${fromDay}–${toDay} ${UK_MONTH_GENITIVE[toMonth - 1]}`
+    return `${fromDay} – ${toDay} ${UK_MONTH_GENITIVE[toMonth - 1]}`
   }
 
   return `${fromDay} ${UK_MONTH_GENITIVE[fromMonth - 1]} – ${toDay} ${UK_MONTH_GENITIVE[toMonth - 1]}`
@@ -211,24 +223,6 @@ function getBattleGoal(session: ZoomCalendarSession): string | null {
   return session.goalA ?? session.goalB ?? session.goalText ?? session.questionPreviews?.[0] ?? null
 }
 
-function isIncompletePastSession(session: ZoomCalendarSession): boolean {
-  return (
-    session.status !== 'COMPLETED' &&
-    session.status !== 'CANCELLED' &&
-    new Date(session.scheduledAt).getTime() <= Date.now()
-  )
-}
-
-function hasCompletedSessionOutcome(session: ZoomCalendarSession): boolean {
-  return (
-    session.status === 'COMPLETED' &&
-    (session.actualAttendeeCount !== undefined ||
-      Boolean(session.outcomeTopic) ||
-      Boolean(session.summary) ||
-      Boolean(session.recordingUrl))
-  )
-}
-
 function getSessionSecondaryLines(session: ZoomCalendarSession): string[] {
   const normalizedType = getNormalizedSessionType(session)
   if (normalizedType === 'battle_review') {
@@ -242,8 +236,7 @@ function getSessionSecondaryLines(session: ZoomCalendarSession): string[] {
     const meta = getSessionMeta(session)
     return [
       session.topic && session.topic !== meta ? session.topic : null,
-      session.participantNames?.[0] ?? null,
-      session.questionPreviews?.[0] ?? session.goalText ?? null,
+      session.participantNames?.[0] ?? session.attendees?.[0]?.name ?? 'Учасник не призначений',
     ].filter((value): value is string => Boolean(value))
   }
 
@@ -257,22 +250,36 @@ function getSessionSecondaryLines(session: ZoomCalendarSession): string[] {
   ].filter((value): value is string => Boolean(value))
 }
 
-function getPaymentLabel(session: ZoomCalendarSession): string | null {
-  return getZoomPaymentBadgeLabel(session)
+type CoachPrimaryStatus = {
+  label: string
+  badgeClass: string
 }
 
-function getSessionCardClassName(session: ZoomCalendarSession): string {
-  const normalizedType = getNormalizedSessionType(session)
-  if (normalizedType === 'battle_review') {
-    return 'border-violet-400/45 bg-violet-500/[0.12] shadow-[0_0_0_1px_rgba(167,139,250,0.12)]'
+function getCoachPrimaryStatus(
+  session: ZoomCalendarSession,
+): CoachPrimaryStatus | null {
+  if (session.status === 'CANCELLED') {
+    return {
+      label: 'СКАСОВАНО',
+      badgeClass: 'border border-rose-300/30 bg-rose-500/15 text-rose-100',
+    }
   }
-  if (normalizedType === 'individual' || normalizedType === 'private') {
-    return 'border-sky-400/45 bg-sky-500/[0.12] shadow-[0_0_0_1px_rgba(56,189,248,0.12)]'
+
+  if (session.status === 'COMPLETED') return null
+
+  if (session.commerceStatus === 'APPROVED_PENDING_PAYMENT') {
+    return {
+      label: 'ОЧІКУЄ ОПЛАТИ',
+      badgeClass: 'border border-amber-300/30 bg-amber-400/15 text-amber-100',
+    }
   }
-  if (normalizedType === 'group_practice' || normalizedType === 'group') {
-    return 'border-emerald-400/45 bg-emerald-500/[0.12] shadow-[0_0_0_1px_rgba(52,211,153,0.12)]'
+  if (session.commerceStatus === 'REQUESTED') {
+    return {
+      label: 'ОЧІКУЄ РІШЕННЯ',
+      badgeClass: 'border border-sky-300/30 bg-sky-500/15 text-sky-100',
+    }
   }
-  return 'border-white/10 bg-white/[0.045]'
+  return null
 }
 
 function getSessionIcon(session: ZoomCalendarSession): ReactNode {
@@ -282,6 +289,7 @@ function getSessionIcon(session: ZoomCalendarSession): ReactNode {
 function buildCoachWeekDays(
   sessions: ZoomCalendarSession[],
   weekFrom: string,
+  effectiveAvailability: AvailabilityWeekDay[] = [],
   today = new Date()
 ): CoachWeekDay[] {
   const todayKey = getKyivDateKey(today)
@@ -308,6 +316,7 @@ function buildCoachWeekDays(
       isToday: key === todayKey,
       date,
       sessions: daySessions,
+      availability: effectiveAvailability.find((availability) => availability.date === key),
     }
   })
 }
@@ -332,226 +341,136 @@ function CoachMetricCard({
 
 function CoachWeekSessionCard({
   session,
-  canManageZoom,
   onSelect,
-  onComplete,
-  onApproveRequest,
-  onRejectRequest,
-  commerceActionPending,
 }: {
   session: ZoomCalendarSession
-  canManageZoom: boolean
   onSelect: (session: ZoomCalendarSession) => void
-  onComplete: (session: ZoomCalendarSession) => void
-  onApproveRequest: (requestId: string) => void
-  onRejectRequest: (requestId: string) => void
-  commerceActionPending: boolean
 }) {
-  const normalizedType = getNormalizedSessionType(session)
-  const statusVariant = sessionStatusVariant(session.battleStatus ?? session.status)
-  const needsCompletion = canManageZoom && Boolean(session.canEdit) && isIncompletePastSession(session)
-  const paymentLabel = getPaymentLabel(session)
-  const battleDayLabel = normalizedType === 'battle_review' ? getBattleDayLabel(session) : null
   const secondaryLines = getSessionSecondaryLines(session)
-  const zoomEnabled = Boolean(session.zoomLink) && isZoomLinkActive(session.scheduledAt)
-  const completedOutcomeVisible = hasCompletedSessionOutcome(session)
+  const compactStatus = getCoachPrimaryStatus(session)
+  const compactSecondary = secondaryLines.slice(0, 2).join(' · ') || session.topic
 
   return (
     <article
-      className={`group w-full rounded-xl border px-2.5 py-2 text-left transition hover:-translate-y-0.5 hover:bg-white/[0.07] ${getSessionCardClassName(session)}`}
+      className="border-t border-white/[0.08] py-2.5 first:border-t-0"
       data-coach-session-id={session.id}
     >
-      <div className="flex items-start gap-2.5">
-        <button
-          type="button"
-          onClick={() => onSelect(session)}
-          className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-white/85 transition hover:bg-white/15"
-          aria-label="Відкрити сесію"
-        >
+      <button type="button" onClick={() => onSelect(session)} aria-label={`Дії з сесією: ${session.topic}`} className="group flex min-h-12 w-full items-center gap-2.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-700/40 text-slate-100">
           {getSessionIcon(session)}
-        </button>
-        <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => onSelect(session)}
-            className="block w-full min-w-0 text-left"
-          >
-            <p className="min-w-0 text-[13px] font-semibold leading-tight text-white">
-              <span className="mr-2 text-white/85">{formatKyivTime(session.scheduledAt)}</span>
-              <span>{getSessionMeta(session)}</span>
-            </p>
-          </button>
-          {secondaryLines.length > 0 && (
-            <p className="mt-1 text-[12px] leading-snug text-white/68">
-              {secondaryLines.join(' · ')}
-            </p>
-          )}
-          {completedOutcomeVisible && (
-            <div className="mt-2 rounded-lg border border-emerald-400/15 bg-emerald-500/[0.06] px-2.5 py-2 text-[12px] leading-snug text-white/72">
-              <p className="font-semibold text-emerald-200">✅ Завершено</p>
-              {session.actualAttendeeCount !== undefined && (
-                <p className="mt-1">{session.actualAttendeeCount} були присутні</p>
-              )}
-              {session.attendeesCount !== undefined && session.actualAttendeeCount !== undefined && (
-                <p className="mt-0.5 text-white/45">{session.actualAttendeeCount} фактично · {session.attendeesCount} зареєстровано</p>
-              )}
-              {session.outcomeTopic && <p className="mt-1">Тема: «{session.outcomeTopic}»</p>}
-              {session.summary && <p className="mt-1">Підсумок: «{session.summary}»</p>}
-              {session.recordingUrl && session.canViewRecording && (
-                <a
-                  href={session.recordingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-flex rounded-lg border border-sky-300/25 bg-sky-500/15 px-2.5 py-1 font-semibold text-sky-100 transition hover:bg-sky-500/25"
-                >
-                  Відкрити запис
-                </a>
-              )}
-            </div>
-          )}
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${needsCompletion ? 'border border-amber-300/30 bg-amber-400/15 text-amber-100' : statusVariant.badgeClass}`}>
-              {needsCompletion ? 'Потребує завершення' : statusVariant.label}
-            </span>
-            {paymentLabel && (
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
-                {paymentLabel}
-              </span>
-            )}
-            {battleDayLabel && (
-              <span className="rounded-full border border-violet-300/25 bg-violet-300/10 px-2 py-0.5 text-[10px] font-semibold text-violet-100">
-                {battleDayLabel}
-              </span>
-            )}
-            {session.zoomLink && (
-              <span
-                className={[
-                  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
-                  zoomEnabled
-                    ? 'border-sky-300/30 bg-sky-400/15 text-sky-100'
-                    : 'border-white/10 bg-white/[0.04] text-white/45',
-                ].join(' ')}
-              >
-                Увійти в Zoom
-                <ExternalLink className="h-3 w-3" />
-              </span>
-            )}
-            {needsCompletion && (
-              <button
-                type="button"
-                onClick={() => onComplete(session)}
-                className="rounded-full border border-emerald-300/25 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/24"
-              >
-                Завершити сесію
-              </button>
-            )}
-            {canManageZoom && session.commerceStatus === 'REQUESTED' && session.commerceRequestId && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onApproveRequest(session.commerceRequestId!)}
-                  disabled={commerceActionPending}
-                  className="rounded-full border border-emerald-300/25 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-500/24 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Підтвердити
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRejectRequest(session.commerceRequestId!)}
-                  disabled={commerceActionPending}
-                  className="rounded-full border border-rose-300/25 bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-100 transition hover:bg-rose-500/24 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Відхилити
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => onSelect(session)}
-          className="mt-1 text-white/45 transition group-hover:text-white/80"
-          aria-label="Відкрити деталі сесії"
-        >
-          ›
-        </button>
-      </div>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] leading-4">
+            <span className="shrink-0 text-sky-100/85">{formatCoachSessionRange(session)}</span>
+            <span className="font-semibold text-white">{['individual', 'private'].includes(getNormalizedSessionType(session)) ? 'Індивідуальна сесія' : getSessionMeta({ type: session.type })}</span>
+          </span>
+          <span className="mt-0.5 block text-xs leading-4 text-sky-100/70">{compactSecondary}</span>
+          {compactStatus && <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${compactStatus.badgeClass}`}>{compactStatus.label}</span>}
+        </span>
+        <span className="flex shrink-0 flex-col items-center gap-1 text-sky-100/70"><MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" /><ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+      </button>
     </article>
   )
+}
+
+export function CoachSessionActions({ session, canManage, busy, error, onDetails, onEdit, onCancel, onComplete, onApprove, onReject }: {
+  session: ZoomCalendarSession
+  canManage: boolean
+  busy: boolean
+  error: string | null
+  onDetails: () => void
+  onEdit: (reschedule: boolean) => void
+  onCancel: () => void
+  onComplete: () => void
+  onApprove: () => void
+  onReject: () => void
+}) {
+  const terminal = session.status === 'COMPLETED' || session.status === 'CANCELLED'
+  const pendingRequest = Boolean(session.commerceRequestId && session.commerceStatus === 'REQUESTED')
+  const pendingCommerce = Boolean(session.commerceRequestId && ['REQUESTED', 'APPROVED_PENDING_PAYMENT'].includes(session.commerceStatus ?? ''))
+  const canEdit = canManage && session.canEdit && !terminal && !pendingCommerce
+  const future = new Date(session.scheduledAt).getTime() > Date.now()
+  const status = getCoachPrimaryStatus(session)
+  const day = new Intl.DateTimeFormat('uk-UA', { timeZone: KYIV_TIMEZONE, weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(session.scheduledAt))
+  const actionClass = 'flex w-full items-center gap-3 border-t border-white/10 py-2.5 text-left text-xs text-white/90 disabled:opacity-40'
+  return <div data-coach-session-actions className="pt-2">
+    <div className="mb-3 flex items-center gap-3">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-700/40">{getSessionIcon(session)}</span>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{['individual', 'private'].includes(getNormalizedSessionType(session)) ? 'Індивідуальна сесія' : getSessionMeta({ type: session.type })}</p>
+        <p className="mt-0.5 text-xs text-sky-100/70">{day} · {formatCoachSessionRange(session)}</p>
+        <p className="mt-0.5 text-xs text-sky-100/60">{getSessionSecondaryLines(session).join(' · ')}</p>
+        {status && <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] ${status.badgeClass}`}>{status.label}</span>}
+      </div>
+    </div>
+    <button type="button" onClick={onDetails} className={actionClass}><Info className="h-4 w-4" />ВІДКРИТИ ДЕТАЛІ</button>
+    {canEdit && <>
+      <button type="button" onClick={() => onEdit(false)} className={actionClass}><PencilLine className="h-4 w-4" />{getNormalizedSessionType(session) === 'group_practice' ? 'РЕДАГУВАТИ НАЛАШТУВАННЯ' : 'РЕДАГУВАТИ ТЕМУ'}</button>
+      <button type="button" onClick={() => onEdit(true)} className={actionClass}><CalendarClock className="h-4 w-4" />ПЕРЕНЕСТИ СЕСІЮ</button>
+      {future ? <button type="button" onClick={onCancel} className={actionClass}><Ban className="h-4 w-4 text-rose-400" />{getNormalizedSessionType(session) === 'group_practice' ? 'СКАСУВАТИ ПРАКТИКУ' : 'СКАСУВАТИ СЕСІЮ'}</button> : <button type="button" onClick={onComplete} className={actionClass}><CheckCircle2 className="h-4 w-4 text-emerald-400" />ЗАВЕРШИТИ СЕСІЮ</button>}
+    </>}
+    {canManage && pendingRequest && !terminal && <>
+      <button type="button" disabled={busy} onClick={onApprove} className={actionClass}><CheckCircle2 className="h-4 w-4 text-emerald-400" />ПІДТВЕРДИТИ ЗАПИТ</button>
+      <button type="button" disabled={busy} onClick={onReject} className={actionClass}><Ban className="h-4 w-4 text-rose-400" />ВІДХИЛИТИ ЗАПИТ</button>
+    </>}
+    {error && <p role="alert" className="mt-2 text-xs text-red-200">{error}</p>}
+  </div>
 }
 
 function CoachWeeklyDiary({
   days,
   onSelectSession,
-  onCompleteSession,
   onCreateSession,
-  onApproveRequest,
-  onRejectRequest,
-  commerceActionPending,
   canManageZoom,
 }: {
   days: CoachWeekDay[]
   onSelectSession: (session: ZoomCalendarSession) => void
-  onCompleteSession: (session: ZoomCalendarSession) => void
   onCreateSession: (date: Date) => void
-  onApproveRequest: (requestId: string) => void
-  onRejectRequest: (requestId: string) => void
-  commerceActionPending: boolean
   canManageZoom: boolean
 }) {
+  const [expandedEmptyDay, setExpandedEmptyDay] = useState<string | null>(null)
   return (
     <div className="space-y-2.5" data-coach-weekly-diary="true">
       {days.map((day) => (
         <section
           key={day.key}
           className={[
-            'rounded-2xl border px-2.5 py-2.5',
-            day.isToday
-              ? 'border-sky-300/30 bg-sky-400/[0.08] shadow-[0_0_30px_rgba(56,189,248,0.12)]'
-              : 'border-white/[0.08] bg-white/[0.025]',
+            'rounded-xl border px-2.5 py-2',
+            day.sessions.length || day.availability?.windows.length ? 'border-sky-500/30 bg-gradient-to-br from-slate-950 to-sky-950/40' : 'border-slate-700/60 bg-slate-900/35',
           ].join(' ')}
           data-coach-week-day={day.label}
         >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="flex items-baseline gap-2">
-              <p className={['text-sm font-semibold', day.isToday ? 'text-sky-200' : 'text-white/85'].join(' ')}>
-                {day.label}
-              </p>
-              <p className={['text-sm font-semibold', day.isToday ? 'text-sky-200' : 'text-white/65'].join(' ')}>
-                {day.dateLabel}
-              </p>
-              {day.isToday && <span className="text-[11px] text-sky-200/75">· Сьогодні</span>}
+          <div className="flex min-h-10 items-center gap-2.5">
+            <div className="w-10 shrink-0 text-left">
+              <p className="text-xs font-semibold text-white">{day.label}</p>
+              <p className="text-xs font-semibold text-white">{day.dateLabel.padStart(5, '0')}</p>
             </div>
-            {day.sessions.length > 0 && (
-              <span className="text-[11px] text-white/45">{day.sessions.length} сес.</span>
-            )}
+            <span className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold ${day.availability?.windows.length ? 'bg-gradient-to-b from-emerald-400 to-emerald-600 text-white' : 'bg-gradient-to-b from-slate-600 to-slate-800 text-slate-100'}`}>{day.availability?.windows.length ? 'ON' : 'OFF'}</span>
+            <p className={`min-w-0 flex-1 text-[11px] leading-4 ${day.availability?.windows.length ? 'text-sky-100/85' : 'text-slate-400'}`}>{day.availability?.windows.length ? day.availability.windows.map((slot) => `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}–${String(slot.endHour ?? slot.hour + 1).padStart(2, '0')}:${String(slot.endMinute ?? slot.minute).padStart(2, '0')}`).join(', ') : 'ВИХІДНИЙ'}</p>
+            {canManageZoom && (day.sessions.length > 0 || Boolean(day.availability?.windows.length)) ? <button type="button" onClick={() => onCreateSession(day.date)} aria-label={`Додати сесію ${day.key}`} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-400 bg-gradient-to-b from-sky-400 to-sky-700 text-white shadow-[inset_0_1px_5px_rgba(255,255,255,0.35)]"><Plus className="h-5 w-5" /></button> : <button type="button" aria-label={`Переглянути день ${day.key}`} aria-expanded={expandedEmptyDay === day.key} onClick={() => setExpandedEmptyDay(expandedEmptyDay === day.key ? null : day.key)} className="flex h-8 w-8 shrink-0 items-center justify-center text-sky-100/70"><ChevronRight className="h-4 w-4" /></button>}
           </div>
 
           {day.sessions.length > 0 ? (
-            <div className="space-y-2">
+            <div className="ml-[50px] mt-1 border-t border-white/[0.08]">
               {day.sessions.map((session) => (
                 <CoachWeekSessionCard
                   key={session.id}
                   session={session}
-                  canManageZoom={canManageZoom}
                   onSelect={onSelectSession}
-                  onComplete={onCompleteSession}
-                  onApproveRequest={onApproveRequest}
-                  onRejectRequest={onRejectRequest}
-                  commerceActionPending={commerceActionPending}
                 />
               ))}
             </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-white/10 bg-black/10 px-3 py-2 text-[12px] text-white/42">
-              <span>Немає запланованих сесій</span>
+          ) : (Boolean(day.availability?.windows.length) || expandedEmptyDay === day.key) && (
+            <div className="mt-2 flex flex-col items-center gap-4 rounded-xl border border-dashed border-slate-700/70 bg-slate-950/30 px-6 py-6 text-center text-xs leading-5 text-white/85">
+              <CalendarDays className="h-6 w-6 text-slate-200" />
+              <span className="max-w-44">На цей день немає запланованих зустрічей</span>
               {canManageZoom && (
                 <button
                   type="button"
                   onClick={() => onCreateSession(day.date)}
-                  className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+                  className="rounded-lg border border-sky-400 bg-gradient-to-b from-sky-600 to-sky-800 px-3 py-2 text-[11px] font-semibold text-white transition hover:brightness-110"
                 >
-                  + Додати сесію
+                  + НОВА СЕСІЯ
                 </button>
               )}
             </div>
@@ -585,9 +504,9 @@ function CoachActionModal({
     <BaseModal
       isOpen
       onClose={onClose}
-      containerClassName="z-[80] items-end px-3 py-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4"
+      containerClassName="z-[80] items-center justify-center px-3 py-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       overlayClassName="bg-black/70 backdrop-blur-sm"
-      panelClassName="relative z-10 flex max-h-[calc(100vh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,8,23,0.98))] shadow-[0_24px_80px_rgba(0,0,0,0.48)] sm:max-h-[calc(100vh-2rem)]"
+      panelClassName="relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,8,23,0.98))] shadow-[0_24px_80px_rgba(0,0,0,0.48)]"
     >
       <div role="dialog" aria-modal="true" aria-labelledby="coach-action-modal-title" className="flex min-h-0 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
@@ -779,6 +698,8 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
     },
     {}
   )
+  const availabilityWeekFrom = getKyivDateKey(new Date(weekRange.from))
+  const { data: effectiveAvailability = [] } = useGetAvailabilityWeekQuery(availabilityWeekFrom)
   const [finalize] = useFinalizeBattleMutation()
   const [approveCommerceRequest, { isLoading: isApprovingCommerce }] =
     useApproveZoomCommerceRequestMutation()
@@ -786,6 +707,8 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
     useRejectZoomCommerceRequestMutation()
   const [createSession, { isLoading: isCreating }] =
     useCreateZoomSessionMutation()
+  const [cancelZoomSession, { isLoading: isCancellingSession }] =
+    useCancelZoomSessionMutation()
 
   const [battlesOpen, setBattlesOpen] = useState(true)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
@@ -794,11 +717,15 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
     Partial<CreateSessionPayload> | undefined
   >(undefined)
   const [selectedSession, setSelectedSession] = useState<ZoomCalendarSession | null>(null)
+  const [selectedSessionView, setSelectedSessionView] = useState<'actions' | 'details'>('actions')
+  const [requestActionError, setRequestActionError] = useState<string | null>(null)
   const [completionSessionId, setCompletionSessionId] = useState<string | null>(null)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
-  const [editingFocus, setEditingFocus] = useState<'zoomLink' | null>(null)
+  const [editingFocus, setEditingFocus] = useState<'zoomLink' | 'schedule' | null>(null)
+  const [cancellingSessionId, setCancellingSessionId] = useState<string | null>(null)
+  const [cancelSessionError, setCancelSessionError] = useState<string | null>(null)
 
-  const weekDays = buildCoachWeekDays(sessions, weekRange.from)
+  const weekDays = buildCoachWeekDays(sessions, weekRange.from, effectiveAvailability)
   const activeBattles = sessions.filter(
     (session) =>
       getNormalizedSessionType(session) === 'battle_review' &&
@@ -809,11 +736,6 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
     (sum, session) => sum + (session.attendeesCount ?? 0),
     0
   )
-  const paymentSessions = sessions.filter((session) => typeof session.priceCents === 'number')
-  const paidSessions = paymentSessions.filter((session) => (session.priceCents ?? 0) > 0).length
-  const paymentsMetric = paymentSessions.length > 0
-    ? `${Math.round((paidSessions / paymentSessions.length) * 100)}%`
-    : '—'
   const displayBattles: BattleSession[] = activeBattles as BattleSession[]
   const user = useAppSelector((state) => state.auth.user)
   const previewRole = user?.activeRole ?? user?.role ?? 'USER'
@@ -853,11 +775,44 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
 
   const closeCoachActionModal = () => {
     setSelectedSession(null)
+    setSelectedSessionView('actions')
+    setRequestActionError(null)
     setCompletionSessionId(null)
     setEditingSessionId(null)
     setEditingFocus(null)
     setCreateDate(null)
     setCreateInitialValues(undefined)
+    setCancellingSessionId(null)
+    setCancelSessionError(null)
+  }
+
+  const requestSessionCancellation = (sessionId: string) => {
+    setCancellingSessionId(sessionId)
+    setCancelSessionError(null)
+  }
+
+  const handleRequestDecision = async (approve: boolean) => {
+    if (!selectedSessionData?.commerceRequestId) return
+    setRequestActionError(null)
+    try {
+      const decide = approve ? approveCommerceRequest : rejectCommerceRequest
+      await decide(selectedSessionData.commerceRequestId).unwrap()
+      closeCoachActionModal()
+    } catch {
+      setRequestActionError('Не вдалося оновити запит. Спробуй ще раз.')
+    }
+  }
+
+  const confirmSessionCancellation = async () => {
+    if (!cancellingSessionId || isCancellingSession) return
+
+    setCancelSessionError(null)
+    try {
+      await cancelZoomSession(cancellingSessionId).unwrap()
+      closeCoachActionModal()
+    } catch {
+      setCancelSessionError('Не вдалося скасувати Zoom-сесію. Спробуй ще раз.')
+    }
   }
 
   const handleCreateForDate = (date: Date) => {
@@ -897,42 +852,30 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
 
   return (
     <div className="flex flex-col gap-3 text-white" data-coach-zoom-panel="weekly-diary">
-      <div className="rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.9),rgba(2,8,23,0.95))] p-3 shadow-[0_16px_42px_rgba(0,0,0,0.24)]">
+      <div>
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-sky-300/25 bg-sky-500/15 text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.16)]">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <div>
-              <h1 className="text-lg font-semibold leading-tight text-white">Панель коуча</h1>
+          <div>
+              <h1 className="text-xl font-semibold leading-tight text-white">Панель коуча</h1>
               <p className="mt-0.5 text-xs text-white/56">Vira · Starway Studio</p>
-            </div>
           </div>
-          {canManageZoom && activeCoachScreen === 'calendar' && calendarMode === 'calendar' && (
+          {canManageZoom && activeCoachScreen === 'calendar' && (
             <button
               type="button"
               onClick={() => handleCreateForDate(new Date())}
-              className="rounded-xl border border-sky-300/35 bg-sky-500/20 px-3 py-2 text-[12px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:bg-sky-500/28"
+              className="rounded-lg border border-sky-400 bg-gradient-to-b from-sky-700/50 to-sky-950/50 px-3 py-2 text-[11px] font-semibold text-white"
             >
-              + Нова сесія
+              + НОВА СЕСІЯ
             </button>
           )}
         </div>
 
-        {activeCoachScreen === 'calendar' && <div className="mt-3 grid grid-cols-2 rounded-xl border border-white/10 bg-black/15 p-1">
-          <button type="button" onClick={() => setCalendarMode('calendar')} className={`rounded-lg px-3 py-2 text-xs font-semibold ${calendarMode === 'calendar' ? 'bg-sky-500/20 text-white' : 'text-white/55'}`}>КАЛЕНДАР</button>
-          <button type="button" onClick={() => setCalendarMode('availability')} className={`rounded-lg px-3 py-2 text-xs font-semibold ${calendarMode === 'availability' ? 'bg-sky-500/20 text-white' : 'text-white/55'}`}>МОЯ ДОСТУПНІСТЬ</button>
+        {activeCoachScreen === 'calendar' && <div className="mt-3 grid grid-cols-2 rounded-lg border border-slate-700/60">
+          <button type="button" aria-pressed={calendarMode === 'calendar'} onClick={() => setCalendarMode('calendar')} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${calendarMode === 'calendar' ? 'border-sky-400 bg-gradient-to-b from-sky-700/50 to-sky-950/50 text-white' : 'border-transparent text-sky-100/80'}`}>КАЛЕНДАР</button>
+          <button type="button" aria-pressed={calendarMode === 'availability'} onClick={() => setCalendarMode('availability')} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${calendarMode === 'availability' ? 'border-sky-400 bg-gradient-to-b from-sky-700/50 to-sky-950/50 text-white' : 'border-transparent text-sky-100/80'}`}>МОЯ ДОСТУПНІСТЬ</button>
         </div>}
 
-        {calendarMode === 'calendar' && <>
-        <div className="mt-3 grid grid-cols-4 gap-1.5">
-          <CoachMetricCard label="Сесій" value={sessions.length} caption="на тиждень" />
-          <CoachMetricCard label="Учасників" value={totalAttendees} caption="всього" />
-          <CoachMetricCard label="Активних" value={displayBattles.length} caption="battle" />
-          <CoachMetricCard label="Оплат" value={paymentsMetric} caption={paymentSessions.length ? `${paidSessions}/${paymentSessions.length}` : 'немає даних'} />
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/15 p-1.5">
+        {activeCoachScreen === 'calendar' && calendarMode === 'calendar' && <>
+        <div className="mt-4 flex items-center justify-between gap-2 px-1">
           <button
             type="button"
             onClick={goToPreviousWeek}
@@ -942,7 +885,7 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div className="min-w-0 flex-1 text-center">
-            <p className="text-sm font-semibold text-white">{formatWeekRange(weekRange.from)} {new Date(weekRange.from).getUTCFullYear()}</p>
+            <p className="text-xs font-semibold text-white">{formatWeekRange(weekRange.from)} {new Date(weekRange.from).getUTCFullYear()}</p>
           </div>
           <button
             type="button"
@@ -976,22 +919,12 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
         days={weekDays}
         onSelectSession={(session) => {
           setSelectedSession(session)
+          setSelectedSessionView('actions')
+          setRequestActionError(null)
           setCompletionSessionId(null)
           setCreateDate(null)
         }}
-        onCompleteSession={(session) => {
-          setSelectedSession(session)
-          setCompletionSessionId(session.id)
-          setCreateDate(null)
-        }}
         onCreateSession={handleCreateForDate}
-        onApproveRequest={(requestId) => {
-          void approveCommerceRequest(requestId)
-        }}
-        onRejectRequest={(requestId) => {
-          void rejectCommerceRequest(requestId)
-        }}
-        commerceActionPending={isApprovingCommerce || isRejectingCommerce}
         canManageZoom={canManageZoom}
       />}
 
@@ -1040,23 +973,90 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
 
       {selectedSessionData && (
         <CoachActionModal
-          title={completionSessionId === selectedSessionData.id ? 'Завершити сесію' : 'Сесія'}
+          title={cancellingSessionId === selectedSessionData.id
+            ? 'Скасувати сесію'
+            : completionSessionId === selectedSessionData.id ? 'Завершити сесію'
+            : selectedSessionView === 'details' ? 'Деталі сесії'
+            : selectedSessionData.commerceRequestId && ['REQUESTED', 'APPROVED_PENDING_PAYMENT'].includes(selectedSessionData.commerceStatus ?? '') ? 'Дії з запитом користувача'
+            : getNormalizedSessionType(selectedSessionData) === 'group_practice' ? 'Дії з груповою практикою' : 'Дії з сесією'}
           onClose={closeCoachActionModal}
         >
-          <SessionCard
-            session={selectedSessionData}
-            mode="coach"
-            userId={expertId ?? 'staff'}
-            initialCompletionOpen={completionSessionId === selectedSessionData.id}
-            onClose={closeCoachActionModal}
-            onAddToCalendar={handleAddToCalendar}
-            onEdit={(id) => {
-              setEditingSessionId(id)
-              setSelectedSession(null)
-              setCompletionSessionId(null)
-            }}
-            onCancel={closeCoachActionModal}
-          />
+          {cancellingSessionId === selectedSessionData.id ? (
+            <div className="space-y-4">
+              <p className="text-sm text-white/75">Скасувати цю Zoom-сесію?</p>
+              {cancelSessionError && (
+                <p role="alert" className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-100">
+                  {cancelSessionError}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void confirmSessionCancellation()}
+                  disabled={isCancellingSession}
+                  className="rounded-xl border border-red-400/30 bg-red-500/15 px-4 py-2.5 text-[12px] font-semibold text-red-100 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCancellingSession ? 'СКАСОВУЄМО…' : 'СКАСУВАТИ СЕСІЮ'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCancellingSessionId(null)}
+                  disabled={isCancellingSession}
+                  className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold text-white/70 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  НАЗАД
+                </button>
+              </div>
+            </div>
+          ) : selectedSessionView === 'actions' ? (
+            <CoachSessionActions
+              session={selectedSessionData} canManage={canManageZoom}
+              busy={isApprovingCommerce || isRejectingCommerce} error={requestActionError}
+              onDetails={() => setSelectedSessionView('details')}
+              onEdit={(reschedule) => { setEditingSessionId(selectedSessionData.id); setEditingFocus(reschedule ? 'schedule' : null); setSelectedSession(null) }}
+              onCancel={() => requestSessionCancellation(selectedSessionData.id)}
+              onComplete={() => { setCompletionSessionId(selectedSessionData.id); setSelectedSessionView('details') }}
+              onApprove={() => void handleRequestDecision(true)} onReject={() => void handleRequestDecision(false)}
+            />
+          ) : (
+            <>
+              <SessionCard
+                session={selectedSessionData}
+                mode="coach"
+                userId={expertId ?? 'staff'}
+                initialCompletionOpen={completionSessionId === selectedSessionData.id}
+                onClose={closeCoachActionModal}
+                onAddToCalendar={handleAddToCalendar}
+                onEdit={(id) => {
+                  setEditingSessionId(id)
+                  setSelectedSession(null)
+                  setCompletionSessionId(null)
+                }}
+                onCancel={requestSessionCancellation}
+              />
+              {canManageZoom && selectedSessionData.commerceStatus === 'REQUESTED' && selectedSessionData.commerceRequestId && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleRequestDecision(true)}
+                    disabled={isApprovingCommerce || isRejectingCommerce}
+                    className="rounded-xl border border-emerald-300/25 bg-emerald-500/15 px-4 py-2.5 text-[12px] font-semibold text-emerald-100 transition hover:bg-emerald-500/24 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ПІДТВЕРДИТИ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRequestDecision(false)}
+                    disabled={isApprovingCommerce || isRejectingCommerce}
+                    className="rounded-xl border border-rose-300/25 bg-rose-500/15 px-4 py-2.5 text-[12px] font-semibold text-rose-100 transition hover:bg-rose-500/24 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ВІДХИЛИТИ
+                  </button>
+                </div>
+              )}
+              {requestActionError && <p role="alert" className="mt-2 text-xs text-red-200">{requestActionError}</p>}
+            </>
+          )}
         </CoachActionModal>
       )}
 
@@ -1074,7 +1074,7 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
         </CoachActionModal>
       )}
       {canManageZoom && editingSessionData && (
-        <CoachActionModal title="Редагування сесії" onClose={closeCoachActionModal}>
+        <CoachActionModal title={editingFocus === 'schedule' ? 'Перенести сесію' : 'Редагування сесії'} onClose={closeCoachActionModal}>
           <SessionForm
             defaultDate={new Date(editingSessionData.scheduledAt)}
             sessionId={editingSessionData.id}
@@ -1089,7 +1089,7 @@ export function CoachZoomPanel({ expertId, activeScreen: activeCoachScreen = 'ca
             onSubmit={handleUpdate}
             onClose={closeCoachActionModal}
             isLoading={isUpdating}
-            title="Редагування сесії"
+            title={editingFocus === 'schedule' ? 'Перенести сесію' : 'Редагування сесії'}
             submitLabel="Зберегти"
             loadingLabel="Збереження..."
             autoFocusZoomLink={editingFocus === 'zoomLink'}

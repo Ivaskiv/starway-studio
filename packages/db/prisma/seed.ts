@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import jwt from 'jsonwebtoken';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertCanonicalDbOperationAllowed } from '../../../scripts/canonical-db-guard.mjs';
 import {
   DailyChoice,
   DailyState,
@@ -43,6 +44,7 @@ if (existsSync(rootEnvPath)) {
 if (existsSync(backendEnvPath)) {
   loadEnv({ path: backendEnvPath, override: true });
 }
+assertCanonicalDbOperationAllowed('seed');
 
 function resolveSupabasePassword(input: string | undefined): string | undefined {
   const raw = String(input ?? '').trim();

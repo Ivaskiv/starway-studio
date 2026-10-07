@@ -557,6 +557,7 @@ export async function getEligibleBattleOpponents(args: {
   expertId: string;
 }): Promise<{ id: string; firstName: string | null; lastName: string | null; email: string }[]> {
   const { userId, expertId } = args;
+  const now = new Date();
   const users = await prisma.user.findMany({
     where: {
       id: { not: userId },
@@ -564,11 +565,13 @@ export async function getEligibleBattleOpponents(args: {
       deletedAt: null,
       productSubscriptions: {
         some: {
-          status: 'ACTIVE',
-          product: { code: FOCUS_PRODUCT_CODE },
+          product: { code: { equals: FOCUS_PRODUCT_CODE, mode: 'insensitive' } },
           OR: [
-            { expiresAt: null },
-            { expiresAt: { gt: new Date() } },
+            {
+              status: { in: ['active', 'paid'] },
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+            { status: 'trial', trialEndsAt: { gt: now } },
           ],
         },
       },

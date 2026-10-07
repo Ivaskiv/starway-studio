@@ -1,6 +1,8 @@
 import { prisma } from '../backend/src/db/client.js'
+import { assertCanonicalDbOperationAllowed } from './canonical-db-guard.mjs'
 
 async function main() {
+  assertCanonicalDbOperationAllowed('schema-repair')
   await prisma.$executeRawUnsafe(`
     DO $$
     BEGIN

@@ -1,7 +1,66 @@
 import type { Request, Response } from "express"
 import { prisma } from "../../../db/client.js"
 import { getCheckoutSession, refreshCheckoutSessionPayload } from "../payments/wayforpay/checkout.js"
-import { generatePaymentSignature } from "../payments/wayforpay/service.js"
+import {
+  buildPaymentRequest,
+  generatePaymentSignature,
+  generatePaymentSignatureFromPayload,
+} from "../payments/wayforpay/service.js"
+
+const HOSTED_ARRAY_FIELD_NAMES: Record<string, string> = {
+  productName: 'productName[]',
+  productCount: 'productCount[]',
+  productPrice: 'productPrice[]',
+}
+
+function escapeHtmlAttribute(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+export function toHostedWayForPayPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  // CREATE_INVOICE is valid only for api.wayforpay.com/api, never for hosted /pay.
+  const { transactionType: _invoiceOnlyTransactionType, ...hostedPayload } = payload
+  return hostedPayload
+}
+
+export function buildHostedWayForPayFormInputs(payload: Record<string, unknown>): string {
+  return Object.entries(payload)
+    .flatMap(([key, value]) => {
+      const fieldName = HOSTED_ARRAY_FIELD_NAMES[key] ?? key
+      if (Array.isArray(value)) {
+        return value.map((item) =>
+          `<input type="hidden" name="${fieldName}" value="${escapeHtmlAttribute(item)}" />`,
+        )
+      }
+
+      const normalizedValue = typeof value === 'object'
+        ? JSON.stringify(value)
+        : value
+      return `<input type="hidden" name="${fieldName}" value="${escapeHtmlAttribute(normalizedValue)}" />`
+    })
+    .join('\n')
+}
+
+export function buildHostedWayForPayCheckoutHtml(payload: Record<string, unknown>): string {
+  const formInputs = buildHostedWayForPayFormInputs(payload)
+  return [
+    '<!doctype html>',
+    '<html lang="uk">',
+    '<head><meta charset="utf-8" /><title>WayForPay Checkout</title></head>',
+    '<body>',
+    '<form id="wayforpay-checkout" method="post" action="https://secure.wayforpay.com/pay">',
+    formInputs,
+    '<noscript><button type="submit">Continue to payment</button></noscript>',
+    '</form>',
+    '<script>document.getElementById("wayforpay-checkout").submit();</script>',
+    '</body>',
+    '</html>',
+  ].join('')
+}
 
 function decodeStoredCheckoutPayload(payload: string): Record<string, unknown> | null {
   try {
@@ -15,9 +74,7 @@ function decodeStoredCheckoutPayload(payload: string): Record<string, unknown> |
   }
 }
 
-function refreshCheckoutPayloadForRetry(rawPayload: Record<string, unknown>): Record<string, unknown> {
-  // Approval binds one immutable reference; regenerating it disconnects the callback from its request.
-  if (rawPayload.zoomCommerceRequestId) return rawPayload
+export function refreshCheckoutPayloadForRetry(rawPayload: Record<string, unknown>): Record<string, unknown> {
   const amount = Number(rawPayload.amount ?? 0)
   const currency = String(rawPayload.currency ?? 'UAH')
   const clientAccountId = String(rawPayload.clientAccountId ?? '').trim()
@@ -34,6 +91,24 @@ function refreshCheckoutPayloadForRetry(rawPayload: Record<string, unknown>): Re
 
   if (!existingRef || !clientAccountId || !Number.isFinite(amount) || amount <= 0 || productName.length === 0) {
     return rawPayload
+  }
+
+  // Zoom commerce callbacks are bound to this immutable reference, so only regenerate signed WayForPay fields.
+  if (rawPayload.zoomCommerceRequestId) {
+    const hostedPayload = toHostedWayForPayPayload(rawPayload)
+    return {
+      ...hostedPayload,
+      ...buildPaymentRequest({
+        userId: clientAccountId,
+        productId: String(rawPayload.paymentKind ?? productName[0] ?? 'zoom_individual'),
+        amount,
+        payRef: existingRef,
+        currency,
+        product_name: productName,
+        product_count: productCount.length ? productCount : [1],
+        product_price: productPrice.length ? productPrice : [amount],
+      }),
+    }
   }
 
   const orderDate = Math.floor(Date.now() / 1000)
@@ -123,27 +198,37 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
   }
 
   // FIX 2026-05-25 PAY_RETRY2: regenerate order reference/signature so repeated pay attempts stay valid.
-  const replaySafePayload = refreshCheckoutPayloadForRetry(payload)
-  if (String(replaySafePayload.orderReference ?? '') !== String(payload.orderReference ?? '')) {
+  const unsignedHostedPayload = toHostedWayForPayPayload(refreshCheckoutPayloadForRetry(payload))
+  const replaySafePayload: Record<string, unknown> = {
+    ...unsignedHostedPayload,
+    merchantSignature: generatePaymentSignatureFromPayload(unsignedHostedPayload),
+  }
+  const checkoutPayloadChanged = JSON.stringify(replaySafePayload) !== JSON.stringify(payload)
+  if (checkoutPayloadChanged) {
     if (token) {
-      await refreshCheckoutSessionPayload(token, replaySafePayload).catch((error) => {
+      try {
+        await refreshCheckoutSessionPayload(token, replaySafePayload)
+      } catch (error) {
         console.error('[CHECKOUT_TRACE] retry_payload_persist_failed', {
           token,
           orderReference: replaySafePayload.orderReference,
           error: error instanceof Error ? error.message : String(error),
         })
+        throw error
+      }
+    }
+    if (String(replaySafePayload.orderReference ?? '') !== String(payload.orderReference ?? '')) {
+      console.warn('[PAYMENT_RETRY]', {
+        oldRef: String(payload.orderReference ?? ''),
+        newRef: String(replaySafePayload.orderReference ?? ''),
+      })
+      console.info('[PAYMENT_TRACE]', {
+        step: 'invoice_create',
+        note: 'checkout_retry_regenerated',
+        previousOrderReference: payload.orderReference,
+        nextOrderReference: replaySafePayload.orderReference,
       })
     }
-    console.warn('[PAYMENT_RETRY]', {
-      oldRef: String(payload.orderReference ?? ''),
-      newRef: String(replaySafePayload.orderReference ?? ''),
-    })
-    console.info('[PAYMENT_TRACE]', {
-      step: 'invoice_create',
-      note: 'checkout_retry_regenerated',
-      previousOrderReference: payload.orderReference,
-      nextOrderReference: replaySafePayload.orderReference,
-    })
   }
 
   console.log('[WAYFORPAY_CHECKOUT] rendering form', {
@@ -158,34 +243,7 @@ export async function renderWayForPayCheckoutPageHandler(req: Request, res: Resp
     hasServiceUrl: Boolean(replaySafePayload.serviceUrl),
   })
 
-  const formInputs = Object.entries(replaySafePayload)
-    .flatMap(([key, value]) => {
-      if (Array.isArray(value)) {
-        return value.map((item) =>
-          `<input type="hidden" name="${key}" value="${String(item ?? '').replace(/"/g, '&quot;')}" />`,
-        )
-      }
-
-      const normalizedValue = typeof value === 'object'
-        ? JSON.stringify(value)
-        : String(value ?? '')
-      return `<input type="hidden" name="${key}" value="${normalizedValue.replace(/"/g, '&quot;')}" />`
-    })
-    .join('\n')
-
-  const html = [
-    '<!doctype html>',
-    '<html lang="uk">',
-    '<head><meta charset="utf-8" /><title>WayForPay Checkout</title></head>',
-    '<body>',
-    '<form id="wayforpay-checkout" method="post" action="https://secure.wayforpay.com/pay">',
-    formInputs,
-    '<noscript><button type="submit">Continue to payment</button></noscript>',
-    '</form>',
-    '<script>document.getElementById("wayforpay-checkout").submit();</script>',
-    '</body>',
-    '</html>',
-  ].join('')
+  const html = buildHostedWayForPayCheckoutHtml(replaySafePayload)
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   return res.status(200).send(html)

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { buildZoomCalendarUrl } from '../urls.js'
+import { buildZoomCalendarUrl } from '../../../../src/modules/zoom/urls.js'
 
 const ORIGINAL_ENV = {
   TELEGRAM_WEBAPP_BASE_URL: process.env.TELEGRAM_WEBAPP_BASE_URL,
@@ -29,5 +29,25 @@ describe('buildZoomCalendarUrl', () => {
     expect(prodUrl.pathname).toBe('/miniapp/zoom-calendar')
     expect(localUrl.searchParams.get('intent')).toBe('booking')
     expect(prodUrl.searchParams.get('intent')).toBe('booking')
+    expect(localUrl.searchParams.get('zoomRole')).toBe('user')
+    expect(prodUrl.searchParams.get('zoomRole')).toBe('user')
+  })
+
+  it('preserves an explicit coach role without creating a second route', () => {
+    process.env.TELEGRAM_WEBAPP_BASE_URL = 'https://starway-frontend.vercel.app'
+
+    const url = new URL(buildZoomCalendarUrl({ zoomRole: 'coach' }))
+
+    expect(url.pathname).toBe('/miniapp/zoom-calendar')
+    expect(url.searchParams.get('zoomRole')).toBe('coach')
+  })
+
+  it('preserves an explicit OPS role on the canonical Mini App route', () => {
+    process.env.TELEGRAM_WEBAPP_BASE_URL = 'https://starway-frontend.vercel.app'
+
+    const url = new URL(buildZoomCalendarUrl({ zoomRole: 'ops' }))
+
+    expect(url.pathname).toBe('/miniapp/zoom-calendar')
+    expect(url.searchParams.get('zoomRole')).toBe('ops')
   })
 })

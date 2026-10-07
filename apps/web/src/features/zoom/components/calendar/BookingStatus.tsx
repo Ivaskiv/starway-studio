@@ -5,11 +5,13 @@ export function BookingStatus({
   onAddToCalendar,
   onUnbook,
   unbookDisabled = false,
+  unbookLoading = false,
 }: {
   session: ZoomCalendarSession;
   onAddToCalendar: (session: ZoomCalendarSession) => void;
   onUnbook?: (session: ZoomCalendarSession) => void;
   unbookDisabled?: boolean;
+  unbookLoading?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2 mt-2">
@@ -27,12 +29,12 @@ export function BookingStatus({
 
       {onUnbook ? (
         <button
-          className="bg-white/5 hover:bg-white/10 text-white/75 text-sm px-3 py-2 rounded-lg border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => onUnbook(session)}
           type="button"
           disabled={unbookDisabled}
         >
-          Скасувати запис
+          {unbookLoading ? 'СКАСОВУЄМО…' : 'СКАСУВАТИ ЗАПИС'}
         </button>
       ) : null}
     </div>

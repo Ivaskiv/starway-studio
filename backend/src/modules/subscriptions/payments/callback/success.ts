@@ -1,7 +1,6 @@
 import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/service.js'
 
 import { prisma } from '../../../../db/client.js'
-import { sendOpsTelegramMessage } from '../../../../lib/telegram.js'
 import { trackEvent } from '../../../events/service.js'
 import { sendBillingSuccessTelegramMessage } from '../../../telegram-mentor/handlers/billing.js'
 import {
@@ -67,15 +66,14 @@ export async function handleApprovedPayment(input: {
 
       await prisma.$transaction(
         async (tx) => {
-          // fix with kimi 2026-05-28: wrapped all post-payment DB writes in prisma.$transaction — prevents partial state (e.g. subscription created but focusPaid = false) on server crash mid-orchestration
+          // Keep this transaction DB-only. Telegram delivery and AB progress
+          // enrichment run after commit so a slow side effect cannot expire it.
           if (
             typeof data.order_reference === 'string' &&
             data.order_reference.trim()
           ) {
-            await markCheckoutSessionCompleted(
-              data.order_reference.trim(),
-              tx
-            ).catch(async (err: unknown) => {
+            await markCheckoutSessionCompleted(data.order_reference.trim(), tx).catch(
+              (err: unknown) => {
               const errorMessage =
                 err instanceof Error ? err.message : String(err)
               console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
@@ -85,19 +83,8 @@ export async function handleApprovedPayment(input: {
                 orderReference: data.order_reference,
                 error: errorMessage,
               })
-              await sendOpsTelegramMessage(
-                `[PAYMENT_LIFECYCLE] markCheckoutSessionCompleted failed\nuserId: ${userId}\npayRef: ${payRef}\norderReference: ${data.order_reference}\nerror: ${errorMessage}`
-              ).catch((opsErr: unknown) => {
-                console.error('[PAYMENT_LIFECYCLE] ops_alert_failed', {
-                  operation: 'mark_checkout_session_completed',
-                  userId,
-                  payRef,
-                  orderReference: data.order_reference,
-                  error:
-                    opsErr instanceof Error ? opsErr.message : String(opsErr),
-                })
-              })
-            })
+              },
+            )
           }
 
           if (
@@ -129,36 +116,27 @@ export async function handleApprovedPayment(input: {
                 },
               })
             }
-
-            await markAbTestPaymentSuccess(userId, tx).catch(
-              async (err: unknown) => {
-                const errorMessage =
-                  err instanceof Error ? err.message : String(err)
-                console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
-                  userId,
-                  payRef,
-                  orderReference: data.order_reference,
-                  stage: 'markAbTestPaymentSuccess',
-                  error: errorMessage,
-                })
-                await sendOpsTelegramMessage(
-                  `[PAYMENT_LIFECYCLE] markAbTestPaymentSuccess failed\nuserId: ${userId}\npayRef: ${payRef}\norderReference: ${data.order_reference}\nerror: ${errorMessage}`
-                ).catch((opsErr: unknown) => {
-                  console.error('[PAYMENT_LIFECYCLE] ops_alert_failed', {
-                    operation: 'mark_ab_test_payment_success',
-                    userId,
-                    payRef,
-                    orderReference: data.order_reference,
-                    error:
-                      opsErr instanceof Error ? opsErr.message : String(opsErr),
-                  })
-                })
-              }
-            )
           }
         },
         { maxWait: 5000, timeout: 10000 }
       )
+
+      if (
+        webhookResult.scope === 'ecosystem' &&
+        webhookResult.productId === 'focus'
+      ) {
+        // This helper owns AB progress/events through its canonical client.
+        // Never pass the just-completed interactive transaction to it.
+        await markAbTestPaymentSuccess(userId).catch((err: unknown) => {
+          console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+            userId,
+            payRef,
+            orderReference: data.order_reference,
+            stage: 'markAbTestPaymentSuccess',
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
+      }
 
       console.log(`[WayForPay] Subscription activated`, {
         userId,
@@ -227,6 +205,13 @@ export async function handleApprovedPayment(input: {
           webhookResult,
           payRef,
           amount,
+        }).catch((err: unknown) => {
+          console.error('[PAYMENT_LIFECYCLE] side_effect_failed', {
+            operation: 'focus_payment_post_commit_delivery',
+            userId,
+            orderReference: data.order_reference,
+            error: err instanceof Error ? err.message : String(err),
+          })
         })
 } else if (
         webhookResult.scope === 'ecosystem' &&

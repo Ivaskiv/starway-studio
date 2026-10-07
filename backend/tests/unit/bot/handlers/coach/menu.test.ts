@@ -120,17 +120,18 @@ describe('showCoachSystemMenu', () => {
 })
 
 describe('canonical coach main menu', () => {
-  it('preserves calendar auth URL and routes every Coach destination through the existing calendar', () => {
+  it('puts the persistent Coach Mini App entry before its secondary navigation', () => {
     const url = 'https://miniapp.example/miniapp/zoom-calendar?dl=coach-token'
     const { reply_markup } = buildCoachMainMenuReplyMarkup('EXPERT', url)
-    expect(reply_markup.keyboard).toEqual([
-      [expect.objectContaining({ text: '👥 УЧАСНИКИ', web_app: { url: `${url}#participants` } }), expect.objectContaining({ text: '⚔️ BATTLE', web_app: { url: `${url}#battle` } })],
-      [expect.objectContaining({ text: '📊 АНАЛІТИКА', web_app: { url: `${url}#analytics` } }), expect.objectContaining({ text: '⚙️ ЩЕ', web_app: { url: `${url}#more` } })],
+    expect(reply_markup.inline_keyboard).toEqual([
+      [expect.objectContaining({ text: 'ZOOM КАЛЕНДАР', web_app: { url } })],
+      [expect.objectContaining({ text: 'УЧАСНИКИ', web_app: { url: `${url}#participants` } }), expect.objectContaining({ text: 'BATTLE', web_app: { url: `${url}#battle` } })],
+      [expect.objectContaining({ text: 'АНАЛІТИКА', web_app: { url: `${url}#analytics` } }), expect.objectContaining({ text: 'ЩЕ', web_app: { url: `${url}#more` } })],
     ])
-    expect(reply_markup.resize_keyboard).toBe(true)
-    expect(reply_markup.is_persistent).toBe(true)
+    expect(reply_markup).not.toHaveProperty('keyboard')
     expect(MENU_ANALYTICS_PATTERN.test('📊 АНАЛІТИКА')).toBe(true)
     expect(MENU_SETTINGS_PATTERN.test('⚙️ ЩЕ')).toBe(true)
-    expect(coachBotContent.menu.members).toBe('👥 УЧАСНИКИ')
+    expect(JSON.stringify(reply_markup)).not.toContain('/app/dashboard/zoom')
+    expect(reply_markup.inline_keyboard[0]?.[0]).not.toHaveProperty('url')
   })
 })

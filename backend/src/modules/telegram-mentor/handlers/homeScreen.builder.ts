@@ -42,6 +42,48 @@ type HomeMessagePayload = StartMessagePayload & {
   digestText?: string
 }
 
+type CanonicalResultKey = Parameters<typeof buildCanonicalResultKeyboard>[0]['resultKey']
+
+const CANONICAL_RESULT_KEYS: readonly CanonicalResultKey[] = [
+  'state',
+  'goal',
+  'choice',
+  'decision',
+  'action',
+]
+
+function resolveCanonicalResultKey(value: string | null | undefined): CanonicalResultKey | null {
+  const normalized = value?.trim().toLowerCase()
+  return normalized && CANONICAL_RESULT_KEYS.includes(normalized as CanonicalResultKey)
+    ? normalized as CanonicalResultKey
+    : null
+}
+
+function buildPreviewZoomCalendarButtons(input: {
+  resultKey: CanonicalResultKey
+  zoomCalendarUrl: string
+}): StartMessagePayload['buttons'] {
+  const canonicalKeyboard = buildCanonicalResultKeyboard({
+    resultKey: input.resultKey,
+    hasFocus: false,
+    isMyBooking: false,
+    zoomCalendarUrl: input.zoomCalendarUrl,
+  })
+  const [calendarRow, focusRow, programRow] = canonicalKeyboard.inline_keyboard
+  const calendarButton = calendarRow?.[0]
+  const focusButton = focusRow?.[0]
+  const programButton = programRow?.[0]
+
+  if (!calendarButton || !focusButton || !programButton) {
+    throw new Error('CANONICAL_ZOOM_CALENDAR_BUTTONS_UNAVAILABLE')
+  }
+
+  return [
+    [{ ...calendarButton, text: 'ZOOM КАЛЕНДАР' }],
+    [focusButton, programButton],
+  ] as StartMessagePayload['buttons']
+}
+
 function getKyivDateKey(value: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     year: 'numeric',
@@ -373,9 +415,7 @@ async function loadUserHomeSchedule(userId: string) {
     }
   }
 
-  const zoomCalendarUrl = buildZoomCalendarUrl()
-  const userZoomCalendarUrl =
-    `${zoomCalendarUrl}${zoomCalendarUrl.includes('?') ? '&' : '?'}zoomRole=user`
+  const userZoomCalendarUrl = buildZoomCalendarUrl()
 
   return {
     schedule: formatWeeklySchedule(mergedOverview, commerceBySessionId),
@@ -409,11 +449,17 @@ async function resolveCompletedUserHome(
 ): Promise<HomeMessagePayload | null> {
   const progress = await loadAbTestProgress(user.id).catch(() => null)
 
-  if (progress?.status !== 'completed' || !progress.result_key) {
+  const resultKey = progress?.status === 'completed'
+    ? resolveCanonicalResultKey(progress.result_key)
+    : user.lifecycleState === 'FOCUS_PAID' || user.lifecycleState === 'ZOOM_MEMBER'
+      ? resolveCanonicalResultKey(user.testResultType)
+      : null
+
+  if (!resultKey) {
     return null
   }
 
-  const result = getAbTestResultDefinition(progress.result_key)
+  const result = getAbTestResultDefinition(resultKey)
   const diagnosticText = interpolateFirstName(result.msg1, user.firstName)
 
   const [resolvedAccessState, upcomingZoom] = await Promise.all([
@@ -441,21 +487,15 @@ async function resolveCompletedUserHome(
     : 'Ти вже побачила свій результат, але до Zoom-практики ще не переходила.'
 
   const zoomStatusLines = resolveZoomStatusText({ upcomingZoom })
+  const previewZoomCalendarButtons = buildPreviewZoomCalendarButtons({
+    resultKey,
+    zoomCalendarUrl: buildZoomCalendarUrl(),
+  })
 
   if (hasZoomAccess) {
     const nextStepText = bookedUpcoming
       ? '<b>Наступний крок:</b> відкрий деталі найближчої Zoom-практики і продовжуй з тієї точки, де зупинилась.'
       : '<b>Наступний крок:</b> обери найближчу Zoom-практику і запишись.'
-
-    const programKeyboard = buildCanonicalResultKeyboard({
-      resultKey: progress.result_key,
-      hasFocus: false,
-      isMyBooking: bookedUpcoming,
-      zoomCalendarUrl: buildZoomCalendarUrl({ intent: 'booking' }),
-    })
-
-    const secondaryRows =
-      programKeyboard.inline_keyboard.slice(1) as unknown as StartMessagePayload['buttons']
 
     return {
       text: [
@@ -473,28 +513,19 @@ async function resolveCompletedUserHome(
         '',
         nextStepText,
       ].join('\n'),
-      buttons: [
-        [{
-          text: bookedUpcoming ? 'ПЕРЕГЛЯНУТИ ЗАПИС' : 'ОБРАТИ ZOOM-ПРАКТИКУ',
-          web_app: {
-            url: buildZoomCalendarUrl({
-              intent: bookedUpcoming ? undefined : 'booking',
-            }),
-          },
-        }],
-        ...secondaryRows,
-      ],
+      buttons: previewZoomCalendarButtons,
     }
   }
-
-  const keyboardState = {
-    resultKey: progress.result_key,
-    hasFocus: resolvedAccessState?.hasFocus === true,
-    isMyBooking: upcomingZoom?.isMyBooking === true,
-    zoomCalendarUrl: buildZoomCalendarUrl({ intent: 'booking' }),
-  } as const
-
-  const replyMarkup = buildCanonicalResultKeyboard(keyboardState)
+  if (!hasZoomAccess) {
+    return {
+      text: joinBlocks([
+        bold('ТВІЙ ZOOM-КАЛЕНДАР'),
+        'Тут ти можеш переглядати розклад групових та індивідуальних Zoom-сесій.',
+        'Щоб записатися на Zoom-сесію, активуй доступ.',
+      ]),
+      buttons: previewZoomCalendarButtons,
+    }
+  }
   const resultSummary = diagnosticText
     .replace(/^[^\n]*,\s*ось твій результат\.\s*\n?/i, '')
     .trim()
@@ -517,7 +548,7 @@ async function resolveCompletedUserHome(
       resolveAccessStatusText({ state: resolvedAccessState }),
       'Обери формат участі, щоб продовжити роботу зі своєю ситуацією.',
     ]),
-    buttons: replyMarkup.inline_keyboard as StartMessagePayload['buttons'],
+    buttons: previewZoomCalendarButtons,
   }
 }
 

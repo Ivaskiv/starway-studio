@@ -94,6 +94,7 @@ import { prisma } from '../../../../../src/db/client.ts'
 import { getCoachWeeklyDiary } from '../../../../../src/modules/zoom/calendar/zoom.calendar.service.ts'
 
 type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
+let resetCoachWeeklyDigestDedupeForTests: typeof import('../../../../../src/bot/handlers/coach/menu.ts').resetCoachWeeklyDigestDedupeForTests
 
 function createTelegramBotMock() {
   return {
@@ -115,12 +116,14 @@ function createCoachCtx() {
 }
 
 describe('registerCoachBotHandlers /start', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     delete process.env.COACH_TELEGRAM_ID
     delete process.env.TEST_COACH_MENTOR_TELEGRAM_ID
     process.env.JWT_ACCESS_SECRET = 'test-access-secret'
     process.env.JWT_REFRESH_SECRET = 'test-refresh-secret'
+    ;({ resetCoachWeeklyDigestDedupeForTests } = await import('../../../../../src/bot/handlers/coach/menu.ts'))
+    resetCoachWeeklyDigestDedupeForTests()
   })
 
   it('keeps a single /start entrypoint and does not register duplicate command:start handler', async () => {
@@ -139,7 +142,8 @@ describe('registerCoachBotHandlers /start', () => {
 
     await startHandler(ctx)
 
-    expect(ctx.reply).toHaveBeenCalledTimes(1)
+    expect(ctx.reply).toHaveBeenCalledTimes(2)
+    expect(ctx.reply.mock.calls[1]?.[0]).toContain('ТВІЙ РОЗКЛАД НА ЦЕЙ ТИЖДЕНЬ')
   }, 10000)
 
   it('routes privileged coach /start into the existing staff system menu', async () => {
@@ -158,28 +162,21 @@ describe('registerCoachBotHandlers /start', () => {
 
     await startHandler(ctx)
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('Твій розклад на цей тиждень'),
+    const [text, payload] = ctx.reply.mock.calls[1]
+    expect(text).toContain('ТВІЙ РОЗКЛАД НА ЦЕЙ ТИЖДЕНЬ')
+    expect(payload.reply_markup.inline_keyboard[0]).toEqual([
       expect.objectContaining({
-        reply_markup: expect.objectContaining({
-          keyboard: [
-            [
-              coachBotContent.menu.members,
-              expect.objectContaining({
-                text: coachBotContent.menu.battle,
-                web_app: {
-                  url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token&zoomRole=coach#battle',
-                },
-              }),
-            ],
-            [coachBotContent.menu.analytics, coachBotContent.menu.more],
-          ],
-        }),
+        text: 'ZOOM КАЛЕНДАР',
+        web_app: {
+          url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token&zoomRole=coach',
+        },
       }),
-    )
+    ])
   })
 
-  it('renders the weekly schedule on repeated /start without persisting duplicate data', async () => {
+  it('suppresses an identical weekly digest within ten minutes while preserving the calendar keyboard', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-08T12:00:00.000Z'))
     const { registerCoachBotHandlers } = await import(
       '../../../../../src/bot/handlers/coach/register.ts'
     )
@@ -191,21 +188,23 @@ describe('registerCoachBotHandlers /start', () => {
     await startHandler(ctx)
     await startHandler(ctx)
 
-    expect(ctx.reply).toHaveBeenCalledTimes(2)
-    expect(ctx.reply).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('Твій розклад на цей тиждень'),
-      expect.any(Object),
-    )
-    expect(ctx.reply).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('Твій розклад на цей тиждень'),
-      expect.any(Object),
-    )
+    expect(ctx.reply).toHaveBeenCalledTimes(4)
+    expect(ctx.reply.mock.calls[1]?.[0]).toContain('ТВІЙ РОЗКЛАД НА ЦЕЙ ТИЖДЕНЬ')
+    expect(ctx.reply.mock.calls[3]?.[0]).toBe('Розклад уже оновлено. Відкрий Zoom календар нижче.')
+    expect(ctx.reply.mock.calls[3]?.[1].reply_markup.inline_keyboard[0]).toEqual([
+      expect.objectContaining({ text: 'ZOOM КАЛЕНДАР' }),
+    ])
+    expect(vi.mocked(getCoachWeeklyDiary)).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 1)
+    await startHandler(ctx)
+
+    expect(ctx.reply.mock.calls[5]?.[0]).toContain('ТВІЙ РОЗКЛАД НА ЦЕЙ ТИЖДЕНЬ')
     expect(vi.mocked(getCoachWeeklyDiary)).toHaveBeenCalledTimes(2)
     expect(prisma.user.create).not.toHaveBeenCalled()
     expect(prisma.user.update).not.toHaveBeenCalled()
     expect(prisma.zoomSession.create).not.toHaveBeenCalled()
+    vi.useRealTimers()
   })
 
   it('keeps genuine schedule-read failures on the existing runtime error path', async () => {
@@ -220,9 +219,9 @@ describe('registerCoachBotHandlers /start', () => {
 
     await startHandler(ctx)
 
-    expect(ctx.reply).toHaveBeenCalledWith('❌ Сталася помилка. Спробуй ще раз.', {
+    expect(ctx.reply.mock.calls[1]).toEqual(['❌ Сталася помилка. Спробуй ще раз.', {
       parse_mode: 'HTML',
-    })
+    }])
   })
 
   it('allows ADMIN to pass the existing coach access gate without exposing superadmin settings', async () => {
@@ -245,8 +244,8 @@ describe('registerCoachBotHandlers /start', () => {
 
     await startHandler(ctx)
 
-    const [, payload] = ctx.reply.mock.calls[0]
-    expect(JSON.stringify(payload.reply_markup.keyboard)).not.toContain(
+    const [, payload] = ctx.reply.mock.calls[1]
+    expect(JSON.stringify(payload.reply_markup.inline_keyboard)).not.toContain(
       coachBotContent.menu.settings
     )
   })

@@ -44,6 +44,7 @@ import { registerChannelHandlers } from './channel.js'
 import { registerMessageHandlers } from './messages.js'
 import { buildTelegramDebugStateMessages } from '../runtime/parity.js'
 import { registerZoomAdminHandlers } from './zoom-admin.js'
+import { registerZoomMenuAfterHandlerEnforcement } from '../../../interactive/telegramConsumerStartup.js'
 
 let mentorBotRegistered = false
 const processedUpdates = new Set<number>()
@@ -143,6 +144,8 @@ export async function registerMentorBot(
    ).userIdResolved = true
    await next()
    })
+
+   registerZoomMenuAfterHandlerEnforcement(bot, { zoomRole: 'user' })
 
    bot.command('start', async (ctx) => {
    await handleStart(ctx)

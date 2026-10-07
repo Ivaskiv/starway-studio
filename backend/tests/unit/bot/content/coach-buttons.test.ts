@@ -23,18 +23,21 @@ function hasDecorativeEmoji(value: string): boolean {
 }
 
 describe('coach button labels', () => {
-  it('renders the compact main coach reply keyboard', () => {
-    const markup = buildCoachMainMenuReplyMarkup()
-    const keyboard = markup.reply_markup.keyboard.flat()
-    const labels = keyboard.map((button) => typeof button === 'string' ? button : button.text)
+  it('keeps Coach navigation inline and leaves the persistent bot menu button available', () => {
+    const markup = buildCoachMainMenuReplyMarkup(
+      'EXPERT',
+      'https://miniapp.example/miniapp/zoom-calendar?zoomRole=coach',
+    )
+    const buttons = markup.reply_markup.inline_keyboard.flat()
+    const labels = buttons.map((button) => button.text)
 
     expect(labels).toEqual([
-      coachBotContent.system.calendarCta,
       coachBotContent.menu.members,
       coachBotContent.menu.battle,
       coachBotContent.menu.analytics,
       coachBotContent.menu.more,
     ])
+    expect(markup.reply_markup).not.toHaveProperty('keyboard')
     expect(labels).not.toContain(coachBotContent.menu.conduct)
     expect(labels).not.toContain(coachBotContent.menu.calendar)
   })
@@ -47,19 +50,22 @@ describe('coach button labels', () => {
     expect(MENU_SETTINGS_PATTERN.test('⚙️ Система')).toBe(true)
   })
 
-  it('keeps the calendar CTA as one WebApp button and removes the old first-row pair', () => {
+  it('routes every Coach destination through the canonical calendar without a reply keyboard', () => {
     const markup = buildCoachMainMenuReplyMarkup('EXPERT', 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token')
-    const keyboard = markup.reply_markup.keyboard
-    const labels = keyboard.flat().map((button) => typeof button === 'string' ? button : button.text)
+    const keyboard = markup.reply_markup.inline_keyboard
+    const labels = keyboard.flat().map((button) => button.text)
 
     expect(keyboard[0]).toEqual([
       expect.objectContaining({
-        text: coachBotContent.system.calendarCta,
-        web_app: { url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token' },
+        text: coachBotContent.menu.members,
+        web_app: { url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token#participants' },
+      }),
+      expect.objectContaining({
+        text: coachBotContent.menu.battle,
+        web_app: { url: 'https://miniapp.example/app/dashboard/zoom?dl=coach-zoom-token#battle' },
       }),
     ])
     expect(labels).toEqual([
-      coachBotContent.system.calendarCta,
       coachBotContent.menu.members,
       coachBotContent.menu.battle,
       coachBotContent.menu.analytics,

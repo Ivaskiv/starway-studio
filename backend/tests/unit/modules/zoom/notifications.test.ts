@@ -4,7 +4,7 @@ const mockExpertFindMany = vi.fn()
 const mockGenerateSessionsFromAvailability = vi.fn()
 const mockSeedDefaultAvailability = vi.fn()
 
-vi.mock('../../../db/client.js', () => ({
+vi.mock('../../../../src/db/client.js', () => ({
   prisma: {
     expert: {
       findMany: (...args: unknown[]) => mockExpertFindMany(...args),
@@ -12,24 +12,24 @@ vi.mock('../../../db/client.js', () => ({
   },
 }))
 
-vi.mock('../booking/zoom.availability.service.js', () => ({
+vi.mock('../../../../src/modules/zoom/booking/zoom.availability.service.js', () => ({
   generateSessionsFromAvailability: (...args: unknown[]) => mockGenerateSessionsFromAvailability(...args),
   seedDefaultAvailability: (...args: unknown[]) => mockSeedDefaultAvailability(...args),
 }))
 
-vi.mock('../../../lib/telegram.js', () => ({
+vi.mock('../../../../src/lib/telegram.js', () => ({
   bot: {},
   sendDedupedTelegramMessage: vi.fn(),
 }))
 
-vi.mock('../index.js', () => ({
+vi.mock('../../../../src/modules/zoom/index.js', () => ({
   getAllUpcomingSessionsForNotification: vi.fn(),
   patchSessionRequests: vi.fn(),
   expireStaleSwapRequests: vi.fn(),
   syncChannelPost: vi.fn(),
 }))
 
-import { scanZoomAvailabilityAutoGenerate } from '../notifications/zoom.notifications.js'
+import { scanZoomAvailabilityAutoGenerate } from '../../../../src/modules/zoom/notifications/zoom.notifications.js'
 
 describe('scanZoomAvailabilityAutoGenerate', () => {
   beforeEach(() => {
@@ -52,6 +52,12 @@ describe('scanZoomAvailabilityAutoGenerate', () => {
         id: 'expert-inactive-slots',
         zoomAvailability: [
           { id: 'slot-2', active: false, dayOfWeek: 1, hour: 19, minute: 0, timezone: 'Europe/Kyiv', sessionType: 'group_practice' },
+        ],
+      },
+      {
+        id: 'expert-individual-only',
+        zoomAvailability: [
+          { id: 'slot-4', active: true, dayOfWeek: 2, hour: 10, minute: 0, timezone: 'Europe/Kyiv', sessionType: 'individual' },
         ],
       },
       {
@@ -78,14 +84,15 @@ describe('scanZoomAvailabilityAutoGenerate', () => {
     const result = await scanZoomAvailabilityAutoGenerate()
 
     expect(mockGenerateSessionsFromAvailability).toHaveBeenCalledTimes(2)
-    expect(mockSeedDefaultAvailability).toHaveBeenCalledTimes(1)
+    expect(mockSeedDefaultAvailability).toHaveBeenCalledTimes(3)
     expect(mockSeedDefaultAvailability).toHaveBeenCalledWith('expert-empty')
+    expect(mockSeedDefaultAvailability).toHaveBeenCalledWith('expert-individual-only')
     expect(mockGenerateSessionsFromAvailability).toHaveBeenCalledWith('expert-active', 4)
     expect(mockGenerateSessionsFromAvailability).toHaveBeenCalledWith('expert-failing', 4)
     expect(result).toEqual({
-      expertsScanned: 2,
-      expertsSkipped: 1,
-      created: 8,
+      expertsScanned: 4,
+      expertsSkipped: 0,
+      created: 16,
       skipped: 0,
       failures: 1,
     })

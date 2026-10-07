@@ -105,20 +105,32 @@ const USER_ZOOM_COMMERCE_PRESENTATION: Record<
   UserZoomCommercePresentationState,
   Omit<UserZoomCommercePresentation, 'state'>
 > = {
-  AVAILABLE: { label: 'Доступно', paymentVisible: false },
-  REQUESTED: { label: 'Очікує підтвердження', paymentVisible: false },
-  APPROVED_PENDING_PAYMENT: { label: 'Очікує оплати', paymentVisible: true },
-  PAID: { label: 'Оплачено · Заплановано', paymentVisible: false },
-  EXPIRED: { label: 'Час вичерпано', paymentVisible: false },
-  CANCELLED: { label: 'Скасовано', paymentVisible: false },
-  REJECTED: { label: 'Відхилено', paymentVisible: false },
+  AVAILABLE: { label: 'ДОСТУПНО', paymentVisible: false },
+  REQUESTED: { label: 'ЗАПИТ СТВОРЕНО', paymentVisible: false },
+  APPROVED_PENDING_PAYMENT: { label: 'ОЧІКУЄ ОПЛАТИ', paymentVisible: true },
+  PAID: { label: 'ОПЛАЧЕНО', paymentVisible: false },
+  EXPIRED: { label: 'ЧАС ОПЛАТИ ВИЧЕРПАНО', paymentVisible: false },
+  CANCELLED: { label: 'СКАСОВАНО', paymentVisible: false },
+  REJECTED: { label: 'ВІДХИЛЕНО', paymentVisible: false },
 }
 
 export function getUserZoomCommercePresentation(
-  session: Pick<SessionLike, 'commerceStatus'>,
+  session: SessionLike,
 ): UserZoomCommercePresentation {
   const state: UserZoomCommercePresentationState =
     session.commerceStatus ?? 'AVAILABLE'
+
+  const normalizedType = getNormalizedSessionType(session)
+  const isFreeIndividual =
+    state === 'AVAILABLE'
+    && (normalizedType === 'individual' || normalizedType === 'private')
+    && !session.isMyBooking
+    && session.slotStatus !== 'booked'
+    && (session.remainingSlots ?? 1) > 0
+
+  if (isFreeIndividual) {
+    return { state, label: 'ВІЛЬНИЙ СЛОТ', paymentVisible: false }
+  }
 
   return {
     state,

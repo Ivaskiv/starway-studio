@@ -89,9 +89,9 @@ vi.mock('@/products/ab-system/content/abTest.focus.js', () => ({
 }))
 
 vi.mock('@/products/ab-system/content/abTest.shared.js', () => ({
-  AB_TEST_FOCUS_PAYMENT_CTA_1M: '1m',
-  AB_TEST_FOCUS_PAYMENT_CTA_3M: '3m',
-  AB_TEST_FOCUS_PAYMENT_CTA_1Y: '1y',
+  AB_TEST_FOCUS_PAYMENT_CTA_1M: 'ОПЛАТИТИ 1 МІСЯЦЬ — 33 €',
+  AB_TEST_FOCUS_PAYMENT_CTA_3M: 'ОПЛАТИТИ 3 МІСЯЦІ — 69 €',
+  AB_TEST_FOCUS_PAYMENT_CTA_1Y: 'ОПЛАТИТИ 1 РІК — 229 €',
   AB_TEST_FOCUS_PRICE_1M: '1m-price',
   AB_TEST_FOCUS_PRICE_3M: '3m-price',
   AB_TEST_FOCUS_PRICE_1Y: '1y-price',
@@ -242,7 +242,7 @@ import {
  handlePendingFocusPaymentEvidenceText,
  handleResendFocusBlock12,
  resolveFocusShortcutCallback,
-} from '../../../../../src/products/ab-system/telegram/flow.ts'
+} from '../../../../../src/products/ab-system/telegram/flow.js'
 
 function createCtx() {
  return {
@@ -368,10 +368,10 @@ describe('legacy focus callbacks for active users', () => {
       expect.objectContaining({
         inlineKeyboard: {
           inline_keyboard: [
-            [{ text: '1m', url: 'https://checkout.example' }],
-            [{ text: '3m', url: 'https://checkout.example' }],
-            [{ text: '1y', url: 'https://checkout.example' }],
-            [{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 1 МІСЯЦЬ', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 3 МІСЯЦІ', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 1 РІК', url: 'https://checkout.example' }],
+            [{ text: 'ПРОБНИЙ ZOOM', url: 'https://checkout.example' }],
             [{ text: 'ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
           ],
         },
@@ -402,10 +402,10 @@ describe('legacy focus callbacks for active users', () => {
       expect.objectContaining({
         inlineKeyboard: {
           inline_keyboard: [
-            [{ text: '1m', url: 'https://checkout.example' }],
-            [{ text: '3m', url: 'https://checkout.example' }],
-            [{ text: '1y', url: 'https://checkout.example' }],
-            [{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 1 МІСЯЦЬ', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 3 МІСЯЦІ', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 1 РІК', url: 'https://checkout.example' }],
+            [{ text: 'ПРОБНИЙ ZOOM', url: 'https://checkout.example' }],
             [{ text: 'ТЕСТ 1 ГРН', url: 'https://secure.wayforpay.com/button/bcd1a02457187' }],
             [{ text: 'ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
           ],
@@ -435,9 +435,9 @@ describe('legacy focus callbacks for active users', () => {
       expect.objectContaining({
         inlineKeyboard: {
           inline_keyboard: [
-            [{ text: '1m', url: 'https://checkout.example' }],
-            [{ text: '3m', url: 'https://checkout.example' }],
-            [{ text: '1y', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 1 МІСЯЦЬ', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 3 МІСЯЦІ', url: 'https://checkout.example' }],
+            [{ text: 'ОПЛАТИТИ 1 РІК', url: 'https://checkout.example' }],
             [{ text: 'ПРОБЛЕМА З ОПЛАТОЮ', callback_data: 'focus:payment_issue' }],
           ],
         },
@@ -465,7 +465,7 @@ describe('legacy focus callbacks for active users', () => {
     expect(vi.mocked(updateSession)).toHaveBeenCalledWith(
       'user-1',
       '42',
-      'chat',
+      'payment_evidence',
       expect.objectContaining({
         paymentIssueAwaitingEvidence: true,
       }),
@@ -550,10 +550,17 @@ describe('legacy focus callbacks for active users', () => {
 
   it('forwards text payment evidence to OPS and clears pending state', async () => {
     const ctx = createCtx()
-    vi.mocked(getSession).mockResolvedValue({
-      userId: 'user-1',
-      data: { paymentIssueAwaitingEvidence: true },
-    } as never)
+    vi.mocked(getSession)
+      .mockResolvedValueOnce({
+        userId: 'user-1',
+        state: 'payment_evidence',
+        data: { paymentIssueAwaitingEvidence: true },
+      } as never)
+      .mockResolvedValueOnce({
+        userId: 'user-1',
+        state: 'chat',
+        data: {},
+      } as never)
 
     const handled = await handlePendingFocusPaymentEvidenceText(
       ctx as never,
@@ -576,6 +583,39 @@ describe('legacy focus callbacks for active users', () => {
       'focus_payment_evidence_ack_text',
       expect.stringContaining('Чек і деталі платежу передано'),
     )
+
+    const handledAfterClear = await handlePendingFocusPaymentEvidenceText(
+      ctx as never,
+      'user-1',
+      'звичайне повідомлення після чека',
+    )
+
+    expect(handledAfterClear).toBe(false)
+    expect(sendOpsTelegramMessageMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not consume ordinary text from a session without explicit payment-evidence state', async () => {
+    const ctx = createCtx()
+    vi.mocked(getSession).mockResolvedValue({
+      userId: 'user-1',
+      state: 'chat',
+      data: { paymentIssueAwaitingEvidence: true },
+    } as never)
+
+    const handled = await handlePendingFocusPaymentEvidenceText(
+      ctx as never,
+      'user-1',
+      'тест',
+    )
+
+    expect(handled).toBe(false)
+    expect(sendOpsTelegramMessageMock).not.toHaveBeenCalled()
+    expect(planMessageMock).not.toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'focus_payment_evidence_ack_text',
+      expect.any(String),
+    )
   })
 
   it('forwards photo payment evidence to OPS and clears pending state', async () => {
@@ -589,6 +629,7 @@ describe('legacy focus callbacks for active users', () => {
     process.env.STARWAY_OPS_CHAT_ID = '3829747010'
     vi.mocked(getSession).mockResolvedValue({
       userId: 'user-1',
+      state: 'payment_evidence',
       data: { paymentIssueAwaitingEvidence: true },
     } as never)
 

@@ -82,9 +82,11 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
   const from = startOf(view, currentDate).toISOString();
   const to   = endOf(view, currentDate).toISOString();
 
-  const usesSessionSource = Boolean(sessionSource
-    && Date.parse(sessionSource.from) <= Date.parse(from)
-    && Date.parse(sessionSource.to) >= Date.parse(to));
+  // An explicit source is supplied by a parent that owns presentation-level
+  // selection (USER filters). It must remain authoritative even if the user
+  // navigates beyond its original query range; falling back to this hook's
+  // query would reintroduce the unfiltered list.
+  const usesSessionSource = Boolean(sessionSource);
   const { data: fetchedSessions = [] } = useGetCalendarSessionsQuery(
     { from, to, role: mode, userId, expertId },
     { skip: usesSessionSource },

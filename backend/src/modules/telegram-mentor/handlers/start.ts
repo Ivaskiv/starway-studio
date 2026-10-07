@@ -28,6 +28,7 @@ import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { getUserAccessState, type UserAccessState } from '../../subscriptions/payments/focus-access.js'
 import { logger } from '../../../utils/logger.js'
 import { formatTelegramMessage, sendTelegramMessage } from '../../../lib/telegram/messageFormatter.js'
+import { removeTelegramReplyKeyboard } from '../../../lib/telegram/send.js'
 
 export * from './start.shared.js'
 
@@ -314,6 +315,20 @@ async function deliver(
     return
   }
 
+  /*
+   * Clear legacy persistent USER reply keyboards left in Telegram clients.
+   * Zoom Calendar navigation belongs to the bot-level chat menu instead.
+   *
+   * Telegram applies ReplyKeyboardRemove through the message that carries
+   * it. Keep that zero-width message in the chat; deleting it can restore
+   * the previous persistent keyboard in Telegram clients and hide the blue
+   * bot menu again.
+   */
+  await removeTelegramReplyKeyboard(ctx)
+    .catch((error) => {
+      console.warn('[START_LEGACY_REPLY_KEYBOARD_REMOVE_FAILED]', error)
+    })
+
   const formattedMessage = formatTelegramMessage({
     text: payload.text,
     preformatted: payload.parseMode === 'HTML',
@@ -325,48 +340,12 @@ async function deliver(
     .map(row => row.filter(button => 'web_app' in button))
     .filter(row => row.length > 0)
 
-  const zoomCalendarWebAppButton = webAppInlineKeyboard
-    .flat()
-    .find((button) => 'web_app' in button && Boolean(button.web_app?.url))
-  const inlineCalendarUrl = zoomCalendarWebAppButton && 'web_app' in zoomCalendarWebAppButton
-    ? zoomCalendarWebAppButton.web_app?.url ?? null
-    : null
+  /*
+   * Zoom Calendar navigation belongs exclusively to the Telegram
+   * persistent bot menu configured in telegramConsumerStartup.ts.
+   */
+  const menuReplyMarkup = payload.reply_markup
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[USER_ZOOM_MENU_TRACE]', {
-      phase: 'inline_entrypoint',
-      url: inlineCalendarUrl,
-    })
-  }
-
-  const hasUserHomeMenu = payload.reply_markup.inline_keyboard
-    .flat()
-    .some((button) =>
-      'callback_data' in button
-      && (
-        button.callback_data === 'user_home:my_sessions'
-        || button.callback_data === 'ab_test:show_result'
-      ),
-    )
-
-  const menuReplyMarkup =
-    hasUserHomeMenu && zoomCalendarWebAppButton && 'web_app' in zoomCalendarWebAppButton
-      ? {
-          keyboard: [
-            [{
-              text: '📅 ZOOM КАЛЕНДАР',
-              web_app: { url: zoomCalendarWebAppButton.web_app.url },
-            }],
-            [
-              { text: '🗓 МОЇ СЕСІЇ' },
-              { text: '📊 МОЇ РЕЗУЛЬТАТИ' },
-            ],
-            [{ text: '💬 ПІДТРИМКА' }],
-          ],
-          resize_keyboard: true,
-          is_persistent: true,
-        }
-      : payload.reply_markup
   const dedupKey = String(deliveryChatId)
   const payloadSignature = JSON.stringify({
     digestText: formattedDigest?.text ?? null,
@@ -424,6 +403,7 @@ async function deliver(
       messageId: sentMessage?.message_id ?? null,
       via: 'planMessage(ctx.reply)',
     })
+
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     console.error('[START_DELIVER_ERROR]', {

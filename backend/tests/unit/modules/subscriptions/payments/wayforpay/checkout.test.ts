@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockCheckoutSessionUpsert = vi.fn()
 const mockCheckoutSessionUpdate = vi.fn()
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('@/db/client.js', () => ({
   prisma: {
     checkoutSession: {
       upsert: (...args: unknown[]) => mockCheckoutSessionUpsert(...args),
@@ -12,7 +12,7 @@ vi.mock('../../../../db/client.ts', () => ({
   },
 }))
 
-import { refreshCheckoutSessionPayload, saveCheckoutSession } from '../wayforpay/checkout.ts'
+import { refreshCheckoutSessionPayload, saveCheckoutSession } from '@/modules/subscriptions/payments/wayforpay/checkout.ts'
 
 describe('saveCheckoutSession', () => {
   beforeEach(() => {

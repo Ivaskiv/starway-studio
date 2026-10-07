@@ -306,8 +306,12 @@ if (
     }
 
     const webhookResult = result.value
-    // Commerce core persists payment atomically; attendee/notification delivery belongs to 01b.
+    // Commerce core persists payment atomically. Deliver the canonical
+    // confirmation after both the first Approved callback and a retried one:
+    // notifyCommercePaid owns durable per-user delivery idempotency.
     if (webhookResult.payRef.startsWith('zoom_commerce_')) {
+      const { notifyCommercePaid } = await import('../../../zoom/commerce/zoom.commerce-telegram.js')
+      await notifyCommercePaid(webhookResult.payRef)
       return res.status(200).send('OK')
     }
     if (webhookResult.duplicate) {

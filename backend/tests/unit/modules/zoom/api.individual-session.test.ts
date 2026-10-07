@@ -25,6 +25,7 @@ const mockNotifyPrivateSessionRequest = vi.fn()
 const mockPrismaCheckoutSessionFindFirst = vi.fn()
 const mockGetIndividualAvailabilityForScheduledAt = vi.fn()
 const mockGetIndividualAvailabilitySummary = vi.fn()
+const mockGetAvailability = vi.fn()
 const mockGetAvailabilityWeek = vi.fn()
 const mockSaveAvailabilityWeek = vi.fn()
 
@@ -78,6 +79,7 @@ vi.mock('../../../../src/modules/zoom/booking/zoom.availability.service.js', asy
   ...await importOriginal<typeof import('../../../../src/modules/zoom/booking/zoom.availability.service.js')>(),
   getIndividualAvailabilityForScheduledAt: (...args: unknown[]) => mockGetIndividualAvailabilityForScheduledAt(...args),
   getIndividualAvailabilitySummary: (...args: unknown[]) => mockGetIndividualAvailabilitySummary(...args),
+  getAvailability: (...args: unknown[]) => mockGetAvailability(...args),
   getAvailabilityWeek: (...args: unknown[]) => mockGetAvailabilityWeek(...args),
   saveAvailabilityWeek: (...args: unknown[]) => mockSaveAvailabilityWeek(...args),
 }))
@@ -157,6 +159,11 @@ describe('zoom session participant contract', () => {
       alternatives: [],
     })
     mockGetIndividualAvailabilitySummary.mockResolvedValue([])
+    mockGetAvailability.mockResolvedValue([{
+      id: 'thu-group', dayOfWeek: 4, hour: 13, minute: 0,
+      timezone: 'Europe/Kyiv', sessionType: 'group_practice', maxSlots: 50,
+      priceCents: 0, durationMinutes: 60, active: true,
+    }])
     mockGetAvailabilityWeek.mockResolvedValue([])
     mockSaveAvailabilityWeek.mockResolvedValue(undefined)
   })
@@ -246,6 +253,33 @@ describe('zoom session participant contract', () => {
       questionText: 'Потрібен розбір.',
     })
     expect(response.status).toHaveBeenCalledWith(201)
+  })
+
+  it('keeps commerce slot rejection on the USER individual request flow', async () => {
+    const unavailable = Object.assign(new Error('COMMERCE_SLOT_UNAVAILABLE'), {
+      alternatives: [{ scheduledAt: '2026-10-10T11:00:00.000Z', available: true }],
+    })
+    mockCreateUserIndividualRequest.mockRejectedValueOnce(unavailable)
+    const response = createResponse()
+
+    await handleCreateUserIndividualRequest(
+      {
+        user: { id: 'user-auth' },
+        body: {
+          scheduledAt: '2026-10-10T10:00:00.000Z',
+          questionText: 'Потрібен розбір.',
+        },
+      } as never,
+      response as never,
+      vi.fn(),
+    )
+
+    expect(response.status).toHaveBeenCalledWith(409)
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'COMMERCE_SLOT_UNAVAILABLE',
+      message: 'Цей час уже зайнятий. Обери інший доступний час.',
+      alternatives: [{ scheduledAt: '2026-10-10T11:00:00.000Z', available: true }],
+    })
   })
 
   it('rejects an individual session with more than one selected user', async () => {
@@ -341,11 +375,12 @@ describe('zoom session participant contract', () => {
     expect(mockRegisterAttendee).not.toHaveBeenCalled()
   })
 
-  it('uses canonical Individual availability before a coach-created session persists', async () => {
+  it('creates a coach individual session even when commerce request availability would not expose that slot', async () => {
     mockGetIndividualAvailabilityForScheduledAt.mockResolvedValueOnce({
       candidate: { available: false, reason: 'Час уже заброньований' },
       alternatives: [],
     })
+    mockCreateFullSession.mockResolvedValue({ id: 'session-1' })
     const response = createResponse()
 
     await handleCreateSession(
@@ -359,9 +394,9 @@ describe('zoom session participant contract', () => {
       vi.fn(),
     )
 
-    expect(response.status).toHaveBeenCalledWith(409)
-    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'COMMERCE_SLOT_UNAVAILABLE' }))
-    expect(mockCreateFullSession).not.toHaveBeenCalled()
+    expect(mockGetIndividualAvailabilityForScheduledAt).not.toHaveBeenCalled()
+    expect(mockCreateFullSession).toHaveBeenCalledTimes(1)
+    expect(response.status).toHaveBeenCalledWith(201)
   })
 
   it('rejects an overlapping coach session before persistence', async () => {
@@ -677,6 +712,30 @@ describe('zoom session participant contract', () => {
     expect(response.status).toHaveBeenCalledWith(201)
   })
 
+  it('rejects a group practice outside the coach normal schedule before persistence', async () => {
+    mockCreateFullSession.mockResolvedValue({ id: 'group-session-1' })
+    const response = createResponse()
+
+    await handleCreateSession(
+      createRequest({
+        scheduledAt: '2026-09-10T09:00:00.000Z',
+        topic: 'Групова практика',
+        type: 'group_practice',
+        maxAttendees: 50,
+      }),
+      response as never,
+      vi.fn(),
+    )
+
+    expect(mockGetAvailability).toHaveBeenCalledWith('expert-1')
+    expect(response.status).toHaveBeenCalledWith(409)
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'group_schedule_unavailable',
+      message: 'Час групової практики не відповідає звичному графіку коуча.',
+    })
+    expect(mockCreateFullSession).not.toHaveBeenCalled()
+  })
+
   it('binds Battle progress writes to authenticated user, not request body userId', async () => {
     mockLogBattleProgress.mockResolvedValue({ id: 'battle-session-1' })
     const response = createResponse()
@@ -937,6 +996,90 @@ describe('zoom session participant contract', () => {
     expect(mockGetIndividualCheckoutUrl).toHaveBeenCalledTimes(
       role === 'user' && status === 'APPROVED_PENDING_PAYMENT' ? 1 : 0,
     )
+  })
+
+  it('projects the existing expert relation as real coach identity and preserves null when absent', async () => {
+    mockGetCalendarSessions.mockResolvedValue([
+      {
+        id: 'session-with-coach',
+        scheduledAt: new Date('2026-09-10T10:00:00.000Z'),
+        topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED',
+        requests: { type: 'individual', maxSlots: 1 },
+        expert: { id: 'expert-1', displayName: 'Надія Старвей' },
+        attendees: [],
+        _count: { attendees: 0 },
+        isMyBooking: false,
+      },
+      {
+        id: 'session-without-coach',
+        scheduledAt: new Date('2026-09-11T10:00:00.000Z'),
+        topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED',
+        requests: { type: 'individual', maxSlots: 1 },
+        expert: null,
+        attendees: [],
+        _count: { attendees: 0 },
+        isMyBooking: false,
+      },
+    ])
+    const response = createResponse()
+
+    await handleGetCalendarSessions({
+      user: { id: 'user-1' },
+      query: {
+        from: '2026-09-01T00:00:00.000Z',
+        to: '2026-09-30T23:59:59.000Z',
+        role: 'user',
+      },
+    } as never, response as never, vi.fn())
+
+    expect(response.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'session-with-coach',
+        coach: { id: 'expert-1', name: 'Надія Старвей' },
+        topic: 'Індивідуальна сесія',
+        durationMinutes: 60,
+      }),
+      expect.objectContaining({
+        id: 'session-without-coach',
+        coach: null,
+        topic: 'Індивідуальна сесія',
+        durationMinutes: 60,
+      }),
+    ])
+  })
+
+  it('projects the linked commerce requester as the coach participant before payment creates an attendee', async () => {
+    mockGetCalendarSessions.mockResolvedValue([{
+      id: 'coach-created-individual',
+      scheduledAt: new Date('2026-09-10T10:00:00.000Z'),
+      topic: 'Індивідуальна сесія',
+      status: 'SCHEDULED',
+      requests: { type: 'individual', maxSlots: 1 },
+      attendees: [],
+      _count: { attendees: 0 },
+      isMyBooking: false,
+    }])
+    mockGetCommerceCalendarRequests.mockResolvedValue([{
+      id: 'commerce-1', zoomSessionId: 'coach-created-individual', requesterUserId: 'user-1',
+      status: 'APPROVED_PENDING_PAYMENT', amount: 1, currency: 'UAH',
+      requester: { id: 'user-1', firstName: 'Анна', lastName: 'Мельник', email: 'anna@example.com' },
+    }])
+    const response = createResponse()
+
+    await handleGetCalendarSessions({
+      user: { id: 'coach-user-1' },
+      query: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-30T23:59:59.000Z', role: 'coach' },
+    } as never, response as never, vi.fn())
+
+    expect(response.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'coach-created-individual',
+        participantNames: ['Анна Мельник'],
+        commerceStatus: 'APPROVED_PENDING_PAYMENT',
+      }),
+    ])
   })
 
   it('exposes completed outcome and recording capability for coach calendar DTO', async () => {

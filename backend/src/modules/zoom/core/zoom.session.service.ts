@@ -90,7 +90,10 @@ export async function updateSession(
   return session
 }
 
-export async function cancelSession(sessionId: string): Promise<ZoomSession> {
+export async function cancelSession(
+  sessionId: string,
+  options?: { affectedUserIds?: string[] },
+): Promise<ZoomSession> {
   const session = await prisma.zoomSession.update({
     where: { id: sessionId },
     data: { status: ZoomStatus.CANCELLED },
@@ -99,7 +102,7 @@ export async function cancelSession(sessionId: string): Promise<ZoomSession> {
   void afterZoomOperation(bot, {
     operation: 'cancel',
     sessionId: session.id,
-    affectedUserIds: [],
+    affectedUserIds: options?.affectedUserIds ?? [],
   }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
 
   return session

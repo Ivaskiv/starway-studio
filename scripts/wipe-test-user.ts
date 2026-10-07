@@ -1,8 +1,10 @@
 import { prisma } from '../backend/src/db/client.js'
+import { assertCanonicalDbOperationAllowed } from './canonical-db-guard.mjs'
 
 const EMAIL = 'teachinform3@gmail.com'
 
 async function wipe() {
+  assertCanonicalDbOperationAllowed('wipe-test-user')
   const user = await prisma.user.findUnique({
     where: { email: EMAIL },
     select: { id: true },

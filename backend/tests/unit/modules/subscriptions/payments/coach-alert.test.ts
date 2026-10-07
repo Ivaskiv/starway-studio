@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockCheckoutSessionFindFirst = vi.fn()
 const mockCheckoutSessionFindMany = vi.fn()
-const mockCheckoutSessionUpdate = vi.fn()
+const mockCheckoutSessionUpdateMany = vi.fn()
 const mockSendOpsTelegramMessage = vi.fn()
 
 vi.mock('../../../../db/client.ts', () => ({
@@ -10,7 +10,17 @@ vi.mock('../../../../db/client.ts', () => ({
     checkoutSession: {
       findFirst: (...args: unknown[]) => mockCheckoutSessionFindFirst(...args),
       findMany: (...args: unknown[]) => mockCheckoutSessionFindMany(...args),
-      update: (...args: unknown[]) => mockCheckoutSessionUpdate(...args),
+      updateMany: (...args: unknown[]) => mockCheckoutSessionUpdateMany(...args),
+    },
+  },
+}))
+
+vi.mock('@/db/client.js', () => ({
+  prisma: {
+    checkoutSession: {
+      findFirst: (...args: unknown[]) => mockCheckoutSessionFindFirst(...args),
+      findMany: (...args: unknown[]) => mockCheckoutSessionFindMany(...args),
+      updateMany: (...args: unknown[]) => mockCheckoutSessionUpdateMany(...args),
     },
   },
 }))
@@ -19,10 +29,14 @@ vi.mock('../../../../lib/telegram.ts', () => ({
   sendOpsTelegramMessage: (...args: unknown[]) => mockSendOpsTelegramMessage(...args),
 }))
 
+vi.mock('@/lib/telegram.js', () => ({
+  sendOpsTelegramMessage: (...args: unknown[]) => mockSendOpsTelegramMessage(...args),
+}))
+
 import {
   alertCoachAboutPaymentIssue,
   findRelevantFocusCheckoutSession,
-} from '../coach-alert.ts'
+} from '@/modules/subscriptions/payments/coach-alert.ts'
 
 describe('coachAlert.service', () => {
   beforeEach(() => {
@@ -66,7 +80,7 @@ describe('coachAlert.service', () => {
   })
 
   it('sends payment issue alerts through the canonical ops transport', async () => {
-    mockCheckoutSessionUpdate.mockResolvedValue(undefined)
+    mockCheckoutSessionUpdateMany.mockResolvedValue({ count: 1 })
     mockSendOpsTelegramMessage.mockResolvedValue(true)
 
     await alertCoachAboutPaymentIssue({
@@ -82,8 +96,8 @@ describe('coachAlert.service', () => {
       scenario: 'E',
     })
 
-    expect(mockCheckoutSessionUpdate).toHaveBeenCalledWith({
-      where: { token: 'checkout-token' },
+    expect(mockCheckoutSessionUpdateMany).toHaveBeenCalledWith({
+      where: { token: 'checkout-token', paymentIssueReportedAt: null },
       data: { paymentIssueReportedAt: expect.any(Date) },
     })
     expect(mockSendOpsTelegramMessage).toHaveBeenCalledWith(
@@ -108,8 +122,27 @@ describe('coachAlert.service', () => {
     )
   })
 
+  it('does not duplicate an OPS payment-issue card after the checkout is already claimed', async () => {
+    mockCheckoutSessionUpdateMany.mockResolvedValue({ count: 0 })
+
+    await alertCoachAboutPaymentIssue({
+      bot: {} as never,
+      coachChatId: '3829747010',
+      userId: 'user-1',
+      checkoutToken: 'checkout-token',
+      orderReference: 'focus_order_1',
+      amount: 1500,
+      currency: 'UAH',
+      productCode: 'focus',
+      reason: 'transaction_Declined',
+      scenario: 'B',
+    })
+
+    expect(mockSendOpsTelegramMessage).not.toHaveBeenCalled()
+  })
+
   it('renders trial-specific coach actions for a trial zoom payment issue', async () => {
-    mockCheckoutSessionUpdate.mockResolvedValue(undefined)
+    mockCheckoutSessionUpdateMany.mockResolvedValue({ count: 1 })
     mockSendOpsTelegramMessage.mockResolvedValue(true)
 
     await alertCoachAboutPaymentIssue({
@@ -135,7 +168,7 @@ describe('coachAlert.service', () => {
               callback_data: 'admin:grant_trial_zoom:trial-token',
             }),
             expect.objectContaining({
-              text: 'ЗАПИТАТИ ДЕТАЛІ',
+              text: 'Потрібні деталі оплати',
               callback_data: 'admin:ask_payment_details:trial-token',
             }),
           ]],

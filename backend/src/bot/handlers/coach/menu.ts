@@ -1,7 +1,6 @@
-import { getIndividualSessionStatusLabel } from '../../../modules/zoom/domain/individual-session-lifecycle.js'
+import { resolveIndividualSessionState } from '../../../modules/zoom/domain/individual-session-lifecycle.js'
 import type { Context } from 'telegraf'
 import { Markup } from 'telegraf'
-import type { KeyboardButton } from '@telegraf/types'
 
 import { prisma } from '../../../db/client.js'
 import {
@@ -21,7 +20,7 @@ import {
   type CoachWeeklyDiarySession,
 } from '../../../modules/zoom/calendar/zoom.calendar.service.js'
 import { getCalendarRequests } from '../../../modules/zoom/commerce/zoom.commerce-request.service.js'
-import { toMutableReplyKeyboard } from '../../../utils/keyboard.js'
+import { startOfKyivWeek } from '../../../modules/zoom/shared/zoom.time.utils.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
 import { resolveCoachUserId } from './access.js'
 import { resolveCoachWebAppBaseUrl } from '../../../config/webapp.js'
@@ -32,6 +31,12 @@ import {
 } from '../coach-content/shared.js'
 
 const lastCoachAgentsMessageByChat = new Map<string, number>()
+const coachWeeklyDigestSentAt = new Map<string, number>()
+const COACH_WEEKLY_DIGEST_TTL_MS = 10 * 60 * 1000
+
+export function resetCoachWeeklyDigestDedupeForTests(): void {
+  coachWeeklyDigestSentAt.clear()
+}
 
 export const MENU_CONDUCT_PATTERN =
   /^(?:🎙️?\s*)?(?:Новий\s+Zoom|Провести)$/iu
@@ -54,6 +59,26 @@ export const MENU_NOTIFICATIONS_PATTERN =
 
 export const MENU_PAYMENTS_PATTERN =
   /^(?:💳\s*)?Оплати$/iu
+
+/*
+ * COACH NAVIGATION CONTRACT — FROZEN
+ * Do not change labels/actions/routes without explicit product approval.
+ * Calendar is the persistent Telegram menu button; section links are inline
+ * WebApp buttons and retain the same canonical Mini App route.
+ */
+export const COACH_NAVIGATION_CONTRACT = {
+  calendar: {
+    label: 'ZOOM КАЛЕНДАР',
+    route: '/miniapp/zoom-calendar',
+    zoomRole: 'coach',
+  },
+  sections: [
+    { label: 'УЧАСНИКИ', panel: 'participants' },
+    { label: 'BATTLE', panel: 'battle' },
+    { label: 'АНАЛІТИКА', panel: 'analytics' },
+    { label: 'ЩЕ', panel: 'more' },
+  ],
+} as const
 
 async function resolveCoachAgentsUrl(ctx: Context): Promise<string> {
   const coachUserId = await resolveCoachUserId(ctx)
@@ -79,15 +104,8 @@ export async function resolveCoachCalendarUrl(ctx: Context): Promise<string> {
   return resolveCoachCalendarUrlForUser(coachUserId)
 }
 
-const BATTLE_STATUS_LABELS: Record<string, string> = {
-  pending: 'Очікує підтвердження',
-  active: 'Активний',
-  completed: 'Завершено',
-  cancelled: 'Скасовано',
-}
-
 type CoachCommercePresentation = {
-  status: 'REQUESTED' | 'APPROVED_PENDING_PAYMENT' | 'PAID'
+  status: 'REQUESTED' | 'APPROVED_PENDING_PAYMENT' | 'PAID' | 'REJECTED' | 'EXPIRED'
   participantName: string | null
 }
 
@@ -103,31 +121,16 @@ function formatKyivTime(value: string): string {
   })
 }
 
-function formatWeekDayHeader(date: Date, now: Date): string {
-  const label = new Intl.DateTimeFormat('uk-UA', {
-    timeZone: 'Europe/Kyiv',
-    weekday: 'short',
-  }).format(date).replace(/\.$/, '')
-  const [, month, day] = formatKyivDayKey(date).split('-')
-  const isToday = formatKyivDayKey(date) === formatKyivDayKey(now)
-  return `${label.toLocaleUpperCase('uk-UA')} · ${Number(day)}.${month}${isToday ? ' · Сьогодні' : ''}`
-}
-
 function formatWeekRange(week: CoachWeeklyDiary['week']): string {
   const from = new Date(week.from)
   const to = new Date(from.getTime() + 6 * 24 * 60 * 60 * 1000)
-  const month = (value: Date) => value.toLocaleDateString('uk-UA', {
+  const date = (value: Date) => value.toLocaleDateString('uk-UA', {
     timeZone: 'Europe/Kyiv',
-    month: 'long',
-  }).replace(/\.$/, '').toLocaleUpperCase('uk-UA')
-  const day = (value: Date) => value.toLocaleDateString('uk-UA', {
-    timeZone: 'Europe/Kyiv',
-    day: 'numeric',
+    day: '2-digit',
+    month: '2-digit',
   })
 
-  return month(from) === month(to)
-    ? `${day(from)}–${day(to)} ${month(to)}`
-    : `${day(from)} ${month(from)} – ${day(to)} ${month(to)}`
+  return `${date(from)}–${date(to)}`
 }
 
 function pluralizeSessionCount(count: number): string {
@@ -138,10 +141,6 @@ function pluralizeSessionCount(count: number): string {
   return 'сесій'
 }
 
-function pluralizeBattleCount(count: number): string {
-  return count === 1 ? 'активний battle' : 'активних battle'
-}
-
 function getSessionTypeLabel(session: CoachWeeklyDiarySession): string {
   if (session.type === 'individual' || session.type === 'PRIVATE') return 'Індивідуальна сесія'
   if (session.type === 'battle_review') return 'Zoom Battle'
@@ -149,70 +148,101 @@ function getSessionTypeLabel(session: CoachWeeklyDiarySession): string {
   return 'Групова практика'
 }
 
-function getStatusLabel(
+type CoachScheduleStatus =
+  | 'scheduled'
+  | 'awaiting_payment'
+  | 'pending_confirmation'
+  | 'payment_attention'
+  | 'unconfirmed'
+
+function getScheduleStatus(
+  session: CoachWeeklyDiarySession,
+  commerce?: CoachCommercePresentation,
+): CoachScheduleStatus {
+  if (session.type === 'individual' || session.type === 'PRIVATE') {
+    const state = resolveIndividualSessionState({
+      sessionStatus: session.status,
+      commerceStatus: commerce?.status,
+    })
+    if (state === 'SCHEDULED') return 'scheduled'
+    if (state === 'PENDING_PAYMENT') return 'awaiting_payment'
+    if (state === 'PENDING_CONFIRMATION') return 'pending_confirmation'
+    if (state === 'REJECTED' || state === 'EXPIRED') return 'payment_attention'
+    return 'unconfirmed'
+  }
+
+  return ['SCHEDULED', 'ACTIVE', 'COMPLETED'].includes(session.status)
+    ? 'scheduled'
+    : 'unconfirmed'
+}
+
+const COACH_SCHEDULE_STATUS_LABELS: Record<CoachScheduleStatus, string> = {
+  scheduled: 'Заплановано',
+  awaiting_payment: 'Очікує оплати',
+  pending_confirmation: 'Очікує підтвердження',
+  payment_attention: 'Потребує дії',
+  unconfirmed: 'Потребує дії',
+}
+
+function getSessionTitle(session: CoachWeeklyDiarySession): string {
+  const fallback = getSessionTypeLabel(session)
+  const topic = session.topic.trim()
+  if (!topic || topic.localeCompare(fallback, 'uk-UA', { sensitivity: 'accent' }) === 0) {
+    return fallback
+  }
+  if (session.type === 'individual' || session.type === 'PRIVATE') return topic
+  if (session.type === 'group_practice') return `${fallback} «${topic}»`
+  return fallback
+}
+
+function getSessionClientName(
   session: CoachWeeklyDiarySession,
   commerce?: CoachCommercePresentation,
 ): string {
   if (session.type === 'individual' || session.type === 'PRIVATE') {
-    return getIndividualSessionStatusLabel({
-      role: 'coach',
-      sessionStatus: session.status,
-      commerceStatus: commerce?.status,
-    })
+    return session.participantNames[0] ?? commerce?.participantName ?? 'Ім\'я не вказано'
   }
-
-  if (session.battleStatus && BATTLE_STATUS_LABELS[session.battleStatus]) {
-    return BATTLE_STATUS_LABELS[session.battleStatus]
-  }
-  if (session.status === 'SCHEDULED') return 'Заплановано'
-  if (session.status === 'COMPLETED') return 'Завершено'
-  if (session.status === 'CANCELLED') return 'Скасовано'
-  if (session.status === 'ACTIVE') return 'Активна'
-  return 'Статус недоступний'
-}
-
-function getBattleParticipantLine(session: CoachWeeklyDiarySession): string | null {
-  if (session.challengerName && session.opponentName) {
-    return `${session.challengerName} vs ${session.opponentName}`
-  }
-  if (session.participantNames.length >= 2) {
-    return `${session.participantNames[0]} vs ${session.participantNames[1]}`
-  }
-  return null
-}
-
-function formatCoachDiarySession(
-  session: CoachWeeklyDiarySession,
-  commerce?: CoachCommercePresentation,
-): string {
-  const isIndividual = session.type === 'individual' || session.type === 'PRIVATE'
-  const icon = session.type === 'battle_review' ? '🟣' : isIndividual ? '🔵' : '🟢'
-  const segments = [
-    `${icon} ${escapeTelegramHtml(formatKyivTime(session.scheduledAt))}`,
-    getSessionTypeLabel(session),
-  ]
 
   if (session.type === 'battle_review') {
-    const participantLine = getBattleParticipantLine(session)
-    if (participantLine) segments.push(escapeTelegramHtml(participantLine))
-    if (session.topic.trim()) segments.push(escapeTelegramHtml(session.topic.trim()))
-    segments.push(getStatusLabel(session, commerce))
-    return segments.join(' · ')
+    if (session.challengerName && session.opponentName) {
+      return `${session.challengerName} vs ${session.opponentName}`
+    }
+    if (session.participantNames.length >= 2) {
+      return `${session.participantNames[0]} vs ${session.participantNames[1]}`
+    }
   }
 
-  if (isIndividual) {
-    const participant = session.participantNames[0] ?? commerce?.participantName
-    if (participant) segments.push(escapeTelegramHtml(participant))
-    if (session.topic.trim()) segments.push(escapeTelegramHtml(session.topic.trim()))
-    segments.push(getStatusLabel(session, commerce))
-    return segments.join(' · ')
-  }
+  return '—'
+}
 
-  if (session.topic.trim()) segments[1] += ` «${escapeTelegramHtml(session.topic.trim())}»`
-  const capacity = session.attendeesCount + session.remainingSlots
-  segments.push(`${session.attendeesCount}/${capacity}`)
-  segments.push(getStatusLabel(session, commerce))
-  return segments.join(' · ')
+type CoachSchedulePresentation =
+  | { kind: 'free' }
+  | { kind: 'confirmed' }
+  | { kind: 'awaiting_payment'; label: string }
+  | { kind: 'attention'; label: string }
+
+function getCoachSchedulePresentation(
+  session: CoachWeeklyDiarySession,
+  commerce?: CoachCommercePresentation,
+): CoachSchedulePresentation {
+  const status = getScheduleStatus(session, commerce)
+  const hasIndividualParticipant = Boolean(
+    session.participantNames[0] || commerce?.participantName,
+  )
+
+  if ((session.type === 'individual' || session.type === 'PRIVATE') && status === 'unconfirmed' && !hasIndividualParticipant) {
+    return { kind: 'free' }
+  }
+  if (status === 'scheduled') return { kind: 'confirmed' }
+  if (status === 'awaiting_payment') {
+    return { kind: 'awaiting_payment', label: COACH_SCHEDULE_STATUS_LABELS[status] }
+  }
+  return { kind: 'attention', label: COACH_SCHEDULE_STATUS_LABELS[status] }
+}
+
+function formatAttentionDate(value: string): string {
+  const [, month, day] = formatKyivDayKey(new Date(value)).split('-')
+  return `${day}.${month}`
 }
 
 export function formatCoachWeeklyDiaryMessage(
@@ -231,42 +261,94 @@ export function formatCoachWeeklyDiaryMessage(
   const visibleSessions = diary.sessions.filter((session) =>
     visibleDayKeys.has(formatKyivDayKey(new Date(session.scheduledAt))),
   )
-  const sessionsByDay = new Map<string, CoachWeeklyDiarySession[]>()
-  for (const session of visibleSessions) {
-    const key = formatKyivDayKey(new Date(session.scheduledAt))
-    sessionsByDay.set(key, [...(sessionsByDay.get(key) ?? []), session])
-  }
-
-  const dayBlocks = visibleDates.flatMap((date) => {
-    const sessions = sessionsByDay.get(formatKyivDayKey(date)) ?? []
-    if (sessions.length === 0) return []
-    const body = sessions
-      .map((session) => formatCoachDiarySession(session, commerceBySessionId.get(session.id)))
-      .join('\n')
-    return [[bold(formatWeekDayHeader(date, now)), body].join('\n')]
-  })
-  const activeBattles = visibleSessions.filter(
-    (session) => session.type === 'battle_review' && session.battleStatus === 'active'
-  ).length
-
-  const battleSummary = activeBattles > 0
-    ? ` · ${activeBattles} ${pluralizeBattleCount(activeBattles)}`
-    : ''
+  const sessions = visibleSessions
+    .map((session) => ({
+      session,
+      presentation: getCoachSchedulePresentation(session, commerceBySessionId.get(session.id)),
+    }))
+    .sort((left, right) => new Date(left.session.scheduledAt).getTime() - new Date(right.session.scheduledAt).getTime())
+  const summary = sessions.reduce(
+    (counts, { presentation }) => {
+      if (presentation.kind === 'confirmed') counts.confirmed += 1
+      if (presentation.kind === 'awaiting_payment') counts.awaitingPayment += 1
+      if (presentation.kind === 'free') counts.free += 1
+      return counts
+    },
+    { confirmed: 0, awaitingPayment: 0, free: 0 },
+  )
+  const todaySessions = sessions
+    .filter(({ session }) => formatKyivDayKey(new Date(session.scheduledAt)) === formatKyivDayKey(now))
+    .filter(({ session }) => new Date(session.scheduledAt).getTime() >= now.getTime())
+    .slice(0, 2)
+  const todayBlock = todaySessions.length === 0
+    ? 'Сьогодні сесій немає.'
+    : todaySessions.map(({ session, presentation }) => {
+      const time = escapeTelegramHtml(formatKyivTime(session.scheduledAt))
+      if (presentation.kind === 'free') return `${time} · Вільний слот`
+      const client = getSessionClientName(session, commerceBySessionId.get(session.id))
+      const label = presentation.kind === 'confirmed' ? 'Підтверджена' : presentation.label
+      return client === '—'
+        ? `${time} · ${escapeTelegramHtml(label)}`
+        : `${time} · ${escapeTelegramHtml(client)} · ${escapeTelegramHtml(label)}`
+    }).join('\n')
+  const attentionSessions = sessions
+    .filter(({ presentation }) => presentation.kind === 'awaiting_payment' || presentation.kind === 'attention')
+    .slice(0, 2)
+  const attentionBlock = attentionSessions.length === 0
+    ? null
+    : [
+      bold('ПОТРЕБУЄ УВАГИ'),
+      attentionSessions.map(({ session, presentation }) => {
+        const client = getSessionClientName(session, commerceBySessionId.get(session.id))
+        const label = presentation.kind === 'awaiting_payment' || presentation.kind === 'attention'
+          ? presentation.label
+          : ''
+        return [
+          formatAttentionDate(session.scheduledAt),
+          formatKyivTime(session.scheduledAt),
+          client === '—' ? getSessionTitle(session) : client,
+          label,
+        ].map(escapeTelegramHtml).join(' · ')
+      }).join('\n'),
+    ].join('\n')
   return joinBlocks([
     [
       `Вітаю, ${escapeTelegramHtml(coachName)}! 👋`,
-      'Твій розклад на цей тиждень',
+      bold('ТВІЙ РОЗКЛАД НА ЦЕЙ ТИЖДЕНЬ'),
     ].join('\n'),
-    bold(formatWeekRange(diary.week)),
-    ...dayBlocks,
-    bold(`Разом: ${visibleSessions.length} ${pluralizeSessionCount(visibleSessions.length)}${battleSummary}`),
+    formatWeekRange(diary.week),
+    `${visibleSessions.length} ${pluralizeSessionCount(visibleSessions.length)} · ${summary.confirmed} оплачені · ${summary.awaitingPayment} очікують оплати · ${summary.free} вільні`,
+    [bold('СЬОГОДНІ'), todayBlock].join('\n'),
+    attentionBlock,
   ])
 }
 
-export async function showCoachMenu(ctx: Context): Promise<void> {
+export async function showCoachMenu(
+  ctx: Context,
+  options: { suppressRepeatedWeeklyDigest?: boolean } = {},
+): Promise<void> {
   const coach = await resolveCoachAccess(ctx)
   if (!coach) {
     await replyWithTelegramMessage(ctx, coachBotContent.access.denied)
+    return
+  }
+
+  const now = new Date()
+  const weekStartDate = formatKyivDayKey(startOfKyivWeek(now))
+  const digestKey = `coach_start_weekly_digest:${coach.id}:${weekStartDate}`
+  const lastSentAt = coachWeeklyDigestSentAt.get(digestKey)
+  const calendarUrl = await resolveCoachCalendarUrl(ctx)
+
+  if (
+    options.suppressRepeatedWeeklyDigest &&
+    lastSentAt &&
+    now.getTime() - lastSentAt < COACH_WEEKLY_DIGEST_TTL_MS
+  ) {
+    await replyWithTelegramMessage(
+      ctx,
+      'Розклад уже оновлено. Відкрий Zoom календар нижче.',
+      buildCoachMainMenuInlineMarkup(calendarUrl),
+    )
     return
   }
 
@@ -277,6 +359,7 @@ export async function showCoachMenu(ctx: Context): Promise<void> {
   })
   const commerceRequests = await getCalendarRequests({
     zoomSessionIds: diary.sessions.map((session) => session.id),
+    includeInactive: true,
   })
   const requesterIds = [...new Set(commerceRequests.map((request) => request.requesterUserId))]
   const requesters = requesterIds.length
@@ -291,7 +374,13 @@ export async function showCoachMenu(ctx: Context): Promise<void> {
       || requester.email
       || null,
   ]))
-  const commercePriority = { REQUESTED: 1, APPROVED_PENDING_PAYMENT: 2, PAID: 3 } as const
+  const commercePriority = {
+    REQUESTED: 1,
+    APPROVED_PENDING_PAYMENT: 2,
+    PAID: 3,
+    REJECTED: 4,
+    EXPIRED: 4,
+  } as const
   const commerceBySessionId = new Map<string, CoachCommercePresentation>()
   for (const request of commerceRequests) {
     if (!request.zoomSessionId || !(request.status in commercePriority)) continue
@@ -305,46 +394,56 @@ export async function showCoachMenu(ctx: Context): Promise<void> {
     }
   }
   const firstName = String(ctx.from?.first_name ?? '').trim() || 'коуч'
-  const calendarUrl = await resolveCoachCalendarUrl(ctx)
 
   const text = formatCoachWeeklyDiaryMessage(diary, firstName, new Date(), commerceBySessionId)
 
-  await replyWithTelegramMessage(ctx, text, buildCoachMainMenuReplyMarkup(coach.role, calendarUrl))
+  await replyWithTelegramMessage(ctx, text, buildCoachMainMenuInlineMarkup(calendarUrl))
+  if (options.suppressRepeatedWeeklyDigest) {
+    coachWeeklyDigestSentAt.set(digestKey, now.getTime())
+  }
+}
+
+export function buildCoachMainMenuInlineMarkup(calendarUrl: string) {
+  const coachPanelUrl = (panel: (typeof COACH_NAVIGATION_CONTRACT.sections)[number]['panel']) =>
+    `${calendarUrl.split('#')[0]}#${panel}`
+  const [participants, battle, analytics, more] = COACH_NAVIGATION_CONTRACT.sections
+
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          Markup.button.webApp(
+            COACH_NAVIGATION_CONTRACT.calendar.label,
+            calendarUrl.split('#')[0],
+          ),
+        ],
+        [
+          Markup.button.webApp(participants.label, coachPanelUrl(participants.panel)),
+          Markup.button.webApp(battle.label, coachPanelUrl(battle.panel)),
+        ],
+        [
+          Markup.button.webApp(analytics.label, coachPanelUrl(analytics.panel)),
+          Markup.button.webApp(more.label, coachPanelUrl(more.panel)),
+        ],
+      ],
+    },
+  }
 }
 
 export function buildCoachMainMenuReplyMarkup(
   role: 'ADMIN' | 'EXPERT' | 'SUPERADMIN' = 'EXPERT',
   calendarUrl?: string
 ) {
-  const coachPanelUrl = (panel: 'participants' | 'battle' | 'analytics' | 'more') =>
-    calendarUrl ? `${calendarUrl.split('#')[0]}#${panel}` : null
-  const participantsUrl = coachPanelUrl('participants')
-  const battleUrl = coachPanelUrl('battle')
-  const analyticsUrl = coachPanelUrl('analytics')
-  const moreUrl = coachPanelUrl('more')
-  const keyboard: KeyboardButton[][] = [
-    [participantsUrl
-      ? Markup.button.webApp(coachBotContent.menu.members, participantsUrl)
-      : coachBotContent.menu.members,
-    battleUrl
-      ? Markup.button.webApp(coachBotContent.menu.battle, battleUrl)
-      : coachBotContent.menu.battle],
-    [analyticsUrl
-      ? Markup.button.webApp(coachBotContent.menu.analytics, analyticsUrl)
-      : coachBotContent.menu.analytics,
-    moreUrl
-      ? Markup.button.webApp(coachBotContent.menu.more, moreUrl)
-      : coachBotContent.menu.more],
-  ]
+  /*
+   * A ReplyKeyboardMarkup hides Telegram's persistent blue Menu Button.
+   * The canonical Coach calendar is the bot-level WebApp menu; secondary
+   * navigation stays inline on the message.
+   */
   void role
 
-  return {
-    reply_markup: toMutableReplyKeyboard({
-      keyboard,
-      resize_keyboard: true,
-      is_persistent: true,
-    }),
-  }
+  return calendarUrl
+    ? buildCoachMainMenuInlineMarkup(calendarUrl)
+    : { reply_markup: { inline_keyboard: [] } }
 }
 
 export async function showCoachSystemMenu(ctx: Context): Promise<void> {

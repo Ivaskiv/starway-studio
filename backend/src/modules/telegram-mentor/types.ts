@@ -12,6 +12,7 @@ type WheelSphere   = `wheel_${string}`
 export type SessionState =
   | 'idle'
   | 'chat'
+  | 'payment_evidence'
   | 'onboarding'
   | 'wheel'
   | QuestionIndex

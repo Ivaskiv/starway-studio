@@ -1,7 +1,13 @@
 import { Prisma, type ZoomCommerceKind, type ZoomCommerceRequest } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
-import { buildShortWayForPayCheckoutUrl } from '../../subscriptions/payments/wayforpay/checkout.js'
-import { buildPaymentRequest } from '../../subscriptions/payments/wayforpay/service.js'
+import {
+  buildShortWayForPayCheckoutUrl,
+  refreshCheckoutSessionPayload,
+} from '../../subscriptions/payments/wayforpay/checkout.js'
+import {
+  buildPaymentRequest,
+  createWayForPayInvoice,
+} from '../../subscriptions/payments/wayforpay/service.js'
 import { buildZoomCalendarUrl } from '../urls.js'
 import {
   getIndividualAvailabilityForScheduledAt,
@@ -15,9 +21,30 @@ type PaymentInput = {
   orderReference: string; userId: string; zoomSessionId: string | null
   paymentKind: string; amount: number; currency: string
 }
+type CreateWayForPayInvoice = typeof createWayForPayInvoice
+type IndividualInvoicePreparation =
+  | { invoiceUrl: string }
+  | { request: ZoomCommerceRequest; checkout: { token: string; payload: Record<string, unknown> } }
 const pendingStatuses = ['CREATED', 'OPENED', 'PROCESSING'] as const
 const PRODUCTION_INDIVIDUAL_PAYMENT = { amount: 60, currency: 'EUR' } as const
 const DEVELOPMENT_INDIVIDUAL_PAYMENT = { amount: 1, currency: 'UAH' } as const
+export const INDIVIDUAL_REQUEST_CONTEXT_ERROR =
+  'Опиши запит кількома словами, щоб коуч розумів, з чим ти приходиш.'
+
+export function validateIndividualRequestContext(value: string): string | null {
+  const normalized = value.trim()
+  if (normalized.length < 8 || normalized.length > 1000) {
+    return INDIVIDUAL_REQUEST_CONTEXT_ERROR
+  }
+
+  const words = normalized.match(/\p{L}{2,}/gu) ?? []
+  const hasPlausibleWord = words.some((word) =>
+    /[aeiouyаеиіоуяюєїыэё]/iu.test(word)
+    || /^[A-ZА-ЯІЇЄҐЁ]{2,5}$/u.test(word),
+  )
+
+  return hasPlausibleWord ? null : INDIVIDUAL_REQUEST_CONTEXT_ERROR
+}
 
 export function resolveZoomIndividualPaymentTerms() {
   return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
@@ -208,6 +235,119 @@ function assertPaymentBinding(
   }
 }
 
+async function refreshActiveCheckoutPayload(
+  tx: Tx,
+  request: ZoomCommerceRequest,
+  checkout: { token: string; payload: unknown },
+): Promise<Record<string, unknown>> {
+  const kind = paymentKind(request)
+  const payment = buildPaymentRequest({
+    userId: request.requesterUserId,
+    productId: kind,
+    amount: Number(request.amount),
+    currency: request.currency,
+    payRef: request.checkoutOrderReference!,
+  })
+  if (request.kind === 'INDIVIDUAL') {
+    payment.returnUrl = zoomIndividualPaymentReturnUrl()
+  }
+
+  const previousPayload = jsonRecord(checkout.payload)
+  const payload: Record<string, unknown> = {
+    ...payment,
+    paymentKind: kind,
+    zoomCommerceRequestId: request.id,
+    zoomSessionId: request.zoomSessionId,
+    userId: request.requesterUserId,
+  }
+  if (previousPayload?.battleEntryMeta !== undefined) {
+    payload.battleEntryMeta = previousPayload.battleEntryMeta
+  }
+  if (typeof previousPayload?.wayForPayInvoiceUrl === 'string') {
+    payload.wayForPayInvoiceUrl = previousPayload.wayForPayInvoiceUrl
+  }
+
+  await refreshCheckoutSessionPayload(checkout.token, payload, tx)
+  return payload
+}
+
+function invoiceUrlFromPayload(payload: Record<string, unknown>): string | null {
+  const value = typeof payload.wayForPayInvoiceUrl === 'string'
+    ? payload.wayForPayInvoiceUrl.trim()
+    : ''
+  try {
+    return new URL(value).protocol === 'https:' ? value : null
+  } catch {
+    return null
+  }
+}
+
+async function ensureIndividualInvoice(
+  db: Db,
+  requestId: string,
+  createInvoice: CreateWayForPayInvoice,
+): Promise<string> {
+  const pending: IndividualInvoicePreparation = await db.$transaction(async tx => {
+    const request = await tx.zoomCommerceRequest.findUniqueOrThrow({ where: { id: requestId } })
+    if (request.kind !== 'INDIVIDUAL' || request.status !== 'APPROVED_PENDING_PAYMENT') {
+      throw new Error('COMMERCE_INVOICE_STATE_CHANGED')
+    }
+    const checkout = await checkoutFor(tx, request)
+    if (!isActive(checkout, new Date())) throw new Error('COMMERCE_CHECKOUT_BINDING_INVALID')
+
+    const existingInvoiceUrl = invoiceUrlFromPayload(jsonRecord(checkout!.payload) ?? {})
+    if (existingInvoiceUrl) return { invoiceUrl: existingInvoiceUrl }
+
+    return {
+      request,
+      checkout: {
+        token: checkout!.token,
+        payload: await refreshActiveCheckoutPayload(tx, request, checkout!),
+      },
+    }
+  })
+  if ('invoiceUrl' in pending) return pending.invoiceUrl
+
+  let invoice: Awaited<ReturnType<CreateWayForPayInvoice>>
+  try {
+    invoice = await createInvoice({
+      userId: pending.request.requesterUserId,
+      productId: 'zoom_individual',
+      amount: Number(pending.request.amount),
+      currency: pending.request.currency,
+      payRef: pending.request.checkoutOrderReference!,
+      product_name: ['Індивідуальна Zoom-сесія'],
+      product_count: [1],
+      product_price: [Number(pending.request.amount)],
+    })
+  } catch (error) {
+    console.warn('[ZOOM_COMMERCE] WayForPay invoice creation failed', {
+      requestId,
+      orderReference: pending.request.checkoutOrderReference,
+      reason: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+
+  return db.$transaction(async tx => {
+    const request = await tx.zoomCommerceRequest.findUniqueOrThrow({ where: { id: requestId } })
+    if (request.kind !== 'INDIVIDUAL' || request.status !== 'APPROVED_PENDING_PAYMENT') {
+      throw new Error('COMMERCE_INVOICE_STATE_CHANGED')
+    }
+    const checkout = await checkoutFor(tx, request)
+    if (!isActive(checkout, new Date())) throw new Error('COMMERCE_CHECKOUT_BINDING_INVALID')
+
+    const existingInvoiceUrl = invoiceUrlFromPayload(jsonRecord(checkout!.payload) ?? {})
+    if (existingInvoiceUrl) return existingInvoiceUrl
+
+    await refreshCheckoutSessionPayload(checkout!.token, {
+      ...pending.checkout.payload,
+      wayForPayInvoiceUrl: invoice.invoiceUrl,
+    }, tx)
+    return invoice.invoiceUrl
+  })
+}
+
 async function expireApprovals(tx: Tx, expertId: string) {
   const now = new Date()
   const requests = await tx.zoomCommerceRequest.findMany({
@@ -386,6 +526,9 @@ export async function createUserIndividualRequest(input: {
   const questionText = input.questionText.trim()
   if (!Number.isFinite(input.scheduledAt.getTime()) || input.scheduledAt <= new Date() || !questionText) {
     throw new Error('COMMERCE_INVALID_REQUEST')
+  }
+  if (validateIndividualRequestContext(questionText)) {
+    throw new Error('COMMERCE_INVALID_REQUEST_CONTEXT')
   }
 
   return db.$transaction(async tx => {
@@ -573,13 +716,23 @@ export async function backfillCancelledLegacyIndividual(
   })
 }
 
-export async function approveRequest(id: string, expertId: string, db: Db = prisma) {
-  return db.$transaction(async tx => {
+export async function approveRequest(
+  id: string,
+  expertId: string,
+  db: Db = prisma,
+  createInvoice: CreateWayForPayInvoice = createWayForPayInvoice,
+) {
+  const approved = await db.$transaction(async tx => {
     await lockRequest(tx, id, expertId)
     await expireApprovals(tx, expertId)
     const request = await tx.zoomCommerceRequest.findUniqueOrThrow({ where: { id } })
     if (request.status === 'APPROVED_PENDING_PAYMENT' || request.status === 'PAID') {
       const checkout = await checkoutFor(tx, request)
+      if (request.status === 'APPROVED_PENDING_PAYMENT' && isActive(checkout, new Date())) {
+        return request.kind === 'INDIVIDUAL'
+          ? { request, checkoutUrl: null, individualInvoiceRequestId: request.id }
+          : { request, checkoutUrl: `${checkoutBaseUrl()}/api/payments/wayforpay/checkout/${checkout!.token}` }
+      }
       return { request, checkoutUrl: request.status === 'PAID' ? null
         : `${checkoutBaseUrl()}/api/payments/wayforpay/checkout/${checkout!.token}` }
     }
@@ -618,8 +771,16 @@ export async function approveRequest(id: string, expertId: string, db: Db = pris
       ...payment, paymentKind: kind, zoomCommerceRequestId: id,
       zoomSessionId: request.zoomSessionId, userId: request.requesterUserId, battleEntryMeta,
     }, undefined, tx, paymentDeadline)
-    return { request: approved, checkoutUrl }
+    return request.kind === 'INDIVIDUAL'
+      ? { request: approved, checkoutUrl: null, individualInvoiceRequestId: approved.id }
+      : { request: approved, checkoutUrl }
   })
+  if (!approved.individualInvoiceRequestId) return approved
+
+  return {
+    request: approved.request,
+    checkoutUrl: await ensureIndividualInvoice(db, approved.individualInvoiceRequestId, createInvoice),
+  }
 }
 
 export async function rejectRequest(id: string, expertId: string, db: Db = prisma) {
@@ -724,6 +885,11 @@ export async function getCalendarRequests(input: {
         requesterUserId: input.requesterUserId,
         ...(input.includeInactive ? {} : { status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT', 'PAID'] as const } }),
       },
+      include: {
+        requester: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
   })
 }
@@ -783,8 +949,13 @@ export async function hasPaidIndividualParticipation(
   }))
 }
 
-export async function getCommerceCheckoutUrl(requestId: string, userId: string): Promise<string | null> {
-  return prisma.$transaction(async tx => {
+export async function getCommerceCheckoutUrl(
+  requestId: string,
+  userId: string,
+  db: Db = prisma,
+  createInvoice: CreateWayForPayInvoice = createWayForPayInvoice,
+): Promise<string | null> {
+  const checkoutResult = await db.$transaction(async tx => {
     const request = await tx.zoomCommerceRequest.findUnique({ where: { id: requestId } })
     if (!request || request.requesterUserId !== userId
       || request.status !== 'APPROVED_PENDING_PAYMENT' || request.scheduledAt <= new Date()) return null
@@ -792,7 +963,19 @@ export async function getCommerceCheckoutUrl(requestId: string, userId: string):
       ? await tx.zoomSession.findUnique({ where: { id: request.zoomSessionId } }) : null
     if (!session || session.status !== 'SCHEDULED') return null
     const checkout = await checkoutFor(tx, request)
-    return isActive(checkout, new Date())
-      ? `${checkoutBaseUrl()}/api/payments/wayforpay/checkout/${checkout!.token}` : null
+    if (isActive(checkout, new Date())) {
+      if (request.kind === 'INDIVIDUAL') {
+        return { checkoutUrl: null, individualInvoiceRequestId: request.id }
+      }
+      await refreshActiveCheckoutPayload(tx, request, checkout!)
+    }
+    return {
+      checkoutUrl: isActive(checkout, new Date())
+        ? `${checkoutBaseUrl()}/api/payments/wayforpay/checkout/${checkout!.token}` : null,
+    }
   })
+  if (!checkoutResult) return null
+  return checkoutResult.individualInvoiceRequestId
+    ? ensureIndividualInvoice(db, checkoutResult.individualInvoiceRequestId, createInvoice)
+    : checkoutResult.checkoutUrl
 }

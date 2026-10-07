@@ -65,8 +65,8 @@ export default function MiniAppCalendarRoute() {
   return (
     <MiniAppLayout activeTab="home" navVariant={isCoach ? 'coach' : 'user'}>
       {isCoach ? (
-        <main className="mx-auto w-full max-w-6xl px-4 py-4 pb-28">
-          {roleSwitch}
+        <main className="mx-auto w-full max-w-md px-4 py-4 pb-28">
+          {location.hash === '#more' && roleSwitch}
           <CoachZoomPanel expertId={user?.expertId ?? null} activeScreen={({ '#participants': 'participants', '#battle': 'battle', '#analytics': 'analytics', '#more': 'more' } as const)[location.hash] ?? 'calendar'} />
         </main>
       ) : user ? (

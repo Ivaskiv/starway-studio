@@ -65,6 +65,7 @@ export type ZoomCompletionDraft =
 
 export interface ZoomCalendarSession {
   id: string;
+  coach?: { id: string; name: string } | null;
   scheduledAt: string;
   topic: string;
   status: ZoomStatus;

@@ -15,6 +15,23 @@ interface ScheduleEventPayload { eventType: ScheduleEventType; sessionId?: strin
 function getSafeName(firstName?: string | null): string { if (!firstName) return ''; const trimmed=firstName.replace(/[<>{}\[\]]/g,'' ).replace(/\s+/g,' ').trim().slice(0,40); if (!trimmed) return ''; const lowered=trimmed.toLowerCase(); if (new Set(['undefined','null','user','test','admin','bot','учень','coach']).has(lowered) || lowered.startsWith('telegram-guest') || /^\d+$/.test(trimmed) || trimmed.length<2) return ''; return trimmed }
 function isGroupPracticeRequest(requests: unknown): boolean { return Boolean(requests && !Array.isArray(requests) && typeof requests === 'object' && (requests as Record<string, unknown>).type === 'group_practice') }
 async function getSessionAttendeeUserIds(sessionId: string): Promise<string[]> { const rows=await prisma.zoomSessionAttendee.findMany({where:{sessionId},select:{userId:true}}); return rows.map((row)=>row.userId) }
+export async function collectCancellationAffectedUserIds(sessionId: string): Promise<string[]> {
+  const [attendees, commerceRequests] = await Promise.all([
+    prisma.zoomSessionAttendee.findMany({ where: { sessionId }, select: { userId: true } }),
+    prisma.zoomCommerceRequest.findMany({
+      where: {
+        zoomSessionId: sessionId,
+        status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT', 'PAID'] },
+      },
+      select: { requesterUserId: true },
+    }),
+  ])
+
+  return [...new Set([
+    ...attendees.map((attendee) => attendee.userId),
+    ...commerceRequests.map((request) => request.requesterUserId),
+  ])]
+}
 async function notifyCoach(expertId: string | null | undefined, details: { swapId: string }): Promise<void> { if (!expertId) return; const expertUser=await prisma.user.findFirst({where:{expertId},select:{telegramChatId:true}}); if (!expertUser?.telegramChatId) return; const { sendDedupedTelegramMessage }=await import('../../../lib/telegram.js'); await sendDedupedTelegramMessage(expertUser.telegramChatId, `💱 Відбувся обмін слотами. Swap #${details.swapId}`).catch(()=>undefined) }
 
 export async function notifyAffectedUsers(
@@ -23,10 +40,11 @@ export async function notifyAffectedUsers(
   session: ZoomSession,
   userIds: string[]
 ): Promise<void> {
-  if (userIds.length === 0) return
+  const uniqueUserIds = [...new Set(userIds)]
+  if (uniqueUserIds.length === 0) return
 
   const users = await prisma.user.findMany({
-    where: { id: { in: userIds }, deletedAt: null },
+    where: { id: { in: uniqueUserIds }, deletedAt: null },
     select: {
       firstName: true,
       telegramChatId: true,
@@ -57,7 +75,7 @@ export async function notifyAffectedUsers(
     update: (greeting) =>
       `${greeting}розклад Zoom-сесії оновлено.\n\n${dateStr}\n${session.topic}\n\nНагадування перераховано.`,
     cancel: (greeting) =>
-      `${greeting}Zoom-сесію скасовано.\n\n${dateStr}\n${session.topic}`,
+      `${greeting}СЕСІЮ СКАСОВАНО\n\n${dateStr}\n${session.topic}\n\nЯкщо потрібно, обери інший час у Zoom календарі.`,
     book: (greeting) =>
       `${greeting}запис підтверджено.\n\n${dateStr}\n${session.topic}\n\nНагадування заплановано.`,
     unbook: (greeting) =>
@@ -70,7 +88,9 @@ export async function notifyAffectedUsers(
 
   const zoomUrl = resolveZoomCalendarUrl()
   const calendarButton = zoomUrl
-    ? { text: 'Переглянути календар', web_app: { url: zoomUrl } }
+    ? canUseTelegramWebAppButton(zoomUrl)
+      ? { text: 'ВІДКРИТИ КАЛЕНДАР', web_app: { url: zoomUrl } }
+      : { text: 'ВІДКРИТИ КАЛЕНДАР', url: zoomUrl }
     : null
 
   for (const user of users) {
@@ -112,10 +132,7 @@ export async function processScheduleNotification(
 ): Promise<void> {
   const { eventType, affectedUserIds, sessionTitle, coachMetadata } = payload
   const zoomUrl = resolveZoomCalendarUrl()
-  const baseUrl = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-  const bookingUrl = baseUrl
-    ? `${baseUrl.replace(/\/$/, '')}/zoom/booking`
-    : null
+  const bookingUrl = buildZoomCalendarUrl({ intent: 'booking' })
 
   if (affectedUserIds.length > 0 && eventType !== 'SWAP') {
     const users = await prisma.user.findMany({
@@ -258,10 +275,7 @@ export async function processScheduleNotification(
     report += `Тип події: Запис на індивідуальну консультацію\nУчасник: ${String(coachMetadata.userName ?? 'Учасник')} (id: ${String(coachMetadata.userId ?? '—')})\nДата та час: ${String(coachMetadata.bookedDateTimeFormatted ?? '—')}\nСтатус оплати: PAID via WayForPay\nАналітичний фокус: ${String(coachMetadata.resultKey ?? '—').toUpperCase()}\nЗапит учасника: ${String(coachMetadata.userTargetDescription ?? '—')}`
   }
 
-  const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-  const panelUrl = panelBase
-    ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom`
-    : null
+  const panelUrl = buildZoomCalendarUrl({ zoomRole: 'ops' })
 
   void sendOpsTelegramMessage(
     report,
@@ -269,7 +283,7 @@ export async function processScheduleNotification(
       ? {
           reply_markup: {
             inline_keyboard: [
-              [{ text: 'Панель керування розкладом', url: panelUrl }],
+              [{ text: 'ПАНЕЛЬ ZOOM', url: panelUrl }],
             ],
           },
         }
@@ -348,7 +362,7 @@ export async function afterZoomOperation(
     eventType,
     sessionId,
     sessionTitle: session.topic,
-    affectedUserIds,
+    affectedUserIds: operation === 'cancel' ? [] : affectedUserIds,
     coachMetadata,
   }).catch((err) =>
     console.error('[afterZoomOp] processScheduleNotification:', err)

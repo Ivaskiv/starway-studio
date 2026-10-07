@@ -12,6 +12,7 @@ import {
   createRequest,
   resolveZoomIndividualPaymentTerms,
 } from '../commerce/zoom.commerce-request.service.js'
+import { getIndividualAvailabilityForScheduledAt } from '../booking/zoom.availability.service.js'
 import { afterZoomOperation } from '../core/zoom.operations.service.js'
 import { endOfKyivWeek, startOfKyivWeek } from '../shared/zoom.time.utils.js'
 
@@ -115,6 +116,12 @@ export async function bookPrivateSlot(userId: string, sessionId: string, questio
     orderBy: { createdAt: 'desc' },
   })
   if (existing) return { success: true, request: existing }
+
+  const availability = await getIndividualAvailabilityForScheduledAt({
+    expertId: session.expertId,
+    scheduledAt: session.scheduledAt,
+  })
+  if (!availability.candidate.available) throw new Error('slot_unavailable')
 
   const individualPayment = resolveZoomIndividualPaymentTerms()
   const request = await createRequest({

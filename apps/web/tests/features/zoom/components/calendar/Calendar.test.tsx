@@ -96,6 +96,137 @@ vi.mock('@/features/zoom/components/calendar/PreparationModal', () => ({
 }))
 
 describe('Zoom Calendar coach presentation', () => {
+  it('collapses empty USER week days while retaining populated day cards', async () => {
+    state.view = 'week'
+    state.sessions = [{
+      id: 'only-tuesday', scheduledAt: '2026-09-01T16:00:00.000Z', topic: 'Єдина сесія',
+      status: 'SCHEDULED', type: 'group_practice', zoomLink: '', attendeesCount: 1,
+      canEdit: false, isMyBooking: false,
+    }]
+
+    const { default: Calendar } = await import('@/features/zoom/components/calendar/Calendar')
+    const markup = renderToStaticMarkup(createElement(Calendar, { mode: 'user', userId: 'user-1' }))
+
+    expect(markup).toContain('data-zoom-week-day="Вт"')
+    expect(markup).not.toContain('data-zoom-week-day="Пн"')
+    expect(markup).not.toContain('data-zoom-week-day="Ср"')
+    expect(markup).toContain('Єдина сесія')
+    expect(markup).not.toContain('Немає запланованих сесій')
+  })
+
+  it('renders one compact empty USER week state with booking and next-week actions', async () => {
+    state.view = 'week'
+    state.sessions = []
+
+    const { default: Calendar } = await import('@/features/zoom/components/calendar/Calendar')
+    const markup = renderToStaticMarkup(createElement(Calendar, {
+      mode: 'user', userId: 'user-1', onFindAvailableSlots: vi.fn(),
+    }))
+
+    expect(markup).toContain('data-zoom-week-empty="user"')
+    expect(markup).toContain('Цього тижня сесій немає.')
+    expect(markup).toContain('НАЙБЛИЖЧІ СЛОТИ')
+    expect(markup).toContain('НАСТУПНИЙ ТИЖДЕНЬ')
+    expect(markup).not.toContain('Немає запланованих сесій')
+  })
+
+  it('sends a NO_ACCESS individual booking attempt to the supplied access gate without opening the booking flow', async () => {
+    const { routeUserBookingAttempt } = await import('@/features/zoom/components/calendar/Calendar')
+    const accessGate = vi.fn()
+    const openBookingQuestion = vi.fn()
+
+    routeUserBookingAttempt({
+      session: {
+        id: 'individual-open', scheduledAt: '2026-09-01T17:00:00.000Z', topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', attendeesCount: 0,
+        remainingSlots: 1, canEdit: false, isMyBooking: false,
+      },
+      hasFocusAccess: false,
+      onAccessRequired: accessGate,
+      onBookingAllowed: openBookingQuestion,
+    })
+
+    expect(accessGate).toHaveBeenCalledTimes(1)
+    expect(openBookingQuestion).not.toHaveBeenCalled()
+  })
+
+  it('recognizes only a genuinely free future individual slot for the panel booking sheet', async () => {
+    const { isAvailableIndividualSlot } = await import('@/features/zoom/components/calendar/Calendar')
+    const freeSlot = {
+      id: 'individual-free', scheduledAt: '2026-12-01T17:00:00.000Z', topic: 'Індивідуальна сесія',
+      status: 'SCHEDULED', type: 'individual', zoomLink: '', attendeesCount: 0,
+      remainingSlots: 1, canEdit: false, isMyBooking: false,
+    } as ZoomCalendarSession
+
+    expect(isAvailableIndividualSlot(freeSlot)).toBe(true)
+    expect(isAvailableIndividualSlot({ ...freeSlot, remainingSlots: 0 })).toBe(false)
+    expect(isAvailableIndividualSlot({ ...freeSlot, slotStatus: 'booked' })).toBe(false)
+    expect(isAvailableIndividualSlot({ ...freeSlot, commerceStatus: 'REQUESTED' })).toBe(false)
+  })
+
+  it('keeps NO_ACCESS Group and free Individual slots visible without a false payment label', async () => {
+    state.view = 'week'
+    state.sessions = [
+      {
+        id: 'group-no-access', scheduledAt: '2026-09-01T16:00:00.000Z', topic: 'Групова практика',
+        status: 'SCHEDULED', type: 'group_practice', zoomLink: '', attendeesCount: 1,
+        remainingSlots: 9, canEdit: false, isMyBooking: false,
+      },
+      {
+        id: 'individual-free', scheduledAt: '2026-09-01T17:00:00.000Z', topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', attendeesCount: 0,
+        remainingSlots: 1, canEdit: false, isMyBooking: false,
+        commerceLabel: 'Оплату не підтверджено',
+      },
+    ]
+
+    const { default: Calendar } = await import('@/features/zoom/components/calendar/Calendar')
+    const markup = renderToStaticMarkup(createElement(Calendar, {
+      mode: 'user', userId: 'user-1', hasFocusAccess: false, onRestrictedGroupAction: vi.fn(),
+    }))
+
+    expect(markup).toContain('Групова практика')
+    expect(markup).toContain('Індивідуальна сесія')
+    expect(markup).toContain('ДОСТУПНО')
+    expect(markup).toContain('ВІЛЬНИЙ СЛОТ')
+    expect(markup).not.toContain('Оплату не підтверджено')
+  })
+
+  it('uses the canonical USER status mapping without compound payment labels', async () => {
+    state.view = 'week'
+    state.sessions = [
+      {
+        id: 'requested', scheduledAt: '2026-09-01T10:00:00.000Z', topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', attendeesCount: 0,
+        commerceStatus: 'REQUESTED', commerceLabel: 'legacy', canEdit: false,
+      },
+      {
+        id: 'pending-payment', scheduledAt: '2026-09-01T11:00:00.000Z', topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', attendeesCount: 0,
+        commerceStatus: 'APPROVED_PENDING_PAYMENT', commerceLabel: 'legacy', canEdit: false,
+      },
+      {
+        id: 'paid', scheduledAt: '2026-09-01T12:00:00.000Z', topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', attendeesCount: 1,
+        commerceStatus: 'PAID', commerceLabel: 'Оплачено · Заплановано', canEdit: false,
+      },
+      {
+        id: 'free', scheduledAt: '2026-09-01T13:00:00.000Z', topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', attendeesCount: 0,
+        remainingSlots: 1, canEdit: false, isMyBooking: false,
+      },
+    ]
+
+    const { default: Calendar } = await import('@/features/zoom/components/calendar/Calendar')
+    const markup = renderToStaticMarkup(createElement(Calendar, { mode: 'user', userId: 'user-1' }))
+
+    expect(markup).toContain('ЗАПИТ СТВОРЕНО')
+    expect(markup).toContain('ОЧІКУЄ ОПЛАТИ')
+    expect(markup).toContain('ОПЛАЧЕНО')
+    expect(markup).toContain('ВІЛЬНИЙ СЛОТ')
+    expect(markup).not.toContain('Оплачено · Заплановано')
+  })
+
   it('renders an expired Individual reservation muted and disabled without a detail affordance', async () => {
     state.view = 'week'
     state.sessions = [{
@@ -117,7 +248,7 @@ describe('Zoom Calendar coach presentation', () => {
     const { default: Calendar } = await import('@/features/zoom/components/calendar/Calendar')
     const markup = renderToStaticMarkup(createElement(Calendar, { mode: 'user', userId: 'user-1' }))
 
-    expect(markup).toContain('Час оплати вичерпано')
+    expect(markup).toContain('ЧАС ОПЛАТИ ВИЧЕРПАНО')
     expect(markup).toContain('disabled=""')
     expect(markup).toContain('cursor-not-allowed')
     expect(markup).toContain('opacity-55')
@@ -148,7 +279,7 @@ describe('Zoom Calendar coach presentation', () => {
     const markup = renderToStaticMarkup(createElement(Calendar, { mode: 'user', userId: 'user-1' }))
     const source = readFileSync(new URL('../../../../../src/features/zoom/components/calendar/Calendar.tsx', import.meta.url), 'utf8')
 
-    expect(markup).toContain('Очікує оплати')
+    expect(markup).toContain('ОЧІКУЄ ОПЛАТИ')
     expect(markup).not.toContain('disabled=""')
     expect(markup).toContain('hover:brightness-110')
     expect(markup).toContain('›')
@@ -231,7 +362,7 @@ describe('Zoom Calendar coach presentation', () => {
     const { default: Calendar } = await import('@/features/zoom/components/calendar/Calendar')
     const markup = renderToStaticMarkup(createElement(Calendar, { mode: 'coach', userId: 'expert-1' }))
 
-    expect(markup).toContain('0 / 50 учасників')
+    expect(markup).toContain('0/50 учасників')
     expect(markup).toContain('Марія К.')
     expect(markup).toContain('Питання про фокус')
     expect(markup).toContain('Vira vs Marta')

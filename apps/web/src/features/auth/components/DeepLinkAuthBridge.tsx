@@ -63,6 +63,17 @@ export function shouldRedirectTelegramRuntimeToMiniApp(pathname: string): boolea
   return pathname === '/miniapp' || pathname.startsWith('/miniapp/')
 }
 
+export function buildTelegramMiniAppNavigationTarget(search: string, hash: string) {
+  const params = new URLSearchParams(search)
+  params.delete('dl')
+
+  return {
+    pathname: '/miniapp/zoom-calendar',
+    search: params.toString() ? `?${params.toString()}` : '',
+    hash,
+  }
+}
+
 export function shouldSkipDeepLinkRestore(status: string, pathname: string): boolean {
   return status === 'loading'
     || (status === 'authenticated' && pathname === '/onboarding/continue')
@@ -243,7 +254,7 @@ export default function DeepLinkAuthBridge() {
         const targetPath = result.link.path
 
         if (isTelegramMiniApp(location.pathname) && shouldRedirectTelegramRuntimeToMiniApp(location.pathname)) {
-          navigate('/miniapp/zoom-calendar', { replace: true })
+          navigate(buildTelegramMiniAppNavigationTarget(location.search, location.hash), { replace: true })
           return
         }
 

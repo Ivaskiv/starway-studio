@@ -199,7 +199,7 @@ export async function notifyMonthSchedule(
       `${greeting}опубліковано розклад Zoom-практик ФОКУС на ${monthLabel}.\n\n` +
       `${scheduleLines}\n\n` +
       `${context ? `${context}\n\n` : ''}` +
-      'Для участі необхідно активувати доступ.'
+      'Ця групова Zoom-практика доступна учасникам ФОКУСУ.'
 
     try {
       await sendTelegramMessage(telegramBot, tgId, text, {
@@ -207,7 +207,7 @@ export async function notifyMonthSchedule(
           inline_keyboard: [
             [
               {
-                text: 'Активувати доступ до ФОКУС',
+                text: 'АКТИВУВАТИ ФОКУС',
                 callback_data: 'open_focus_payment',
               },
             ],

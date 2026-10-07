@@ -149,6 +149,34 @@ describe('battle.service', () => {
     )
   })
 
+  it('returns an active FOCUS participant as an eligible Battle opponent', async () => {
+    const { getEligibleBattleOpponents } = await import('../../../../src/modules/zoom/battle/battle.service.js')
+    mockUserFindMany.mockResolvedValueOnce([{
+      id: 'user-2', firstName: 'Opponent', lastName: null, email: 'opponent@example.com',
+    }])
+
+    await expect(getEligibleBattleOpponents({ userId: 'user-1', expertId: 'expert-1' }))
+      .resolves.toEqual([{
+        id: 'user-2', firstName: 'Opponent', lastName: null, email: 'opponent@example.com',
+      }])
+
+    expect(mockUserFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: { not: 'user-1' },
+        expertId: 'expert-1',
+        productSubscriptions: {
+          some: expect.objectContaining({
+            product: { code: { equals: 'focus', mode: 'insensitive' } },
+            OR: expect.arrayContaining([
+              expect.objectContaining({ status: { in: ['active', 'paid'] } }),
+              expect.objectContaining({ status: 'trial' }),
+            ]),
+          }),
+        },
+      }),
+    }))
+  })
+
   it('stores participant goals on ZoomSessionAttendee without writing goal fields to requests', async () => {
     const { initiateBattle } = await import('../../../../src/modules/zoom/battle/battle.service.js')
     mockZoomSessionFindMany.mockResolvedValue([])

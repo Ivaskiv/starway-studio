@@ -99,10 +99,14 @@ export async function alertCoachAboutPaymentIssue(params: AlertParams): Promise<
   void params.coachChatId
 
   if (params.checkoutToken) {
-    await prisma.checkoutSession.update({
-      where: { token: params.checkoutToken },
+    // Claim the existing checkout before delivery. Retried provider callbacks
+    // then converge on one OPS alert instead of creating duplicate cards.
+    const claim = await prisma.checkoutSession.updateMany({
+      where: { token: params.checkoutToken, paymentIssueReportedAt: null },
       data: { paymentIssueReportedAt: new Date() },
-    }).catch(() => undefined)
+    }).catch(() => null)
+
+    if (!claim || claim.count === 0) return
   }
 
   const isTrialZoom = String(params.productCode ?? '').trim().toLowerCase() === 'trial_zoom'

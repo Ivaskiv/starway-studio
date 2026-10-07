@@ -4,6 +4,7 @@ import { openExternalPaymentUrl } from '@/features/subscription/utils/openExtern
 import {
   useBookPrivateSlotMutation,
   useBookSlotMutation,
+  useCancelZoomCommerceRequestMutation,
   useCancelPrivateBookingMutation,
   useCompleteZoomSessionMutation,
   useLazyGetZoomCompletionDraftQuery,
@@ -17,6 +18,7 @@ import type {
 } from '../../zoom.types'
 import {
   formatUkrDate,
+  getNormalizedSessionType,
   getRemainingLabel,
   getSessionBadgeClass,
   getSessionMeta,
@@ -81,6 +83,8 @@ export function SessionCard({
   onEdit,
   onCancel,
   onRequestBooking,
+  hasFocusAccess,
+  onRestrictedGroupAction,
   onAddToCalendar,
   initialCompletionOpen = false,
 }: {
@@ -91,6 +95,8 @@ export function SessionCard({
   onEdit?: (id: string) => void;
   onCancel?: (id: string) => void;
   onRequestBooking?: (session: ZoomCalendarSession) => void;
+  hasFocusAccess?: boolean;
+  onRestrictedGroupAction?: () => void;
   onAddToCalendar: (session: ZoomCalendarSession) => void;
   initialCompletionOpen?: boolean;
 }) {
@@ -99,6 +105,7 @@ export function SessionCard({
   const [unbookSlot, { isLoading: unbooking }] = useUnbookSlotMutation();
   const [bookPrivateSlot, { isLoading: bookingPrivate }] = useBookPrivateSlotMutation();
   const [cancelPrivateBooking, { isLoading: cancelingPrivate }] = useCancelPrivateBookingMutation();
+  const [cancelCommerceRequest, { isLoading: cancelingCommerceRequest }] = useCancelZoomCommerceRequestMutation();
   const [createSwapRequest, { isLoading: creatingSwap }] = useCreateSwapRequestMutation();
   const [completeZoomSession, { isLoading: completing }] = useCompleteZoomSessionMutation();
   const [loadCompletionDraft, { isFetching: loadingCompletionDraft }] = useLazyGetZoomCompletionDraftQuery();
@@ -111,6 +118,7 @@ export function SessionCard({
   const [recordingRef, setRecordingRef] = useState(session.recordingUrl ?? '');
   const [completionDraftMessage, setCompletionDraftMessage] = useState<string | null>(null);
   const [completionDraftFailed, setCompletionDraftFailed] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const maxSlots = (session.remainingSlots !== undefined && session.attendeesCount !== undefined)
     ? session.remainingSlots + session.attendeesCount
@@ -121,14 +129,31 @@ export function SessionCard({
   const isIndividual = isIndividualSession(session);
   const isIntensive = isIntensiveSession(session);
   const statusVariant = sessionStatusVariant(session.battleStatus ?? session.status)
+  const showsGroupCapacity = ['group_practice', 'group', 'intensive'].includes(getNormalizedSessionType(session))
+  const coachStatusLabel = session.status === 'CANCELLED'
+    ? 'СКАСОВАНО'
+    : session.status === 'COMPLETED'
+      ? 'ЗАВЕРШЕНО'
+      : statusVariant.label
 
   const tooLateToUnbook = new Date(session.scheduledAt).getTime() - Date.now() < 24 * 60 * 60 * 1000;
-  const canUnbook = session.isMyBooking && !tooLateToUnbook && (isPrivate || isGroupPractice);
+  const canUnbook = session.isMyBooking
+    && !tooLateToUnbook
+    && session.status !== 'COMPLETED'
+    && session.status !== 'CANCELLED'
+    && (isPrivate || isIndividual || isGroupPractice);
+  const canCancelCoachSession = mode === 'coach'
+    && Boolean(session.canEdit)
+    && !isPastDate(session.scheduledAt)
+    && session.status !== 'COMPLETED'
+    && session.status !== 'CANCELLED';
   const canComplete = mode === 'coach' && Boolean(session.canEdit) && session.status !== 'COMPLETED' && session.status !== 'CANCELLED' && new Date(session.scheduledAt).getTime() <= Date.now();
   const hasCompletionOutcome = session.status === 'COMPLETED' && (session.actualAttendeeCount !== undefined || Boolean(session.summary) || Boolean(session.outcomeTopic) || Boolean(session.recordingUrl));
   const canLoadCompletionDraft = Boolean(session.recordingAvailable || session.recordingUrl || session.audioFileId);
   const commercePresentation = getUserZoomCommercePresentation(session);
-  const paymentBadgeLabel = session.commerceLabel ?? getZoomPaymentBadgeLabel(session);
+  const paymentBadgeLabel = mode === 'user' && session.commerceStatus
+    ? commercePresentation.label
+    : session.commerceLabel ?? getZoomPaymentBadgeLabel(session);
   const hasCommerceState = Boolean(session.commerceLabel);
   const isOccupiedForUser = session.slotStatus === 'booked' || (session.remainingSlots ?? 1) <= 0;
   const isPendingIndividualPayment =
@@ -136,6 +161,9 @@ export function SessionCard({
     && (isIndividual || isPrivate)
     && session.commerceStatus === 'APPROVED_PENDING_PAYMENT'
     && session.isMyPendingPayment === true
+    && !isPastDate(session.scheduledAt)
+    && session.status !== 'COMPLETED'
+    && session.status !== 'CANCELLED'
     && Boolean(session.checkoutUrl);
 
   const pendingPaymentAmount = session.priceCents !== undefined
@@ -234,13 +262,29 @@ export function SessionCard({
       return;
     }
 
-    if (isPrivate) {
-      await cancelPrivateBooking(session.id).unwrap();
-      return;
-    }
+    setCancelError(null);
+    try {
+      if (isPrivate || isIndividual) {
+        await cancelPrivateBooking(session.id).unwrap();
+        return;
+      }
 
-    if (isGroupPractice) {
-      await unbookSlot(session.id).unwrap();
+      if (isGroupPractice) {
+        await unbookSlot(session.id).unwrap();
+      }
+    } catch {
+      setCancelError('Не вдалося скасувати запис. Спробуй ще раз.');
+    }
+  };
+
+  const handleCancelCommerceRequest = async () => {
+    if (!session.commerceRequestId || cancelingCommerceRequest) return;
+    setCancelError(null);
+    try {
+      await cancelCommerceRequest(session.commerceRequestId).unwrap();
+      onClose();
+    } catch {
+      setCancelError('Не вдалося скасувати запит. Спробуй ще раз.');
     }
   };
 
@@ -250,7 +294,7 @@ export function SessionCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-300">
-              Індивідуальна сесія
+              ЗАПИТ СТВОРЕНО
             </p>
             <h3 className="mt-1 truncate text-[16px] font-semibold text-white">
               {session.topic || 'Zoom-сесія'}
@@ -259,6 +303,7 @@ export function SessionCard({
               {formatUkrDate(session.scheduledAt)}
               {session.durationMinutes ? ` · ${session.durationMinutes} хв` : ''}
             </p>
+            {session.coach && <p className="mt-1 text-[12px] text-white/70">{session.coach.name}</p>}
           </div>
 
           <button
@@ -274,7 +319,7 @@ export function SessionCard({
         <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-400/[0.08] p-3">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[12px] font-semibold text-amber-200">
-              🟠 {commercePresentation.label}
+              ОЧІКУЄ ОПЛАТИ
             </span>
 
             {pendingPaymentAmount && (
@@ -315,10 +360,19 @@ export function SessionCard({
           onClick={() => openExternalPaymentUrl(session.checkoutUrl!)}
           className={`mt-4 w-full text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
         >
-          {pendingPaymentAmount
-            ? `ОПЛАТИТИ ${pendingPaymentAmount}`
-            : 'ОПЛАТИТИ СЕСІЮ'}
+          ОПЛАТИТИ
         </button>
+
+        <button
+          type="button"
+          onClick={() => void handleCancelCommerceRequest()}
+          disabled={cancelingCommerceRequest || !session.commerceRequestId}
+          className="mt-2 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-[13px] font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {cancelingCommerceRequest ? 'СКАСОВУЄМО…' : 'СКАСУВАТИ ЗАПИТ'}
+        </button>
+
+        {cancelError && <p role="alert" className="mt-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-100">{cancelError}</p>}
 
         <p className="mt-2 text-center text-[10px] text-white/35">
           Zoom-посилання стане доступним після підтвердження оплати.
@@ -335,7 +389,9 @@ export function SessionCard({
             {getSessionMeta(session)}
           </span>
           <span className={`ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusVariant.badgeClass}`}>
-            {mode === 'user' && (isIndividual || isPrivate || isBattleReview) ? session.commerceLabel ?? statusVariant.label : statusVariant.label}
+            {mode === 'user' && (isIndividual || isPrivate || isBattleReview)
+              ? commercePresentation.label
+              : coachStatusLabel}
           </span>
           <h3 className={['mt-2 text-[15px] font-semibold leading-snug', statusVariant.textClass].join(' ')}>
             {session.topic}
@@ -355,7 +411,12 @@ export function SessionCard({
 
       {mode === 'coach' && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {session.attendeesCount !== undefined && maxSlots !== undefined && (
+          {(isIndividual || isPrivate) && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/50">
+              Учасник: {session.participantNames?.[0] ?? 'Учасник не призначений'}
+            </span>
+          )}
+          {showsGroupCapacity && session.attendeesCount !== undefined && maxSlots !== undefined && (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/50">
               {session.attendeesCount} / {maxSlots} заброньовано
             </span>
@@ -384,9 +445,11 @@ export function SessionCard({
         </p>
       )}
 
+      {cancelError && <p role="alert" className="mb-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-100">{cancelError}</p>}
+
       {hasCompletionOutcome && (
         <div className="mb-3 rounded-xl border border-emerald-400/15 bg-emerald-500/[0.06] px-3 py-2 text-[12px] leading-snug text-white/70">
-          <p className="font-semibold text-emerald-200">✅ Завершено</p>
+          <p className="font-semibold text-emerald-200">ЗАВЕРШЕНО</p>
           {session.actualAttendeeCount !== undefined && (
             <p className="mt-1">{session.actualAttendeeCount} були присутні</p>
           )}
@@ -430,6 +493,7 @@ export function SessionCard({
                   onAddToCalendar={onAddToCalendar}
                   onUnbook={canUnbook ? () => void handleUnbook() : undefined}
                   unbookDisabled={!canUnbook || unbooking || cancelingPrivate}
+                  unbookLoading={unbooking || cancelingPrivate}
                 />
               ) : session.isMyPendingPayment || hasCommerceState ? (
                 <span className="self-start rounded-full bg-amber-500/10 px-2 py-1 text-[12px] text-amber-200">
@@ -458,6 +522,7 @@ export function SessionCard({
                   onAddToCalendar={onAddToCalendar}
                   onUnbook={canUnbook ? () => void handleUnbook() : undefined}
                   unbookDisabled={!canUnbook || unbooking}
+                  unbookLoading={unbooking}
                 />
                 {session.myQuestion ? (
                   <div className="rounded-lg border border-emerald-400/15 bg-emerald-500/[0.06] px-3 py-2 text-[12px] text-emerald-100">
@@ -476,11 +541,19 @@ export function SessionCard({
               </div>
             ) : (
               <button
-                onClick={() => onRequestBooking?.(session)}
+                onClick={() => {
+                  if (hasFocusAccess === false) {
+                    onRestrictedGroupAction?.()
+                    return
+                  }
+                  onRequestBooking?.(session)
+                }}
                 disabled={booking}
                 className={`text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
               >
-                {booking ? 'Додаємо...' : 'Записатися'}
+                {hasFocusAccess === false
+                  ? 'АКТИВУВАТИ ДОСТУП'
+                  : booking ? 'Додаємо...' : 'Записатися'}
               </button>
             )
           )}
@@ -501,6 +574,7 @@ export function SessionCard({
                   onAddToCalendar={onAddToCalendar}
                   onUnbook={canUnbook ? () => void handleUnbook() : undefined}
                   unbookDisabled={!canUnbook || unbooking || cancelingPrivate}
+                  unbookLoading={unbooking || cancelingPrivate}
                 />
               ) : !(session.isMyPendingPayment || hasCommerceState) && (
                 isOccupiedForUser ? (
@@ -535,6 +609,7 @@ export function SessionCard({
               onAddToCalendar={onAddToCalendar}
               onUnbook={canUnbook ? () => void handleUnbook() : undefined}
               unbookDisabled={!canUnbook || unbooking || cancelingPrivate}
+              unbookLoading={unbooking || cancelingPrivate}
             />
           )}
         </div>
@@ -674,7 +749,7 @@ export function SessionCard({
           </span>
         )}
 
-        {mode === 'coach' && session.canEdit && (
+        {canCancelCoachSession && (
           <>
             <button
               onClick={() => onEdit?.(session.id)}
@@ -686,7 +761,7 @@ export function SessionCard({
               onClick={() => onCancel?.(session.id)}
               className="px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/[0.05] text-[12px] text-red-400/70 hover:bg-red-500/[0.1] transition-all"
             >
-              Скасувати
+              СКАСУВАТИ СЕСІЮ
             </button>
           </>
         )}

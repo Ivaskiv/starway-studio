@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuthRestoreStatus } from '@/features/auth/context/AuthRestoreContext'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import type { MiniAppPageId } from '@/features/social/types/miniapp'
+import { signalTelegramWebAppReady } from '@/features/social/utils/telegramWebApp'
 
 const MINI_APP_AUTH_TIMEOUT_MS = 3_000
 
@@ -45,9 +46,7 @@ export function useMiniAppTelegram({
   const [isBootstrappingAuth, setIsBootstrappingAuth] = useState(false)
 
   useEffect(() => {
-    if (typeof Telegram === 'undefined') return
-    Telegram.WebApp.ready()
-    Telegram.WebApp.expand()
+    signalTelegramWebAppReady()
   }, [])
 
   useEffect(() => {

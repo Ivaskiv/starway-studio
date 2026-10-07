@@ -20,11 +20,13 @@ import {
   useCreateUserIndividualRequestMutation,
   useGetIndividualAvailabilityQuery,
   useGetIndividualAvailabilitySummaryQuery,
+  useBookPrivateSlotMutation,
 } from './zoom.api';
 import { useGetMySessionsQuery } from './services/zoom.api';
 import {
   getSessionBorderClass,
   getSessionMeta,
+  getNormalizedSessionType,
   getZoomPaymentBadgeLabel,
   getUserZoomCommercePresentation,
   isZoomLinkActive,
@@ -32,11 +34,23 @@ import {
 import type { LeaderboardEntry, ZoomCalendarSession, ZoomSessionType } from './zoom.types';
 import { normalizeZoomHubSession } from './utils/zoomCalendar.utils';
 import ZoomCalendar from './components/calendar/Calendar';
+import { SessionCard } from './components/calendar/SessionCard';
 import { BattleInstruction } from './components/BattleInstruction';
 import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl';
 import { UserZoomStatusBadge } from './components/calendar/UserZoomStatusBadge'
+import { useAccessActions } from './hooks/useAccessActions'
 
 const RANK_EMOJI = ['🥇', '🥈', '🥉'];
+const INDIVIDUAL_REQUEST_CONTEXT_ERROR = 'Опиши запит кількома словами, щоб коуч розумів, з чим ти приходиш.';
+
+function validateIndividualRequestContext(value: string): string | null {
+  const normalized = value.trim();
+  if (normalized.length < 8 || normalized.length > 1000) return INDIVIDUAL_REQUEST_CONTEXT_ERROR;
+  const words = normalized.match(/\p{L}{2,}/gu) ?? [];
+  return words.some((word) => /[aeiouyаеиіоуяюєїыэё]/iu.test(word) || /^[A-ZА-ЯІЇЄҐЁ]{2,5}$/u.test(word))
+    ? null
+    : INDIVIDUAL_REQUEST_CONTEXT_ERROR;
+}
 
 // ── Mock Data ─────────────────────────────────────────────────────────────────
 
@@ -122,7 +136,10 @@ function formatIndividualDate(dateKey: string): string {
 
 function formatIndividualTime(iso: string): string {
   return new Intl.DateTimeFormat('uk-UA', {
-    hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: 'Europe/Kyiv',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
   }).format(new Date(iso));
 }
 
@@ -515,6 +532,80 @@ type UserPanelTab = 'sessions' | 'progress' | 'materials' | 'rewards' | 'ai' | '
 type UserProgressTab = 'overview' | 'goals' | 'statistics';
 type UserRewardsTab = 'all' | 'achievements' | 'bonuses' | 'levels';
 type UserCreateAction = 'menu' | 'group' | 'individual' | 'battle' | null;
+type UserSessionFilter = 'all' | 'group' | 'individual';
+type MySessionsFilter = 'upcoming' | 'past' | 'cancelled';
+
+export function getMySessionsFilterPresentation(
+  sessions: ZoomCalendarSession[],
+  filter: MySessionsFilter,
+  now: Date,
+): {
+  sessions: ZoomCalendarSession[]
+  counts: Record<MySessionsFilter, number>
+  emptyMessage: string
+} {
+  const mySessions = sessions.filter(
+    (session) => session.isMyBooking || session.isMyPendingPayment || session.commerceStatus === 'CANCELLED',
+  )
+  const byFilter: Record<MySessionsFilter, ZoomCalendarSession[]> = {
+    upcoming: mySessions.filter(
+      (session) => session.commerceStatus !== 'CANCELLED' && new Date(session.scheduledAt) >= now,
+    ),
+    past: mySessions.filter(
+      (session) => session.commerceStatus !== 'CANCELLED' && new Date(session.scheduledAt) < now,
+    ),
+    cancelled: mySessions.filter((session) => session.commerceStatus === 'CANCELLED'),
+  }
+  const emptyMessages: Record<MySessionsFilter, string> = {
+    upcoming: 'Немає майбутніх сесій.',
+    past: 'Немає минулих сесій.',
+    cancelled: 'Немає скасованих сесій.',
+  }
+
+  return {
+    sessions: byFilter[filter],
+    counts: {
+      upcoming: byFilter.upcoming.length,
+      past: byFilter.past.length,
+      cancelled: byFilter.cancelled.length,
+    },
+    emptyMessage: emptyMessages[filter],
+  }
+}
+
+export function filterUserCalendarSessions(
+  sessions: ZoomCalendarSession[],
+  filter: UserSessionFilter,
+): ZoomCalendarSession[] {
+  if (filter === 'all') return sessions
+
+  return sessions.filter((session) => {
+    const type = getNormalizedSessionType(session)
+    return filter === 'group'
+      ? type === 'group' || type === 'group_practice'
+      : type === 'individual' || type === 'private'
+  })
+}
+
+export function routeUserBookingCta({
+  hasFocusAccess,
+  openPayment,
+  openBookingFlow,
+  showAllSessions,
+}: {
+  hasFocusAccess?: boolean
+  openPayment: () => void
+  openBookingFlow: () => void
+  showAllSessions: () => void
+}): void {
+  if (hasFocusAccess === false) {
+    openPayment()
+    return
+  }
+
+  showAllSessions()
+  openBookingFlow()
+}
 
 export function UserZoomPanel({ userId }: UserZoomPanelProps) {
   const user = useAppSelector((state) => state.auth.user);
@@ -525,13 +616,22 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
     ? panel
     : 'sessions';
   const [activeProgressTab, setActiveProgressTab] = useState<UserProgressTab>('overview');
+  const [sessionFilter, setSessionFilter] = useState<UserSessionFilter>('all');
+  const [mySessionsFilter, setMySessionsFilter] = useState<MySessionsFilter>('upcoming');
+  const [accessMessage, setAccessMessage] = useState<string | null>(null);
   const [activeRewardsTab, setActiveRewardsTab] = useState<UserRewardsTab>('all');
   const [rewardDetailsOpen, setRewardDetailsOpen] = useState(false);
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+  const calendarMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  const nextMondayWindowEnd = new Date(now);
+  nextMondayWindowEnd.setDate(nextMondayWindowEnd.getDate() + 8);
+  const monthEnd = new Date(Math.max(
+    calendarMonthEnd.getTime(),
+    nextMondayWindowEnd.getTime(),
+  )).toISOString();
 
-  const { data: sessions = [] } = useGetCalendarSessionsQuery(
+  const { data: sessions = [], refetch: refetchCalendar } = useGetCalendarSessionsQuery(
     { from: monthStart, to: monthEnd, role: 'user', userId },
     {
       pollingInterval: 30_000,
@@ -539,7 +639,7 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
       refetchOnMountOrArgChange: true,
     },
   );
-  const { data: mySessionsResponse } = useGetMySessionsQuery(undefined);
+  const { data: mySessionsResponse, refetch: refetchMySessions } = useGetMySessionsQuery(undefined);
   const { data: leaderboard = [] } = useGetLeaderboardQuery();
   const [logProgress] = useLogBattleProgressMutation();
   const [acceptBattle] = useAcceptBattleMutation();
@@ -550,6 +650,8 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [createAction, setCreateAction] = useState<UserCreateAction>(null);
   const [requestedUserSession, setRequestedUserSession] = useState<ZoomCalendarSession | null>(null)
+  const [availableIndividualSlot, setAvailableIndividualSlot] = useState<ZoomCalendarSession | null>(null)
+  const [availableIndividualSlotError, setAvailableIndividualSlotError] = useState<string | null>(null)
   const [individualDate, setIndividualDate] = useState('');
   const [individualTime, setIndividualTime] = useState('');
   const [individualQuestion, setIndividualQuestion] = useState('');
@@ -565,6 +667,15 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
   const individualCalendarEnd = new Date(individualCalendarStart);
   individualCalendarEnd.setDate(individualCalendarEnd.getDate() + 41);
   const [createIndividualRequest, { isLoading: isCreatingIndividualRequest }] = useCreateUserIndividualRequestMutation();
+  const [bookPrivateSlot, { isLoading: isBookingAvailableIndividualSlot }] = useBookPrivateSlotMutation();
+  const { openPayment } = useAccessActions({
+    userId,
+    zoomAccess,
+    setMessage: setAccessMessage,
+    refetchCurrentWeek: refetchCalendar,
+    refetchUpcoming: refetchCalendar,
+    refetchMySessions,
+  });
   const {
     data: individualAvailability = [],
     isFetching: isFetchingIndividualAvailability,
@@ -601,10 +712,13 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
   const selectedIndividualDaySummary = individualAvailabilitySummary.find(
     (day) => day.date === individualDate,
   );
+  const individualQuestionValidationError = individualQuestion.trim()
+    ? validateIndividualRequestContext(individualQuestion)
+    : null;
   const canSubmitIndividualRequest = Boolean(
     individualDate
     && selectedIndividualSlot?.available
-    && individualQuestion.trim()
+    && !validateIndividualRequestContext(individualQuestion)
     && !isFetchingIndividualAvailability
     && !isIndividualAvailabilityError
   );
@@ -641,6 +755,14 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
   const individualCalendarGroupSessions = sessions.filter((session) =>
     session.type === 'group' || session.type === 'group_practice',
   );
+  const visibleCalendarSessions = filterUserCalendarSessions(sessions, sessionFilter);
+  const mySessionsPresentation = getMySessionsFilterPresentation(sessions, mySessionsFilter, now);
+  const myCalendarSessions = mySessionsPresentation.sessions;
+  const sessionFilterCounts: Record<UserSessionFilter, number> = {
+    all: sessions.length,
+    group: filterUserCalendarSessions(sessions, 'group').length,
+    individual: filterUserCalendarSessions(sessions, 'individual').length,
+  };
   const displayActiveBattle: ZoomCalendarSession | null = activeBattle;
   const displayLeaderboard: LeaderboardEntry[] = leaderboard;
   const myStats = leaderboard.find(e => e.userId === userId);
@@ -690,6 +812,35 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
   const handleDeclineBattle = (sessionId: string) => {
     declineBattle(sessionId).catch(console.error);
   };
+  const handleBookingCta = () => {
+    routeUserBookingCta({
+      hasFocusAccess: zoomAccess?.hasFocus,
+      openPayment: () => void openPayment(),
+      openBookingFlow: () => setCreateAction('menu'),
+      showAllSessions: () => setSessionFilter('all'),
+    });
+  };
+  const closeAvailableIndividualSlot = () => {
+    if (isBookingAvailableIndividualSlot) return
+    setAvailableIndividualSlot(null)
+    setAvailableIndividualSlotError(null)
+  }
+  const handleAvailableIndividualSlotBooking = async () => {
+    if (!availableIndividualSlot) return
+    if (zoomAccess?.hasFocus === false) {
+      await openPayment()
+      return
+    }
+
+    setAvailableIndividualSlotError(null)
+    try {
+      await bookPrivateSlot(availableIndividualSlot.id).unwrap()
+      closeAvailableIndividualSlot()
+      await Promise.all([refetchCalendar(), refetchMySessions()])
+    } catch {
+      setAvailableIndividualSlotError('Не вдалося надіслати запит. Спробуй ще раз.')
+    }
+  }
   const profileName = user?.firstName?.trim() || user?.email || userId;
   const profileInitials = profileName.slice(0, 2).toUpperCase();
   const hasAiMentorAccess = !getModuleAccess('AI_MENTOR').isLocked;
@@ -740,8 +891,9 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
       setIndividualRequestError('Обери майбутні дату й час.');
       return;
     }
-    if (!individualQuestion.trim()) {
-      setIndividualRequestError('Опиши коротко питання або проблему.');
+    const contextError = validateIndividualRequestContext(individualQuestion);
+    if (contextError) {
+      setIndividualRequestError(contextError);
       return;
     }
     try {
@@ -797,8 +949,8 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
             {profileInitials}
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-[15px] font-semibold leading-tight text-[var(--text-primary)]">{profileName}</h1>
-            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Твій простір розвитку</p>
+            <h1 className="truncate text-[15px] font-semibold leading-tight text-[var(--text-primary)]">Zoom Календар</h1>
+            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Групові та індивідуальні сесії Starway</p>
           </div>
         </div>
         <span
@@ -809,41 +961,118 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
         </span>
       </header>
 
-      <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/[0.08] bg-black/15 p-1">
-        {([
-          { id: 'sessions', label: 'Мої сесії' },
-          { id: 'progress', label: 'Мій прогрес' },
-          { id: 'materials', label: 'Матеріали' },
-        ] as const).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={[
-              'rounded-lg border px-1.5 py-1.5 text-[11px] font-semibold transition-colors',
-              activeTab === tab.id
-                ? 'border-sky-300/35 bg-sky-500/18 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
-                : 'border-transparent text-[var(--text-muted)] hover:bg-white/[0.04] hover:text-[var(--text-primary)]',
-            ].join(' ')}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {accessMessage && (
+        <p className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/70">
+          {accessMessage}
+        </p>
+      )}
 
       {activeTab === 'sessions' && (
         <section className="min-w-0">
-          <div className="mb-3">
-            <button
-              type="button"
-              onClick={() => setCreateAction('menu')}
-              className="btn-liquid-primary w-full rounded-[var(--btn-radius)] px-4 py-2.5 text-sm font-semibold"
-            >
-              + ДОДАТИ СЛОТ
-            </button>
-
+          <section className="mb-4 rounded-2xl border border-white/[0.08] bg-black/15 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-white">Мої сесії</h2>
+              {zoomAccess?.hasFocus !== false && (
+                <button
+                  type="button"
+                  onClick={handleBookingCta}
+                  className="btn-liquid-primary shrink-0 rounded-xl px-3 py-2 text-[11px] font-semibold"
+                >
+                  ЗАПИСАТИСЯ НА СЕСІЮ
+                </button>
+              )}
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl border border-white/[0.08] bg-black/15 p-1">
+              {([
+                { id: 'upcoming', label: 'Майбутні' },
+                { id: 'past', label: 'Минулі' },
+                { id: 'cancelled', label: 'Скасовані' },
+              ] as const).map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setMySessionsFilter(filter.id)}
+                  className={mySessionsFilter === filter.id
+                    ? 'rounded-lg bg-sky-500/18 px-1.5 py-2 text-[10px] font-semibold text-sky-100 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.22)]'
+                    : 'rounded-lg px-1.5 py-2 text-[10px] font-semibold text-[var(--text-muted)]'}
+                >
+                  <span>{filter.label}</span>
+                  <span className="ml-1 text-sky-100/70">{mySessionsPresentation.counts[filter.id]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 space-y-2">
+              {myCalendarSessions.map((session) => (
+                <SessionCard
+                  key={session.id}
+                  session={session}
+                  mode="user"
+                  userId={userId}
+                  onClose={() => undefined}
+                  onAddToCalendar={() => undefined}
+                />
+              ))}
+              {myCalendarSessions.length === 0 && (
+                <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-3 text-center">
+                  <p className="text-sm text-white/50">{mySessionsPresentation.emptyMessage}</p>
+                  {mySessionsFilter === 'upcoming' && zoomAccess?.hasFocus !== false && (
+                    <button
+                      type="button"
+                      onClick={handleBookingCta}
+                      className="mt-2 text-xs font-semibold text-sky-100 underline underline-offset-2"
+                    >
+                      ЗАПИСАТИСЯ НА СЕСІЮ
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+          <div className="mb-3 grid grid-cols-3 gap-1 rounded-xl border border-white/[0.08] bg-black/15 p-1">
+            {([
+              { id: 'all', label: 'Усі сесії' },
+              { id: 'group', label: 'Групові' },
+              { id: 'individual', label: 'Індивідуальні' },
+            ] as const).map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setSessionFilter(filter.id)}
+                className={[
+                  'rounded-lg px-1.5 py-2 text-[10px] font-semibold transition-colors',
+                  sessionFilter === filter.id
+                    ? 'bg-sky-500/18 text-sky-100 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.22)]'
+                    : 'text-[var(--text-muted)] hover:bg-white/[0.04] hover:text-[var(--text-primary)]',
+                ].join(' ')}
+              >
+                <span>{filter.label}</span>
+                <span className="ml-1 text-sky-100/70">{sessionFilterCounts[filter.id]}</span>
+              </button>
+            ))}
           </div>
-
+          {visibleCalendarSessions.length === 0 && (
+            <section className="mb-3 rounded-2xl border border-dashed border-white/15 bg-white/[0.025] px-4 py-4 text-center">
+              <p className="text-sm text-white/60">За цим фільтром цього тижня сесій немає.</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {sessionFilter !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setSessionFilter('all')}
+                    className="rounded-xl border border-sky-300/25 px-3 py-2 text-xs font-semibold text-sky-100"
+                  >
+                    ПОКАЗАТИ ВСІ
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleBookingCta}
+                  className="rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white/85"
+                >
+                  НАЙБЛИЖЧІ СЛОТИ
+                </button>
+              </div>
+            </section>
+          )}
           {createAction !== null && (
             <BaseModal
               isOpen
@@ -855,9 +1084,9 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
               <div>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">Нова Zoom-сесія</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">Запис на Zoom</p>
                     <h2 className="mt-1 text-lg font-semibold text-white">
-                      {createAction === 'menu' ? 'Обери формат' : createAction === 'group' ? 'Групова практика' : createAction === 'individual' ? 'Індивідуальна сесія' : 'Zoom Battle'}
+                      {createAction === 'menu' ? 'Обери сесію' : createAction === 'group' ? 'Групова практика' : createAction === 'individual' ? 'Індивідуальний запит' : 'Zoom Battle'}
                     </h2>
                   </div>
                   <button type="button" onClick={closeCreateModal} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-lg text-white/50">×</button>
@@ -865,9 +1094,9 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
 
                 {createAction === 'menu' && (
                   <div className="mt-5 grid gap-2">
-                    <button type="button" onClick={() => setCreateAction('group')} className="rounded-2xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-3 text-left text-sm font-semibold text-emerald-100">👥 ГРУПОВА</button>
-                    <button type="button" onClick={() => setCreateAction('individual')} className="rounded-2xl border border-sky-300/25 bg-sky-500/10 px-4 py-3 text-left text-sm font-semibold text-sky-100">👤 ІНДИВІДУАЛЬНА</button>
-                    <button type="button" onClick={() => setCreateAction('battle')} className="rounded-2xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 text-left text-sm font-semibold text-amber-100">⚔️ BATTLE</button>
+                    <button type="button" onClick={() => setCreateAction('group')} className="rounded-2xl border border-emerald-300/25 bg-emerald-500/10 px-4 py-3 text-left text-sm font-semibold text-emerald-100">ГРУПОВА ПРАКТИКА</button>
+                    <button type="button" onClick={() => setCreateAction('individual')} className="rounded-2xl border border-sky-300/25 bg-sky-500/10 px-4 py-3 text-left text-sm font-semibold text-sky-100">ІНДИВІДУАЛЬНИЙ ЗАПИТ</button>
+                    <button type="button" onClick={() => setCreateAction('battle')} className="rounded-2xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 text-left text-sm font-semibold text-amber-100">ZOOM BATTLE</button>
                   </div>
                 )}
 
@@ -1049,7 +1278,11 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
                           setIndividualQuestion(event.target.value);
                           setIndividualRequestError(null);
                         }} rows={4} className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-white" /></label>
-                        {individualRequestError && <p className="text-sm text-amber-300">{individualRequestError}</p>}
+                        {(individualRequestError ?? individualQuestionValidationError) && (
+                          <p className="text-sm text-amber-300">
+                            {individualRequestError ?? individualQuestionValidationError}
+                          </p>
+                        )}
                         <button type="button" onClick={() => void handleIndividualRequest()} disabled={!canSubmitIndividualRequest || isCreatingIndividualRequest} className="btn-liquid-primary w-full rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-50">{isCreatingIndividualRequest ? 'Створюємо…' : 'Продовжити'}</button>
                       </>
                     )}
@@ -1061,13 +1294,79 @@ export function UserZoomPanel({ userId }: UserZoomPanelProps) {
             </BaseModal>
           )}
 
+          <BaseModal
+            isOpen={availableIndividualSlot !== null}
+            onClose={closeAvailableIndividualSlot}
+            containerClassName="z-[100] px-3 py-4"
+            panelClassName="max-w-lg rounded-[24px] border border-white/10 bg-[#0d1117] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.48)]"
+          >
+            {availableIndividualSlot && (
+              <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="rounded-full bg-sky-500/15 px-2 py-1 text-[10px] font-semibold text-sky-100">ІНДИВІДУАЛЬНА</span>
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-100">ВІЛЬНИЙ СЛОТ</span>
+                    </div>
+                    <h2 className="mt-3 text-[16px] font-semibold text-white">{availableIndividualSlot.topic || 'Індивідуальна стратегічна сесія'}</h2>
+                    <p className="mt-1 text-[12px] text-white/60">
+                      {fmtDateTime(availableIndividualSlot.scheduledAt)} · {availableIndividualSlot.durationMinutes ?? 60} хв
+                    </p>
+                  </div>
+                  <button type="button" onClick={closeAvailableIndividualSlot} aria-label="Закрити" className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-lg text-white/50">×</button>
+                </div>
+                <p className="mt-4 text-[13px] leading-relaxed text-white/70">Після запису коуч підтвердить сесію.<br />Ми повідомимо тебе в Telegram.</p>
+                {availableIndividualSlotError && <p role="alert" className="mt-3 text-sm text-amber-300">{availableIndividualSlotError}</p>}
+                <button
+                  type="button"
+                  onClick={() => void handleAvailableIndividualSlotBooking()}
+                  disabled={isBookingAvailableIndividualSlot}
+                  className="btn-liquid-primary mt-4 w-full rounded-2xl px-4 py-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  {isBookingAvailableIndividualSlot
+                    ? 'НАДСИЛАЄМО ЗАПИТ…'
+                    : zoomAccess?.hasFocus === false
+                      ? 'АКТИВУВАТИ ДОСТУП І ЗАПИСАТИСЯ'
+                      : 'ЗАПИСАТИСЯ НА СЕСІЮ'}
+                </button>
+              </div>
+            )}
+          </BaseModal>
+
           <ZoomCalendar
             mode="user"
             userId={userId}
-            sessionSource={{ from: monthStart, to: monthEnd, sessions }}
+            sessionSource={{ from: monthStart, to: monthEnd, sessions: visibleCalendarSessions }}
             requestedUserSession={requestedUserSession}
             onRequestedUserSessionHandled={() => setRequestedUserSession(null)}
+            hasFocusAccess={zoomAccess?.hasFocus}
+            onRestrictedGroupAction={() => void openPayment()}
+            onFindAvailableSlots={handleBookingCta}
+            onAvailableIndividualSlot={(session) => {
+              if (zoomAccess?.hasFocus === false) {
+                void openPayment()
+                return
+              }
+              const commerce = getUserZoomCommercePresentation(session)
+              if (commerce.state !== 'AVAILABLE' || commerce.label !== 'ВІЛЬНИЙ СЛОТ') return
+              setAvailableIndividualSlot(session)
+              setAvailableIndividualSlotError(null)
+            }}
           />
+          {zoomAccess?.hasFocus === false && (
+            <section className="mt-3 rounded-2xl border border-sky-300/20 bg-sky-500/[0.08] p-3 text-center">
+              <button
+                type="button"
+                onClick={handleBookingCta}
+                className="btn-liquid-primary w-full rounded-xl px-3 py-3 text-[11px] font-semibold"
+              >
+                АКТИВУВАТИ ДОСТУП І ЗАПИСАТИСЯ
+              </button>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Після оплати ти зможеш бронювати сесії та отримувати нагадування.
+              </p>
+            </section>
+          )}
         </section>
       )}
 

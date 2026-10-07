@@ -255,8 +255,16 @@ function resolveTelegramWebhookUpdateType(update: unknown): string | null {
   return candidate
 }
 
+export function configureTrustedProxy(app: Express): void {
+  // The closest hop is either local cloudflared in development or the
+  // platform proxy in Render. Trust exactly that hop so express-rate-limit
+  // can safely use its forwarded client address without trusting every proxy.
+  app.set('trust proxy', 1)
+}
+
 export function createApp(): Express {
   const app = express()
+  configureTrustedProxy(app)
   const START_TELEGRAM_BOT = process.env.START_TELEGRAM_BOT === 'true'
   const TELEGRAM_WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL?.trim() || ''
   const TELEGRAM_WEBHOOK_SECRET =

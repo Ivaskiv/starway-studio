@@ -7,6 +7,7 @@ import {
   sendOpsTelegramMessage,
 } from '../../../lib/telegram.js'
 import { logger } from '../../../utils/logger.js'
+import { resolveTelegramWebappBaseUrl } from '../../../config/webapp.js'
 import {
   afterZoomOperation,
   createFullSession,
@@ -132,10 +133,7 @@ export function registerZoomAdminHandlers(): void {
    },
    })
    await replyWithTelegramMessage(ctx, `Zoom-посилання оновлено.\n${session.topic}`)
-   const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-   const panelUrl = panelBase
-   ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom`
-   : ''
+   const panelUrl = `${resolveTelegramWebappBaseUrl()}/app/dashboard/zoom`
    void sendOpsTelegramMessage(
    `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n` +
    `Тип події: Редагування сесії\n` +
@@ -182,10 +180,7 @@ export function registerZoomAdminHandlers(): void {
             `Новий час: ${updated.scheduledAt.toLocaleString('uk-UA')}\n` +
             'Нагадування перераховано.'
         )
-        const panelBase = process.env.PUBLIC_FRONTEND_URL?.trim() ?? ''
-        const panelUrl = panelBase
-          ? `${panelBase.replace(/\/$/, '')}/app/dashboard/zoom`
-          : ''
+        const panelUrl = `${resolveTelegramWebappBaseUrl()}/app/dashboard/zoom`
         void sendOpsTelegramMessage(
           `ТРАНЗАКЦІЙНИЙ ЗВІТ\n\n` +
             `Тип події: Редагування сесії\n` +

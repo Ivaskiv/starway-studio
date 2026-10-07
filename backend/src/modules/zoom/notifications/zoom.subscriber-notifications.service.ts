@@ -125,14 +125,14 @@ export async function notifySubscribersNewSession(
       `${dateStr}\n${session.topic}\n\n` +
       `Діагностика зафіксувала пріоритетну точку: ${focus}.\n` +
       'Саме цей патерн розбирається на живих практиках ФОКУС.\n\n' +
-      'Для участі необхідно активувати доступ.'
+      'Ця групова Zoom-практика доступна учасникам ФОКУСУ.'
     try {
       await sendTelegramMessage(telegramBot, tgId, leadText, {
         replyMarkup: {
           inline_keyboard: [
             [
               {
-                text: 'Активувати доступ до ФОКУС',
+                text: 'АКТИВУВАТИ ФОКУС',
                 callback_data: 'open_focus_payment',
               },
             ],

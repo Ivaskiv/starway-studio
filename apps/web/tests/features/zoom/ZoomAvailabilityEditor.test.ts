@@ -36,6 +36,7 @@ import {
   getWeekDateKeys,
   timeValue,
   validateIndividualWindow,
+  RegularSchedule,
   ZoomAvailabilityEditor,
 } from '../../../src/features/zoom/ZoomAvailabilityEditor'
 
@@ -112,6 +113,30 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
     ])
   })
 
+  it('does not create a no-op reset when the displayed week already inherits the recurring schedule', () => {
+    expect(buildWeekOverrideResets([
+      { date: '2026-09-21', source: 'recurring', hasOverride: false, windows: [createIndividualWindow(1)] },
+      { date: '2026-09-22', source: 'recurring', hasOverride: false, windows: [] },
+    ])).toEqual([])
+  })
+
+  it('shows that a week already follows the recurring schedule instead of offering a no-op reset', () => {
+    const original = weekDays.map((day) => ({ ...day }))
+    weekDays.splice(0, weekDays.length, ...weekDays.map((day) => ({ ...day, source: 'recurring' as const, hasOverride: false })))
+
+    try {
+      const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+        weekAnchor: new Date('2026-09-23T12:00:00.000Z'), sessions: [],
+        onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+      }))
+
+      expect(markup).toContain('Тиждень вже за звичним графіком.')
+      expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?ЗАСТОСУВАТИ ЗВИЧНИЙ ГРАФІК/)
+    } finally {
+      weekDays.splice(0, weekDays.length, ...original)
+    }
+  })
+
   it('renders exactly seven compact canonical week rows without opening date editors', () => {
     const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
       weekAnchor: new Date('2026-09-23T12:00:00.000Z'), sessions: [],
@@ -119,12 +144,60 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
     }))
 
     expect(markup.match(/data-availability-week-row/g)).toHaveLength(7)
-    expect(markup).toContain('Пн, 21.09')
+    expect(markup).toContain('Пн')
+    expect(markup).toContain('21.09')
+    expect(markup).toContain('ON')
+    expect(markup).toContain('OFF')
     expect(markup).toContain('09:00–16:00')
     expect(markup).toContain('ВИХІДНИЙ')
     expect(markup).toContain('ЗАСТОСУВАТИ ЗВИЧНИЙ ГРАФІК')
     expect(markup.indexOf('ЗАСТОСУВАТИ ЗВИЧНИЙ ГРАФІК')).toBeGreaterThan(markup.lastIndexOf('data-availability-week-row'))
     expect(markup).not.toContain('Доступний час')
     expect(markup).not.toContain('ЗБЕРЕГТИ ТИЖДЕНЬ')
+  })
+
+  it('keeps the availability overview compact without duplicating calendar sessions until editing', () => {
+    const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+      weekAnchor: new Date('2026-09-23T12:00:00.000Z'),
+      sessions: [{
+        id: 'scheduled-session', scheduledAt: '2026-09-22T14:30:00.000Z', topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', canEdit: true, durationMinutes: 60,
+      }],
+      onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+    }))
+
+    expect(markup).not.toContain('data-availability-sessions="2026-09-22"')
+    expect(markup).not.toContain('Індивідуальна сесія')
+    expect(markup).not.toContain('Доступний час')
+  })
+
+  it('shows the OFF day without duplicating its existing session in availability overview', () => {
+    const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+      weekAnchor: new Date('2026-09-23T12:00:00.000Z'),
+      sessions: [{
+        id: 'off-day-session', scheduledAt: '2026-09-24T07:00:00.000Z', topic: 'Раніше запланована зустріч',
+        status: 'SCHEDULED', type: 'individual', zoomLink: '', canEdit: true, durationMinutes: 60,
+      }],
+      onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+    }))
+
+    expect(markup).toContain('data-availability-week-row="2026-09-24"')
+    expect(markup).not.toContain('data-availability-sessions="2026-09-24"')
+    expect(markup).not.toContain('Раніше запланована зустріч')
+  })
+
+  it('renders compact regular schedule rows with ON/OFF badges and split recurring windows', () => {
+    const sundayMorning = { ...createIndividualWindow(0), id: 'sunday-morning', hour: 9, endHour: 16 }
+    const sundayEvening = { ...createIndividualWindow(0), id: 'sunday-evening', hour: 19, endHour: 20 }
+    const markup = renderToStaticMarkup(createElement(RegularSchedule, {
+      slots: [sundayMorning, sundayEvening], onChange: vi.fn(),
+    }))
+
+    expect(markup.match(/data-availability-regular-row/g)).toHaveLength(7)
+    expect(markup).toContain('ON')
+    expect(markup).toContain('OFF')
+    expect(markup).toContain('09:00–16:00, 19:00–20:00')
+    expect(markup).toContain('ВИХІДНИЙ')
+    expect(markup).not.toContain('РЕДАГУВАТИ')
   })
 })

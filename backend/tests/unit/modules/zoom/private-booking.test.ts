@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockGetUserAccessState, mockCreateRequest, mockResolveZoomIndividualPaymentTerms, mockSendDedupedTelegramMessage, prisma } = vi.hoisted(() => ({
+const { mockGetUserAccessState, mockCreateRequest, mockResolveZoomIndividualPaymentTerms, mockGetIndividualAvailabilityForScheduledAt, mockSendDedupedTelegramMessage, prisma } = vi.hoisted(() => ({
   mockGetUserAccessState: vi.fn(),
   mockCreateRequest: vi.fn(),
   mockResolveZoomIndividualPaymentTerms: vi.fn(() => ({ amount: 1, currency: 'UAH' })),
+  mockGetIndividualAvailabilityForScheduledAt: vi.fn(),
   mockSendDedupedTelegramMessage: vi.fn(),
   prisma: {
     zoomSession: { findUnique: vi.fn() },
@@ -20,6 +21,9 @@ vi.mock('../../../../src/db/client.js', () => ({ prisma }))
 vi.mock('../../../../src/modules/zoom/commerce/zoom.commerce-request.service.js', () => ({
   createRequest: (...args: unknown[]) => mockCreateRequest(...args),
   resolveZoomIndividualPaymentTerms: () => mockResolveZoomIndividualPaymentTerms(),
+}))
+vi.mock('../../../../src/modules/zoom/booking/zoom.availability.service.js', () => ({
+  getIndividualAvailabilityForScheduledAt: (...args: unknown[]) => mockGetIndividualAvailabilityForScheduledAt(...args),
 }))
 vi.mock('../../../../src/lib/telegram.js', () => ({
   bot: {}, coachBot: {},
@@ -44,6 +48,10 @@ describe('private booking commerce request', () => {
       capacity: 1, _count: { attendees: 0 },
     })
     prisma.zoomCommerceRequest.findFirst.mockResolvedValue(null)
+    mockGetIndividualAvailabilityForScheduledAt.mockResolvedValue({
+      candidate: { available: true },
+      alternatives: [],
+    })
     mockCreateRequest.mockResolvedValue({
       id: 'request-1', status: 'REQUESTED', checkoutOrderReference: null,
     })
@@ -81,6 +89,35 @@ describe('private booking commerce request', () => {
       capacity: 1, _count: { attendees: 1 },
     })
     await expect(bookPrivateSlot('user-2', 'session-1')).rejects.toThrow('slot_full')
+    expect(mockCreateRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects a stale pre-created slot after the coach turns that date off', async () => {
+    mockGetIndividualAvailabilityForScheduledAt.mockResolvedValue({
+      candidate: { available: false, reason: 'Час недоступний у розкладі коуча' },
+      alternatives: [],
+    })
+
+    await expect(bookPrivateSlot('user-1', 'session-1')).rejects.toThrow('slot_unavailable')
+    expect(mockGetIndividualAvailabilityForScheduledAt).toHaveBeenCalledWith({
+      expertId: 'expert-1',
+      scheduledAt: expect.any(Date),
+    })
+    expect(mockCreateRequest).not.toHaveBeenCalled()
+  })
+
+  it('keeps an existing booked request unchanged when availability later changes', async () => {
+    prisma.zoomCommerceRequest.findFirst.mockResolvedValue({ id: 'request-1', status: 'PAID' })
+    mockGetIndividualAvailabilityForScheduledAt.mockResolvedValue({
+      candidate: { available: false, reason: 'Час недоступний у розкладі коуча' },
+      alternatives: [],
+    })
+
+    await expect(bookPrivateSlot('user-1', 'session-1')).resolves.toEqual({
+      success: true,
+      request: { id: 'request-1', status: 'PAID' },
+    })
+    expect(mockGetIndividualAvailabilityForScheduledAt).not.toHaveBeenCalled()
     expect(mockCreateRequest).not.toHaveBeenCalled()
   })
 

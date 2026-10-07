@@ -56,15 +56,25 @@ export async function getCalendarSessions(args: {
         email: string | null
       }
     }>;
+    expert?: { id: string; displayName: string } | null;
     isMyBooking?: boolean;
   })[]
 > {
   const { from, to, role, userId, expertId } = args
+  const userVisibility = {
+    OR: [
+      { requests: { path: ['type'], equals: 'group_practice' } },
+      { type: ZoomSessionType.GROUP },
+      { attendees: { some: { userId } } },
+      { commerceRequests: { some: { requesterUserId: userId } } },
+    ],
+  }
 
   if (role === 'coach') {
     return prisma.zoomSession.findMany({
       where: { expertId, scheduledAt: { gte: from, lte: to } },
       include: {
+        expert: { select: { id: true, displayName: true } },
         _count: { select: { attendees: true } },
         attendees: {
           select: {
@@ -85,14 +95,10 @@ export async function getCalendarSessions(args: {
       where: {
         scheduledAt: { gte: from, lte: to },
         status: { not: ZoomStatus.CANCELLED },
-        OR: [
-          { requests: { path: ['type'], equals: 'group_practice' } },
-          { requests: { path: ['type'], equals: 'individual' } },
-          { type: ZoomSessionType.GROUP },
-          { commerceRequests: { some: { requesterUserId: userId } } },
-        ],
+        ...userVisibility,
       },
       include: {
+        expert: { select: { id: true, displayName: true } },
         _count: { select: { attendees: true } },
         attendees: {
           select: {
@@ -134,14 +140,10 @@ export async function getCalendarSessions(args: {
         expertId,
         scheduledAt: { gte: from, lte: to },
         status: { not: ZoomStatus.CANCELLED },
-        OR: [
-          { requests: { path: ['type'], equals: 'group_practice' } },
-          { requests: { path: ['type'], equals: 'individual' } },
-          { type: ZoomSessionType.GROUP },
-          { commerceRequests: { some: { requesterUserId: userId } } },
-        ],
+        ...userVisibility,
       },
       include: {
+        expert: { select: { id: true, displayName: true } },
         _count: { select: { attendees: true } },
         attendees: {
           select: {
@@ -185,14 +187,10 @@ export async function getCalendarSessions(args: {
         expertId,
         scheduledAt: { gte: from, lte: to },
         status: { not: ZoomStatus.CANCELLED },
-        OR: [
-          { requests: { path: ['type'], equals: 'group_practice' } },
-          { requests: { path: ['type'], equals: 'individual' } },
-          { type: ZoomSessionType.GROUP },
-          { commerceRequests: { some: { requesterUserId: userId } } },
-        ],
+        ...userVisibility,
       },
       include: {
+        expert: { select: { id: true, displayName: true } },
         _count: { select: { attendees: true } },
         attendees: {
           select: {
@@ -231,15 +229,10 @@ export async function getCalendarSessions(args: {
       expertId,
       scheduledAt: { gte: from, lte: to },
       status: { not: ZoomStatus.CANCELLED },
-      OR: [
-        { requests: { path: ['type'], equals: 'group_practice' } },
-        { requests: { path: ['type'], equals: 'individual' } },
-        { type: ZoomSessionType.GROUP },
-        { attendees: { some: { userId } } },
-        { commerceRequests: { some: { requesterUserId: userId } } },
-      ],
+      ...userVisibility,
     },
     include: {
+      expert: { select: { id: true, displayName: true } },
       _count: { select: { attendees: true } },
       attendees: {
         select: {

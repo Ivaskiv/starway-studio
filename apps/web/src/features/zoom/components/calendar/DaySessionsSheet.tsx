@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import type { ZoomCalendarSession } from '../../zoom.types'
 import {
   getNormalizedSessionType,
   getSessionMeta,
   isPastDate,
   isGroupPracticeSession,
+  isIndividualSession,
   isPrivateSession,
 } from '../../zoom.utils'
 import {
@@ -29,6 +31,7 @@ export function DaySessionsSheet({
 }) {
   const [unbookSlot, { isLoading: unbooking }] = useUnbookSlotMutation()
   const [cancelPrivateBooking, { isLoading: cancelingPrivate }] = useCancelPrivateBookingMutation()
+  const [actionError, setActionError] = useState<string | null>(null)
   const dateLabel = selectedDate.toLocaleDateString('uk-UA', {
     weekday: 'long',
     day: 'numeric',
@@ -40,15 +43,23 @@ export function DaySessionsSheet({
     : [];
 
   const canUnbookSession = (session: ZoomCalendarSession) =>
-    isGroupPracticeSession(session) || isPrivateSession(session)
+    !isPastDate(session.scheduledAt)
+    && session.status !== 'COMPLETED'
+    && session.status !== 'CANCELLED'
+    && (isGroupPracticeSession(session) || isPrivateSession(session) || isIndividualSession(session))
 
   const handleUnbook = async (session: ZoomCalendarSession) => {
-    if (isGroupPracticeSession(session)) {
-      await unbookSlot(session.id).unwrap()
-      return
-    }
+    setActionError(null)
+    try {
+      if (isGroupPracticeSession(session)) {
+        await unbookSlot(session.id).unwrap()
+        return
+      }
 
-    await cancelPrivateBooking(session.id).unwrap()
+      await cancelPrivateBooking(session.id).unwrap()
+    } catch {
+      setActionError('Не вдалося скасувати запис. Спробуй ще раз.')
+    }
   }
 
   return (
@@ -76,6 +87,7 @@ export function DaySessionsSheet({
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto px-4 py-4">
+          {actionError && <p role="alert" className="mb-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-100">{actionError}</p>}
           {selectedSessions.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
               На цей день сесій немає
@@ -112,6 +124,7 @@ export function DaySessionsSheet({
                             onAddToCalendar={onAddToCalendar}
                             onUnbook={() => void handleUnbook(session)}
                             unbookDisabled={unbooking || cancelingPrivate}
+                            unbookLoading={unbooking || cancelingPrivate}
                           />
                         ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
                           <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">
@@ -164,6 +177,7 @@ export function DaySessionsSheet({
                             onAddToCalendar={onAddToCalendar}
                             onUnbook={() => void handleUnbook(session)}
                             unbookDisabled={unbooking || cancelingPrivate}
+                            unbookLoading={unbooking || cancelingPrivate}
                           />
                         ) : normalizedSessionType === 'battle_review' || isPast || session.status === 'CANCELLED' || session.status === 'COMPLETED' ? (
                           <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/35">

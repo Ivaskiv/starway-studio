@@ -45,7 +45,11 @@ export default function ZoomCalendarPage(_: ZoomCalendarPageProps) {
   )
   const effectiveRole = user?.activeRole ?? role ?? user?.role ?? null
   const isCoach = Boolean(user && isCoachRole(effectiveRole))
-  const canSeePersonalCalendar = Boolean(user && (isCoach || hasPaidAccess(user)))
+  // The Telegram Mini App calendar is a schedule surface for every authenticated USER.
+  // Booking remains gated by UserZoomPanel's existing access action.
+  const canSeePersonalCalendar = Boolean(
+    user && (isCoach || hasPaidAccess(user) || isTelegramRuntime),
+  )
   const shouldShowPersonalCalendar = canSeePersonalCalendar
   const isBrowserFallback = !isTelegramRuntime || !hasTelegramInitData
   const shouldWaitForStandaloneAuth = authStatus === 'loading' && !isTelegramRuntime

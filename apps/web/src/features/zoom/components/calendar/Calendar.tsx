@@ -11,6 +11,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import {
   getNormalizedSessionType,
+  getUserZoomCommercePresentation,
   getSessionMeta,
   getSlotDotClass,
   isPastDate,
@@ -53,6 +54,40 @@ const UK_MONTH_GENITIVE = [
   'листопада',
   'грудня',
 ]
+
+export function routeUserBookingAttempt({
+  session,
+  hasFocusAccess,
+  onAccessRequired,
+  onBookingAllowed,
+}: {
+  session: ZoomCalendarSession
+  hasFocusAccess?: boolean
+  onAccessRequired?: () => void
+  onBookingAllowed: () => void
+}): void {
+  if (!session.isMyBooking && hasFocusAccess === false) {
+    onAccessRequired?.()
+    return
+  }
+
+  onBookingAllowed()
+}
+
+export function isAvailableIndividualSlot(session: ZoomCalendarSession): boolean {
+  const normalizedType = getNormalizedSessionType(session)
+  return (
+    (normalizedType === 'individual' || normalizedType === 'private')
+    && !session.isMyBooking
+    && !session.isMyPendingPayment
+    && !session.commerceStatus
+    && session.slotStatus !== 'booked'
+    && (session.remainingSlots ?? 1) > 0
+    && !isPastDate(session.scheduledAt)
+    && session.status !== 'CANCELLED'
+    && session.status !== 'COMPLETED'
+  )
+}
 
 function getSessionCapacityLabel(session: ZoomCalendarSession): string | null {
   if (session.attendeesCount === undefined) return null
@@ -182,6 +217,10 @@ export default function Calendar(
   props: CalendarProps & {
     requestedUserSession?: ZoomCalendarSession | null
     onRequestedUserSessionHandled?: () => void
+    hasFocusAccess?: boolean
+    onRestrictedGroupAction?: () => void
+    onFindAvailableSlots?: () => void
+    onAvailableIndividualSlot?: (session: ZoomCalendarSession) => void
   },
 ) {
   const {
@@ -263,6 +302,9 @@ export default function Calendar(
       ? `${firstWeekDay.getDate()}–${lastWeekDay.getDate()} ${UK_MONTH_GENITIVE[lastWeekDay.getMonth()]} ${lastWeekDay.getFullYear()}`
       : `${firstWeekDay.getDate()} ${UK_MONTH_GENITIVE[firstWeekDay.getMonth()]} – ${lastWeekDay.getDate()} ${UK_MONTH_GENITIVE[lastWeekDay.getMonth()]} ${lastWeekDay.getFullYear()}`
     : periodLabel
+  const userWeekDaysWithSessions = mode === 'user' && view === 'week'
+    ? weekDays.map((day, index) => ({ day, index, sessions: sessionsOnDay(day) })).filter(({ sessions }) => sessions.length > 0)
+    : []
 
   const closeDaySheet = () => {
     setIsDaySheetOpen(false)
@@ -271,14 +313,28 @@ export default function Calendar(
   }
 
   const openUserBooking = (session: ZoomCalendarSession) => {
-    closeDaySheet()
-    setSelectedSession(null)
-    setCreateDate(null)
-    openBookingQuestion(session)
+    routeUserBookingAttempt({
+      session,
+      hasFocusAccess: props.hasFocusAccess,
+      onAccessRequired: props.onRestrictedGroupAction,
+      onBookingAllowed: () => {
+        closeDaySheet()
+        setSelectedSession(null)
+        setCreateDate(null)
+        openBookingQuestion(session)
+      },
+    })
   }
 
   const openUserSession = (session: ZoomCalendarSession) => {
     if (isExpiredIndividualReservation(session)) return
+
+    if (mode === 'user' && isAvailableIndividualSlot(session) && props.onAvailableIndividualSlot) {
+      closeDaySheet()
+      setCreateDate(null)
+      props.onAvailableIndividualSlot(session)
+      return
+    }
 
     const normalizedType = getNormalizedSessionType(session)
     const isIndividual = normalizedType === 'individual' || normalizedType === 'private'
@@ -534,12 +590,32 @@ export default function Calendar(
       {/* User week list */}
       {view === 'week' && mode !== 'coach' && (
         <div className="flex flex-col" data-zoom-week-view="user-vertical">
-          {weekDays.map((d, i) => {
+          {userWeekDaysWithSessions.length === 0 ? (
+            <section data-zoom-week-empty="user" className="rounded-xl border border-dashed border-white/15 bg-white/[0.025] px-4 py-4 text-center">
+              <p className="text-sm text-white/60">Цього тижня сесій немає.</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={props.onFindAvailableSlots}
+                  className="rounded-xl border border-sky-300/25 px-3 py-2 text-xs font-semibold text-sky-100"
+                >
+                  НАЙБЛИЖЧІ СЛОТИ
+                </button>
+                <button
+                  type="button"
+                  onClick={nextPeriod}
+                  className="rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white/85"
+                >
+                  НАСТУПНИЙ ТИЖДЕНЬ
+                </button>
+              </div>
+            </section>
+          ) : userWeekDaysWithSessions.map(({ day: d, index: i, sessions: daySessions }) => {
             const today = isToday(d)
-            const daySessions = sessionsOnDay(d)
             return (
               <section
                 key={i}
+                data-zoom-week-day={UK_DAY_SHORT[i]}
                 className="border-b border-white/[0.07] px-0.5 py-2 last:border-b-0"
               >
                 <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
@@ -552,14 +628,11 @@ export default function Calendar(
                     </span>
                     {today && <span className="text-[10px] text-sky-200/70">· Сьогодні</span>}
                   </div>
-                  {daySessions.length > 0 && (
-                    <span className="text-[10px] text-white/35">{daySessions.length} сес.</span>
-                  )}
+                  <span className="text-[10px] text-white/35">{daySessions.length} сес.</span>
                 </div>
 
-                {daySessions.length > 0 ? (
-                  <div className="flex flex-col gap-1">
-                    {daySessions.map(s => {
+                <div className="flex flex-col gap-1">
+                  {daySessions.map(s => {
                       const statusVariant = sessionStatusVariant(s.battleStatus ?? s.status)
                       const details = getWeekSessionDetails(s)
                       const SessionIcon = getUserWeekSessionIcon(s)
@@ -596,7 +669,7 @@ export default function Calendar(
                               )}
                             </span>
                             <span className={`max-w-[38%] flex-shrink-0 rounded-full px-2 py-1 text-center text-[9px] font-semibold leading-tight ${getUserWeekStatusClass(s, statusVariant.badgeClass)}`}>
-                              {s.commerceLabel ?? statusVariant.label}
+                              {getUserZoomCommercePresentation(s).label}
                             </span>
                             {!isDisabledReservation && (
                               <span className="flex-shrink-0 text-sm leading-none text-white/35 transition-colors group-hover:text-white/70" aria-hidden="true">›</span>
@@ -604,13 +677,8 @@ export default function Calendar(
                           </span>
                         </button>
                       )
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-white/10 bg-black/10 px-2.5 py-1.5 text-[11px] text-white/35">
-                    Немає запланованих сесій
-                  </div>
-                )}
+                  })}
+                </div>
               </section>
             )
           })}
@@ -643,6 +711,8 @@ export default function Calendar(
               userId={userId}
               onClose={() => setSelectedSession(null)}
               onRequestBooking={openUserBooking}
+              hasFocusAccess={props.hasFocusAccess}
+              onRestrictedGroupAction={props.onRestrictedGroupAction}
               onAddToCalendar={handleAddToCalendar}
               onEdit={id => { setEditingSession(id); setSelectedSession(null); }}
               onCancel={handleCancel}
@@ -658,6 +728,8 @@ export default function Calendar(
           userId={userId}
           onClose={() => setSelectedSession(null)}
           onRequestBooking={openUserBooking}
+          hasFocusAccess={props.hasFocusAccess}
+          onRestrictedGroupAction={props.onRestrictedGroupAction}
           onAddToCalendar={handleAddToCalendar}
           onEdit={id => { setEditingSession(id); setSelectedSession(null); }}
           onCancel={handleCancel}

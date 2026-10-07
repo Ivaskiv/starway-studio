@@ -154,6 +154,7 @@ async function hasPendingFocusPaymentEvidence(
   const session = await getSession(chatId)
   return Boolean(
     session?.userId === userId &&
+    session.state === 'payment_evidence' &&
     session.data?.paymentIssueAwaitingEvidence === true,
   )
 }
@@ -221,9 +222,9 @@ export async function handleFocusPaymentAction(
     await ctx.answerCbQuery('Не вдалося відкрити ФОКУС. Спробуй ще раз.').catch(() => null)
     return true
   }
-  const cta1m = BLOCK10_FOCUS?.cta_1m ?? AB_TEST_FOCUS_PAYMENT_CTA_1M
-  const cta3m = BLOCK10_FOCUS?.cta_3m ?? AB_TEST_FOCUS_PAYMENT_CTA_3M
-  const cta1y = AB_TEST_FOCUS_PAYMENT_CTA_1Y
+  const cta1m = (BLOCK10_FOCUS?.cta_1m ?? AB_TEST_FOCUS_PAYMENT_CTA_1M).replace(/\s+—.*$/, '')
+  const cta3m = (BLOCK10_FOCUS?.cta_3m ?? AB_TEST_FOCUS_PAYMENT_CTA_3M).replace(/\s+—.*$/, '')
+  const cta1y = AB_TEST_FOCUS_PAYMENT_CTA_1Y.replace(/\s+—.*$/, '')
   const {
     blocks: paymentBlocksToSend,
     progressForCheckout,
@@ -236,7 +237,7 @@ export async function handleFocusPaymentAction(
     [{ text: cta3m, url: url3m }],
     [{ text: cta1y, url: url1y }],
     ...(trialZoomUrl
-      ? [[{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', url: trialZoomUrl }]]
+      ? [[{ text: 'ПРОБНИЙ ZOOM', url: trialZoomUrl }]]
       : []),
     ...(testPaymentButton ? [[testPaymentButton]] : []),
     [
@@ -339,7 +340,7 @@ export async function handleFocusPaymentIssue(
     await updateSession(
       issueUserId,
       String(chatId),
-      'chat',
+      'payment_evidence',
       {
         paymentIssueAwaitingEvidence: true,
         paymentIssueRequestedAt: new Date().toISOString(),

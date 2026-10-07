@@ -127,7 +127,17 @@ describe('ZoomCalendarPage', () => {
     expect(markup).not.toContain('COACH_PANEL:')
   })
 
-  it('keeps NO_ACCESS users on the locked entry state', async () => {
+  it('routes an authenticated NO_ACCESS Telegram user to the existing calendar owner', async () => {
+    telegramRuntime.miniApp = true
+    telegramRuntime.initData = 'telegram-init-data'
+    vi.stubGlobal('window', {
+      location: { pathname: '/miniapp/zoom-calendar' },
+      Telegram: {
+        WebApp: {
+          initData: telegramRuntime.initData,
+        },
+      },
+    })
     authState.auth.user = {
       id: 'user-2',
       role: 'USER',
@@ -140,8 +150,7 @@ describe('ZoomCalendarPage', () => {
     const { default: ZoomCalendarPage } = await import('@/features/zoom/pages/ZoomCalendarPage')
     const markup = renderToStaticMarkup(createElement(ZoomCalendarPage))
 
-    expect(markup).toContain('Персональний календар доступний тільки після входу через Telegram Mini App або з активним доступом ФОКУС.')
-    expect(markup).not.toContain('USER_PANEL:')
+    expect(markup).toContain('USER_PANEL:user-2')
     expect(markup).not.toContain('COACH_PANEL:')
   })
 

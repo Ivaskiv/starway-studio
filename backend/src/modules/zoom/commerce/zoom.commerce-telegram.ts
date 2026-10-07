@@ -49,6 +49,14 @@ function formatCommerceDate(value: Date): string {
   return `${date} · ${time}`
 }
 
+function formatPaymentDeadline(value: Date): string {
+  return value.toLocaleTimeString('uk-UA', {
+    timeZone: 'Europe/Kyiv',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function requesterName(
   request: NonNullable<Awaited<ReturnType<typeof requestContext>>>,
 ): string {
@@ -76,11 +84,11 @@ function opsRequestSummary(
   request: NonNullable<Awaited<ReturnType<typeof requestContext>>>,
 ): string {
   return [
-    commerceTypeLabel(request),
-    '',
     `👤 ${requesterName(request)}`,
     `📅 ${formatCommerceDate(request.scheduledAt)}`,
-    ...(request.zoomSession?.topic ? [`💬 ${request.zoomSession.topic}`] : []),
+    ...(request.kind !== 'INDIVIDUAL' && request.zoomSession?.topic
+      ? [`💬 ${request.zoomSession.topic}`]
+      : []),
     `💳 ${commercePriceLabel(request)}`,
     '',
     '⏳ Очікує рішення',
@@ -122,10 +130,10 @@ export async function sendCommerceTicket(requestId: string) {
   return sendUserTelegramMessage(
     opsChatId,
     [
-      '🟣 НОВИЙ ЗАПИТ НА ІНДИВІДУАЛЬНУ СЕСІЮ',
+      '🟣 НОВИЙ ЗАПИТ НА СЕСІЮ',
       '',
       opsRequestSummary(request),
-      ...(contextText ? ['', `💬 Запит користувача: ${contextText}`] : []),
+      ...(contextText ? ['', `💬 ${contextText}`] : []),
     ].join('\n'),
     { reply_markup: commerceActions(request.id) },
   )
@@ -190,6 +198,12 @@ export async function handleCommerceCallback(ctx: Context): Promise<boolean> {
     await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => undefined)
     const checkoutUrl = await getCommerceCheckoutUrl(request.id, request.requesterUserId)
     if (approved.request.status === 'APPROVED_PENDING_PAYMENT' && checkoutUrl) {
+      const paymentDeadline = approved.request.kind === 'INDIVIDUAL' && approved.request.approvedAt
+        ? resolveIndividualPaymentDeadline({
+          approvedAt: approved.request.approvedAt,
+          scheduledAt: approved.request.scheduledAt,
+        })
+        : null
       await sendUserTelegramMessage(
         String(userChatId),
         [
@@ -197,6 +211,7 @@ export async function handleCommerceCallback(ctx: Context): Promise<boolean> {
           '',
           'Коуч підтвердив твій запис.',
           'Щоб закріпити сесію, оплати її.',
+          ...(paymentDeadline ? ['', `Заверши оплату до ${formatPaymentDeadline(paymentDeadline)}.`] : []),
           '',
           userPaymentSummary(request),
         ].join('\n'),
@@ -210,10 +225,7 @@ export async function handleCommerceCallback(ctx: Context): Promise<boolean> {
                 {
                   text: '📅 ВІДКРИТИ КАЛЕНДАР',
                   web_app: {
-                    url: (() => {
-                      const base = buildZoomCalendarUrl()
-                      return `${base}${base.includes('?') ? '&' : '?'}zoomRole=user`
-                    })(),
+                    url: buildZoomCalendarUrl(),
                   },
                 },
               ],
@@ -286,6 +298,65 @@ export async function handleCommerceReply(ctx: Context): Promise<boolean> {
   return true
 }
 
+async function deliverCommercePaymentNotification(input: {
+  eventId: string
+  requestId: string
+  orderReference: string
+  userId: string
+  destination: 'user' | 'ops'
+  deliver: () => Promise<boolean>
+}): Promise<boolean> {
+  const existing = await prisma.event.findUnique({
+    where: { id: input.eventId },
+    select: { state: true },
+  })
+  if (existing?.state === 'DELIVERED') return true
+
+  if (!existing) {
+    await prisma.event.create({
+      data: {
+        id: input.eventId,
+        userId: input.userId,
+        type: 'ZOOM_COMMERCE_PAID',
+        source: 'payment_callback',
+        state: 'PENDING',
+        payload: {
+          requestId: input.requestId,
+          orderReference: input.orderReference,
+          destination: input.destination,
+        },
+      },
+    }).catch(() => undefined)
+  }
+
+  const claimed = await prisma.event.updateMany({
+    where: { id: input.eventId, state: { in: ['PENDING', 'FAILED'] } },
+    data: { state: 'SENDING' },
+  })
+  if (!claimed.count) return false
+
+  try {
+    const sent = await input.deliver()
+    if (!sent) throw new Error('TELEGRAM_DELIVERY_RETURNED_FALSE')
+    await prisma.event.update({ where: { id: input.eventId }, data: { state: 'DELIVERED' } })
+    console.info('[ZOOM_COMMERCE_PAYMENT_DELIVERY_OK]', {
+      requestId: input.requestId,
+      orderReference: input.orderReference,
+      destination: input.destination,
+    })
+    return true
+  } catch (error) {
+    await prisma.event.update({ where: { id: input.eventId }, data: { state: 'FAILED' } }).catch(() => undefined)
+    console.error('[ZOOM_COMMERCE_PAYMENT_DELIVERY_FAILED]', {
+      requestId: input.requestId,
+      orderReference: input.orderReference,
+      destination: input.destination,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return false
+  }
+}
+
 export async function notifyCommercePaid(orderReference: string) {
   const row = await prisma.zoomCommerceRequest.findUnique({
     where: { checkoutOrderReference: orderReference },
@@ -295,7 +366,6 @@ export async function notifyCommercePaid(orderReference: string) {
   const request = await requestContext(row.id)
   if (!request) return
 
-  const topic = request.zoomSession?.topic?.trim() || 'Індивідуальна Zoom-сесія'
   const requests =
     request.zoomSession?.requests
     && typeof request.zoomSession.requests === 'object'
@@ -305,59 +375,82 @@ export async function notifyCommercePaid(orderReference: string) {
 
   const zoomLink = String(requests.zoomLink ?? '').trim()
 
-  const calendarBase = buildZoomCalendarUrl()
-  const userCalendarUrl =
-    `${calendarBase}${calendarBase.includes('?') ? '&' : '?'}zoomRole=user`
+  const userCalendarUrl = buildZoomCalendarUrl()
 
   const userChatId =
     request.requester.telegramChatId
     ?? request.requester.telegramLinks[0]?.chatId
     ?? null
 
-  if (userChatId) {
-    const buttons: Array<Array<
-      | { text: string; url: string }
-      | { text: string; web_app: { url: string } }
-    >> = []
+  const context = await prisma.event.findUnique({ where: { id: `zoom-context:${request.id}` } })
+  const question = (context?.payload as { questionText?: unknown } | undefined)?.questionText
+  const meaningfulQuestion = typeof question === 'string' && question.trim() ? question.trim() : null
+  const buttons: Array<Array<
+    | { text: string; url: string }
+    | { text: string; web_app: { url: string } }
+  >> = []
 
-    if (zoomLink) {
-      buttons.push([
-        {
-          text: '📹 ПРИЄДНАТИСЯ ДО ZOOM',
-          url: zoomLink,
-        },
-      ])
-    }
-
+  if (zoomLink) {
     buttons.push([
       {
-        text: '📅 ВІДКРИТИ КАЛЕНДАР',
-        web_app: { url: userCalendarUrl },
+        text: '📹 ПРИЄДНАТИСЯ ДО ZOOM',
+        url: zoomLink,
       },
     ])
-
-    await sendUserTelegramMessage(
-      String(userChatId),
-      [
-        '🎉 ОПЛАТУ ПІДТВЕРДЖЕНО',
-        '',
-        '🟣 Індивідуальна сесія',
-        `📅 ${formatCommerceDate(request.scheduledAt)}`,
-        `💬 ${topic}`,
-        `💳 ${commercePriceLabel(request)}`,
-        '',
-        '✅ Статус: Заплановано',
-        zoomLink
-          ? 'Посилання на Zoom уже доступне.'
-          : 'Посилання на Zoom з’явиться в календарі після того, як коуч його додасть.',
-      ].join('\n'),
-      {
-        reply_markup: {
-          inline_keyboard: buttons,
-        },
-      },
-    )
   }
+
+  buttons.push([
+    {
+      text: '📅 ВІДКРИТИ КАЛЕНДАР',
+      web_app: { url: userCalendarUrl },
+    },
+  ])
+
+  const userDelivered = await deliverCommercePaymentNotification({
+    eventId: `zoom-commerce-paid:user:${request.id}`,
+    requestId: request.id,
+    orderReference,
+    userId: request.requesterUserId,
+    destination: 'user',
+    deliver: () => userChatId
+      ? sendUserTelegramMessage(
+        String(userChatId),
+        [
+          '✅ ОПЛАТУ ПІДТВЕРДЖЕНО',
+          '',
+          'Твоя індивідуальна Zoom-сесія оплачена.',
+          '',
+          `📅 ${formatCommerceDate(request.scheduledAt)}`,
+          ...(meaningfulQuestion ? [`💬 ${meaningfulQuestion}`] : []),
+          '',
+          'Запис підтверджено.',
+        ].join('\n'),
+        { reply_markup: { inline_keyboard: buttons } },
+      )
+      : Promise.resolve(false),
+  })
+
+  const opsDelivered = await deliverCommercePaymentNotification({
+    eventId: `zoom-commerce-paid:ops:${request.id}`,
+    requestId: request.id,
+    orderReference,
+    userId: request.requesterUserId,
+    destination: 'ops',
+    deliver: () => sendOpsTelegramMessage(
+      [
+        '✅ ОПЛАТУ ОТРИМАНО',
+        '',
+        `👤 ${requesterName(request)}`,
+        `📅 ${formatCommerceDate(request.scheduledAt)}`,
+        `💳 ${commercePriceLabel(request)}`,
+        `🧾 ${orderReference}`,
+        '',
+        'Статус: PAID',
+      ].join('\n'),
+      undefined,
+      { messageType: 'zoom_commerce_paid', source: 'notifyCommercePaid' },
+    ),
+  })
 
   const coach = await prisma.user.findFirst({
     where: {
@@ -388,7 +481,7 @@ export async function notifyCommercePaid(orderReference: string) {
         '',
         `👤 ${requesterName(request)}`,
         `📅 ${formatCommerceDate(request.scheduledAt)}`,
-        `💬 ${topic}`,
+        `💬 ${meaningfulQuestion ?? request.zoomSession?.topic?.trim() ?? 'Індивідуальна Zoom-сесія'}`,
         `💳 ${commercePriceLabel(request)}`,
         '',
         '✅ Сесію підтверджено.',
@@ -401,95 +494,67 @@ export async function notifyCommercePaid(orderReference: string) {
     )
   }
 
-  await sendOpsTelegramMessage(
-    [
-      '💳 ОПЛАТУ ОТРИМАНО',
-      '',
-      `👤 ${requesterName(request)}`,
-      `📅 ${formatCommerceDate(request.scheduledAt)}`,
-      `💬 ${topic}`,
-      `💳 ${commercePriceLabel(request)}`,
-      '',
-      '✅ Статус: Заплановано',
-    ].join('\n'),
-    undefined,
-    {
-      messageType: 'zoom_commerce_paid',
-      source: 'notifyCommercePaid',
-    },
-  )
+  if (!userDelivered || !opsDelivered) {
+    throw new Error('COMMERCE_PAYMENT_NOTIFICATION_DELIVERY_FAILED')
+  }
 }
 
 
 
 type PaymentNudgeKind =
-  | 'AFTER_APPROVAL_4H'
-  | 'SESSION_T_MINUS_24H'
-  | 'AFTER_APPROVAL_1H'
+  | 'INDIVIDUAL_MID_WINDOW'
+  | 'INDIVIDUAL_DEADLINE_MINUS_10M'
 
-function resolvePaymentNudges(input: {
+export function resolvePaymentNudges(input: {
   approvedAt: Date
-  scheduledAt: Date
-  now: Date
+  deadline: Date
 }): Array<{
   kind: PaymentNudgeKind
   dueAt: Date
   text: string
 }> {
-  const HOUR = 60 * 60 * 1000
-  const distance =
-    input.scheduledAt.getTime() - input.approvedAt.getTime()
+  const MINUTE = 60 * 1000
+  const deadlineLabel = formatPaymentDeadline(input.deadline)
+  const midWindowDueAt = new Date(
+    input.approvedAt.getTime() + (input.deadline.getTime() - input.approvedAt.getTime()) / 2,
+  )
+  const deadlineMinusTenMinutes = new Date(input.deadline.getTime() - 10 * MINUTE)
+  const nudges: Array<{ kind: PaymentNudgeKind; dueAt: Date; text: string }> = []
 
-  if (distance > 24 * HOUR) {
-    return [
-      {
-        kind: 'AFTER_APPROVAL_4H',
-        dueAt: new Date(input.approvedAt.getTime() + 4 * HOUR),
-        text: [
-          '💳 НАГАДУВАННЯ ПРО ОПЛАТУ',
-          '',
-          'Твою індивідуальну Zoom-сесію підтверджено.',
-          'Оплати її, щоб остаточно закріпити слот за собою.',
-        ].join('\n'),
-      },
-      {
-        kind: 'SESSION_T_MINUS_24H',
-        dueAt: new Date(input.scheduledAt.getTime() - 24 * HOUR),
-        text: [
-          '⚠️ ТВОЯ ZOOM-СЕСІЯ ВЖЕ ЗАВТРА',
-          '',
-          'Оплата ще не завершена.',
-          'Заверши оплату, щоб зберегти бронювання.',
-          '',
-          'Якщо оплату не буде завершено до дедлайну, слот автоматично звільниться для інших учасників.',
-        ].join('\n'),
-      },
-    ]
+  if (
+    midWindowDueAt > input.approvedAt
+    && Math.abs(midWindowDueAt.getTime() - deadlineMinusTenMinutes.getTime()) >= MINUTE
+  ) {
+    nudges.push({
+      kind: 'INDIVIDUAL_MID_WINDOW',
+      dueAt: midWindowDueAt,
+      text: [
+        'Оплата сесії ще не завершена.',
+        `Заверши оплату до ${deadlineLabel}.`,
+      ].join('\n'),
+    })
   }
 
-  return [
-    {
-      kind: 'AFTER_APPROVAL_1H',
-      dueAt: new Date(input.approvedAt.getTime() + HOUR),
+  if (deadlineMinusTenMinutes > input.approvedAt) {
+    nudges.push({
+      kind: 'INDIVIDUAL_DEADLINE_MINUS_10M',
+      dueAt: deadlineMinusTenMinutes,
       text: [
-        '⚠️ НАГАДУВАННЯ ПРО ОПЛАТУ',
-        '',
-        'Твоя Zoom-сесія підтверджена, але ще не оплачена.',
-        'Заверши оплату зараз, щоб не втратити заброньований слот.',
-        '',
-        'Після завершення часу бронювання слот буде запропоновано іншим учасникам.',
+        'До завершення оплати залишилось 10 хвилин.',
+        `Заверши оплату до ${deadlineLabel}.`,
+        'Після дедлайну слот буде звільнено.',
       ].join('\n'),
-    },
-  ]
+    })
+  }
+
+  return nudges
 }
 
 async function sendPaymentNudgeOnce(input: {
   requestId: string
   requesterUserId: string
-  chatId: string
   kind: PaymentNudgeKind
-  text: string
-  checkoutUrl: string
+  now: Date
 }): Promise<void> {
   const eventId =
     `zoom-payment-nudge:${input.requestId}:${input.kind}`
@@ -528,15 +593,43 @@ async function sendPaymentNudgeOnce(input: {
   if (!claimed.count) return
 
   try {
+    const request = await requestContext(input.requestId)
+    if (
+      !request
+      || request.kind !== 'INDIVIDUAL'
+      || request.status !== 'APPROVED_PENDING_PAYMENT'
+      || !request.approvedAt
+    ) {
+      await prisma.event.update({ where: { id: eventId }, data: { state: 'FAILED' } })
+      return
+    }
+
+    const deadline = resolveIndividualPaymentDeadline({
+      approvedAt: request.approvedAt,
+      scheduledAt: request.scheduledAt,
+    })
+    const nudge = resolvePaymentNudges({
+      approvedAt: request.approvedAt,
+      deadline,
+    }).find((candidate) => candidate.kind === input.kind)
+    const chatId = request.requester.telegramChatId ?? request.requester.telegramLinks[0]?.chatId
+    const checkoutUrl = input.now < deadline
+      ? await getCommerceCheckoutUrl(request.id, request.requesterUserId)
+      : null
+    if (!nudge || nudge.dueAt > input.now || !chatId || !checkoutUrl) {
+      await prisma.event.update({ where: { id: eventId }, data: { state: 'FAILED' } })
+      return
+    }
+
     await sendUserTelegramMessage(
-      input.chatId,
-      input.text,
+      String(chatId),
+      nudge.text,
       {
         reply_markup: {
           inline_keyboard: [[
             {
               text: '💳 ОПЛАТИТИ СЕСІЮ',
-              url: input.checkoutUrl,
+              url: checkoutUrl,
             },
           ]],
         },
@@ -583,20 +676,6 @@ export async function processZoomPaymentLifecycleNotifications(
   for (const request of pending) {
     if (!request.approvedAt) continue
 
-    const chatId =
-      request.requester.telegramChatId
-      ?? request.requester.telegramLinks[0]?.chatId
-      ?? null
-
-    if (!chatId) continue
-
-    const checkoutUrl = await getCommerceCheckoutUrl(
-      request.id,
-      request.requesterUserId,
-    )
-
-    if (!checkoutUrl) continue
-
     const deadline = resolveIndividualPaymentDeadline({
       approvedAt: request.approvedAt,
       scheduledAt: request.scheduledAt,
@@ -606,8 +685,7 @@ export async function processZoomPaymentLifecycleNotifications(
 
     const nudges = resolvePaymentNudges({
       approvedAt: request.approvedAt,
-      scheduledAt: request.scheduledAt,
-      now,
+      deadline,
     })
 
     for (const nudge of nudges) {
@@ -617,10 +695,8 @@ export async function processZoomPaymentLifecycleNotifications(
       await sendPaymentNudgeOnce({
         requestId: request.id,
         requesterUserId: request.requesterUserId,
-        chatId: String(chatId),
         kind: nudge.kind,
-        text: nudge.text,
-        checkoutUrl,
+        now,
       }).catch((error) => {
         console.error('[zoom/payment-nudge] delivery failed', {
           requestId: request.id,
@@ -712,17 +788,13 @@ export async function notifyCommerceExpired(requestId: string) {
     ?? request.requester.telegramLinks[0]?.chatId
     ?? null
 
-  const base = buildZoomCalendarUrl()
-  const userCalendarUrl =
-    `${base}${base.includes('?') ? '&' : '?'}zoomRole=user`
+  const userCalendarUrl = buildZoomCalendarUrl()
 
   if (userChatId) {
     await sendUserTelegramMessage(
       String(userChatId),
       [
-        '❌ ЧАС НА ОПЛАТУ ЗАВЕРШИВСЯ',
-        '',
-        'Слот звільнено.',
+        'Час на оплату завершився. Слот звільнено.',
         '',
         'Якщо хочеш записатися — обери новий зручний час.',
       ].join('\n'),

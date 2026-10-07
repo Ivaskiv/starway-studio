@@ -58,7 +58,7 @@ async function bootstrap() {
     })
   })
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && process.env.CANONICAL_DB !== 'true') {
     prisma.expert.findFirst().then((expert) => {
       if (expert) {
         seedDefaultAvailability(expert.id).catch(() => undefined)

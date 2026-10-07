@@ -610,36 +610,22 @@ export async function sendOpsTelegramMessage(
 
       return sent
     } catch (error) {
-      const description =
-        error
-        && typeof error === 'object'
-        && 'response' in error
-        && error.response
-        && typeof error.response === 'object'
-        && 'description' in error.response
-          ? String(error.response.description)
-          : ''
-
       console.error(
         `[OPS_ROUTE_ERROR] messageType=${messageType} chatId=${chatId} source=${source} bot=${botName}`,
         error,
       )
-
-      if (
-        botName === 'coachBot'
-        && /chat not found/i.test(description)
-      ) {
-        console.warn(
-          `[OPS_ROUTE_FALLBACK] messageType=${messageType} chatId=${chatId} source=${source} from=coachBot to=mainBot`,
-        )
-
-        return sendVia(bot, 'mainBot')
-      }
-
       return false
     }
   }
 
+  // The main bot is the canonical member of STARWAY OPS. Do not probe the
+  // coach bot first: its expected 400 would make normal delivery noisy.
+  const delivered = await sendVia(bot, 'mainBot')
+  if (delivered) return true
+
+  console.warn(
+    `[OPS_ROUTE_FALLBACK] messageType=${messageType} chatId=${chatId} source=${source} from=mainBot to=coachBot`,
+  )
   return sendVia(coachBot, 'coachBot')
 }
 

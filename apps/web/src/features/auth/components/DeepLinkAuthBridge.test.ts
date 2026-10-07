@@ -108,6 +108,18 @@ describe('DeepLinkAuthBridge pending deeplink ownership', () => {
     expect(shouldRedirectTelegramRuntimeToMiniApp('/app/dashboard/admin/studio')).toBe(false)
   })
 
+  it('preserves the frozen coach calendar role and section after deeplink restore', async () => {
+    const { buildTelegramMiniAppNavigationTarget } = await import('./DeepLinkAuthBridge')
+
+    expect(
+      buildTelegramMiniAppNavigationTarget('?dl=coach-token&zoomRole=coach', '#participants'),
+    ).toEqual({
+      pathname: '/miniapp/zoom-calendar',
+      search: '?zoomRole=coach',
+      hash: '#participants',
+    })
+  })
+
   it('does not skip deeplink restore when a stale authenticated session is already present on a staff destination', async () => {
     const { shouldSkipDeepLinkRestore } = await import('./DeepLinkAuthBridge')
 

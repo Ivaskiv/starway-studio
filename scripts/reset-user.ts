@@ -1,4 +1,5 @@
 import { prisma } from '../backend/src/db/client.js'
+import { assertCanonicalDbOperationAllowed } from './canonical-db-guard.mjs'
 
 type JsonRecord = Record<string, unknown>
 
@@ -9,6 +10,7 @@ function toJsonRecord(value: unknown): JsonRecord {
 }
 
 async function main() {
+  assertCanonicalDbOperationAllowed('reset-user')
   const email = process.argv[2]
 
   if (!email) {

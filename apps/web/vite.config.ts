@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import { spawn } from 'node:child_process';
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
@@ -18,13 +19,79 @@ export default defineConfig(({ mode }) => {
   const miniAppDevReloadPlugin = {
     name: 'miniapp-dev-reload-stamp',
     configureServer(server: import('vite').ViteDevServer) {
-      const touch = () => {
-        reloadStamp = Date.now().toString();
+      let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+      let rebuildInFlight = false;
+      let rebuildPending = false;
+
+      const isTelegramBundleSource = (file: string) => {
+        const relativePath = path.relative(__dirname, file).replaceAll('\\', '/');
+
+        if (
+          relativePath.startsWith('node_modules/') ||
+          relativePath.startsWith('dist/') ||
+          relativePath.startsWith('.telegram-legacy-dev/') ||
+          relativePath.startsWith('public/telegram-legacy/') ||
+          relativePath.startsWith('coverage/') ||
+          relativePath.startsWith('.git/')
+        ) {
+          return false;
+        }
+
+        return relativePath.startsWith('src/') && /\.(?:ts|tsx|css|scss)$/.test(relativePath);
       };
 
-      server.watcher.on('add', touch);
-      server.watcher.on('change', touch);
-      server.watcher.on('unlink', touch);
+      const rebuildTelegramBundle = () => {
+        rebuildTimer = null;
+
+        if (rebuildInFlight) {
+          return;
+        }
+
+        if (!rebuildPending) {
+          return;
+        }
+
+        rebuildPending = false;
+        rebuildInFlight = true;
+        server.config.logger.info('[telegram dev bundle] rebuilding');
+
+        const rebuildProcess = spawn('pnpm', ['telegram:build:dev'], {
+          cwd: __dirname,
+          stdio: 'ignore',
+          shell: process.platform === 'win32',
+        });
+
+        rebuildProcess.once('error', (error) => {
+          rebuildInFlight = false;
+          server.config.logger.error(`[telegram dev bundle] rebuild failed: ${error.message}`);
+          if (rebuildPending) rebuildTelegramBundle();
+        });
+
+        rebuildProcess.once('exit', (code) => {
+          rebuildInFlight = false;
+
+          if (code === 0) {
+            reloadStamp = Date.now().toString();
+            server.config.logger.info('[telegram dev bundle] rebuilt');
+          } else {
+            server.config.logger.error('[telegram dev bundle] rebuild failed');
+          }
+
+          if (rebuildPending) rebuildTelegramBundle();
+        });
+      };
+
+      const scheduleTelegramBundleRebuild = (file: string) => {
+        if (!isTelegramBundleSource(file)) return;
+
+        rebuildPending = true;
+        if (rebuildTimer) clearTimeout(rebuildTimer);
+        rebuildTimer = setTimeout(rebuildTelegramBundle, 150);
+      };
+
+      server.watcher.on('add', scheduleTelegramBundleRebuild);
+      server.watcher.on('change', scheduleTelegramBundleRebuild);
+      server.watcher.on('unlink', scheduleTelegramBundleRebuild);
 
       server.middlewares.use('/__miniapp_reload_stamp', (_req, res) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');

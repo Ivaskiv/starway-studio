@@ -16,6 +16,7 @@ import {
 import { activateProductSubscription } from '../../../modules/subscriptions/payments/activation.js'
 import { handleStart } from '../../../modules/telegram-mentor/handlers/start.js'
 import { isProductionRuntime } from '../../../modules/telegram-mentor/runtime/botConfig.js'
+import { registerZoomMenuAfterHandlerEnforcement } from '../../../interactive/telegramConsumerStartup.js'
 import {
   approveRequest as approveZoomCommerceRequest,
   rejectRequest as rejectZoomCommerceRequest,
@@ -150,6 +151,8 @@ type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
 export function registerCoachBotHandlers(telegramBot: Telegraf): void {
   validateCoachContentCatalog()
 
+  registerZoomMenuAfterHandlerEnforcement(telegramBot, { zoomRole: 'coach' })
+
   telegramBot.use(async (ctx, next) => {
     if (!ctx.message || !('text' in ctx.message)) {
       return next()
@@ -204,7 +207,8 @@ export function registerCoachBotHandlers(telegramBot: Telegraf): void {
         await replyWithTelegramMessage(ctx, coachBotContent.access.denied)
         return
       }
-      await showCoachMenu(ctx)
+      await removeTelegramReplyKeyboard(ctx)
+      await showCoachMenu(ctx, { suppressRepeatedWeeklyDigest: true })
     })
   )
   if (!isProductionRuntime()) {

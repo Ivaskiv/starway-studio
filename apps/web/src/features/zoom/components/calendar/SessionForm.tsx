@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useGetAttendeesQuery } from '../../services/zoom.api'
+import { useGetAvailabilityQuery } from '../../zoom.api'
 import type {
+  AvailabilitySlot,
   CreateSessionPayload,
   ZoomSessionType,
 } from '../../zoom.types'
 import { COACH_ZOOM_SESSION_TYPES } from '../../zoom.types'
 import { getSessionMeta, getZoomFormatInfo } from '../../zoom.utils'
+import {
+  createUtcDateForTimeZone,
+  getTimeZoneDateParts,
+  KYIV_TIMEZONE,
+} from '../../utils/zoomDateTime.utils'
 import type { AdminUser } from '@/features/admin/services/ownership.types'
 
 type SessionFormPayload = CreateSessionPayload & {
@@ -20,11 +27,18 @@ const DEFAULT_SUBMIT_ERROR_MESSAGE = 'Не вдалося зберегти Zoom-
 const SCHEDULING_CONFLICT_ERROR_CODES = new Set([
   'coach_session_conflict',
   'user_session_conflict',
+  'COMMERCE_SLOT_UNAVAILABLE',
 ])
 const GENERIC_SUBMIT_ERROR_CLASS =
-  'text-[11px] text-white/55'
+  'rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] text-white/70'
 const CONFLICT_SUBMIT_ERROR_CLASS =
-  'rounded-lg border border-[rgba(var(--semantic-warning-rgb),0.38)] bg-[rgba(var(--semantic-warning-rgb),0.1)] px-3 py-2 text-[11px] text-[var(--semantic-warning)]'
+  'rounded-lg border border-red-300/35 bg-red-500/10 px-3 py-2 text-[11px] text-red-100'
+const GROUP_SCHEDULE_WARNING_CLASS =
+  'rounded-lg border border-amber-300/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100'
+const GROUP_SCHEDULE_INFO_CLASS =
+  'rounded-lg border border-sky-300/25 bg-sky-500/10 px-3 py-2 text-[11px] text-sky-100'
+const GROUP_SCHEDULE_SUCCESS_CLASS =
+  'rounded-lg border border-emerald-300/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -75,8 +89,8 @@ export function getSessionFormSubmitErrorClassName(isConflict: boolean): string 
 }
 
 function formatDateInputValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`
+  const parts = getTimeZoneDateParts(date, KYIV_TIMEZONE)
+  return `${String(parts.day).padStart(2, '0')}.${String(parts.month).padStart(2, '0')}.${parts.year}`
 }
 
 export function formatDatePickerValue(dateValue: string): string {
@@ -92,14 +106,119 @@ export function parseDatePickerValue(dateValue: string): string {
 }
 
 function formatTimeInputValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const parts = getTimeZoneDateParts(date, KYIV_TIMEZONE)
+  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`
 }
 
 export function buildScheduledAtIso(dateValue: string, timeValue: string): string {
   const [day, month, year] = dateValue.split('.').map(Number)
   const [hours, minutes] = timeValue.split(':').map(Number)
-  return new Date(year, month - 1, day, hours, minutes, 0).toISOString()
+  return createUtcDateForTimeZone({
+    year,
+    month,
+    day,
+    hour: hours,
+    minute: minutes,
+    second: 0,
+    millisecond: 0,
+    timeZone: KYIV_TIMEZONE,
+  }).toISOString()
+}
+
+export function getGroupPracticeScheduleState(
+  dateValue: string,
+  timeValue: string,
+  slots: AvailabilitySlot[],
+  availabilityLoaded: boolean,
+): {
+  kind: 'info' | 'warning' | 'success'
+  message: string
+  blocksCreation: boolean
+  recommendedTime: string | null
+} {
+  if (!availabilityLoaded) {
+    return {
+      kind: 'info',
+      message: 'Перевіряємо звичний графік коуча…',
+      blocksCreation: true,
+      recommendedTime: null,
+    }
+  }
+
+  const groupSlots = slots.filter((slot) => slot.active && slot.sessionType === 'group_practice')
+  if (groupSlots.length === 0) {
+    return {
+      kind: 'warning',
+      message: 'У звичному графіку немає активної групової практики.',
+      blocksCreation: true,
+      recommendedTime: null,
+    }
+  }
+
+  const [day, month, year] = dateValue.split('.').map(Number)
+  const dayOfWeek = Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year)
+    ? new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+    : null
+  const daySlots = dayOfWeek === null
+    ? []
+    : groupSlots.filter((slot) => slot.dayOfWeek === dayOfWeek)
+  const recommendedTime = daySlots[0]
+    ? `${String(daySlots[0].hour).padStart(2, '0')}:${String(daySlots[0].minute).padStart(2, '0')}`
+    : null
+
+  if (daySlots.length === 0) {
+    return {
+      kind: 'warning',
+      message: 'На обраний день у звичному графіку немає групової практики.',
+      blocksCreation: true,
+      recommendedTime: null,
+    }
+  }
+
+  const matchesTime = daySlots.some((slot) =>
+    `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}` === timeValue,
+  )
+  if (!matchesTime) {
+    return {
+      kind: 'warning',
+      message: `Час групової практики має відповідати звичному графіку: ${daySlots.map((slot) => `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`).join(', ')}.`,
+      blocksCreation: true,
+      recommendedTime,
+    }
+  }
+
+  return {
+    kind: 'success',
+    message: `Час відповідає звичному графіку: ${timeValue}.`,
+    blocksCreation: false,
+    recommendedTime,
+  }
+}
+
+export function isSessionFormCreationBlocked(input: {
+  isLoading: boolean
+  isSubmitConflict: boolean
+  date: string
+  time: string
+  topic: string
+  type: ZoomSessionType
+  maxAttendees: number
+  groupScheduleBlocked: boolean
+  participantUserId: string
+  participantUserIds: string[]
+}): boolean {
+  if (input.isLoading || input.isSubmitConflict || !input.date.trim() || !input.time.trim() || !input.topic.trim()) {
+    return true
+  }
+  if (input.type === 'group_practice') {
+    return input.maxAttendees < 1 || input.groupScheduleBlocked
+  }
+  if (input.type === 'individual') return !input.participantUserId.trim()
+  if (input.type === 'battle_review') {
+    return input.participantUserIds.length !== BATTLE_PARTICIPANTS_REQUIRED
+      || new Set(input.participantUserIds).size !== BATTLE_PARTICIPANTS_REQUIRED
+  }
+  return false
 }
 
 export function SessionForm({
@@ -133,7 +252,7 @@ export function SessionForm({
   const initialScheduledAt = initialValues?.scheduledAt ? new Date(initialValues.scheduledAt) : null
   const defaultGroupCapacity = initialValues?.maxAttendees ?? DEFAULT_GROUP_CAPACITY
   const [date, setDate] = useState(
-    isEditing && initialScheduledAt ? formatDateInputValue(initialScheduledAt) : '',
+    isEditing && initialScheduledAt ? formatDateInputValue(initialScheduledAt) : formatDateInputValue(defaultDate),
   );
   const [time, setTime] = useState(
     isEditing && initialScheduledAt ? formatTimeInputValue(initialScheduledAt) : '19:00',
@@ -152,6 +271,9 @@ export function SessionForm({
   )
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitConflict, setIsSubmitConflict] = useState(false)
+  const availabilityQuery = useGetAvailabilityQuery()
+  const availabilitySlots = availabilityQuery.data ?? []
+  const availabilityLoaded = availabilityQuery.data !== undefined
   const { data: attendees = [] } = useGetAttendeesQuery(sessionId ?? '', {
     skip: !sessionId,
     refetchOnMountOrArgChange: true,
@@ -172,6 +294,17 @@ export function SessionForm({
   const isGroupPractice = type === 'group_practice'
   const isIndividual = type === 'individual'
   const isBattleReview = type === 'battle_review'
+  const groupScheduleState = getGroupPracticeScheduleState(
+    date,
+    time,
+    availabilitySlots,
+    availabilityLoaded,
+  )
+
+  const resetSchedulingFeedback = () => {
+    setSubmitError(null)
+    setIsSubmitConflict(false)
+  }
 
   useEffect(() => {
     if (!participantUserId && attendees[0]?.userId) {
@@ -197,6 +330,30 @@ export function SessionForm({
       setMaxAttendees(defaultGroupCapacity)
     }
   }, [defaultGroupCapacity, isGroupPractice, isIndividual, type])
+
+  useEffect(() => {
+    if (
+      !isEditing
+      && isGroupPractice
+      && groupScheduleState.recommendedTime
+      && time === '19:00'
+    ) {
+      setTime(groupScheduleState.recommendedTime)
+    }
+  }, [groupScheduleState.recommendedTime, isEditing, isGroupPractice, time])
+
+  const creationBlocked = isSessionFormCreationBlocked({
+    isLoading,
+    isSubmitConflict,
+    date,
+    time,
+    topic,
+    type,
+    maxAttendees,
+    groupScheduleBlocked: !isEditing && isGroupPractice && groupScheduleState.blocksCreation,
+    participantUserId: currentParticipantUserId,
+    participantUserIds: currentParticipantUserIds,
+  })
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -267,7 +424,10 @@ export function SessionForm({
               <button
                 key={option}
                 type="button"
-                onClick={() => setType(option)}
+                onClick={() => {
+                  resetSchedulingFeedback()
+                  setType(option)
+                }}
                 aria-pressed={selected}
                 className={[
                   'rounded-lg border px-3 py-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--accent-rgb),0.45)]',
@@ -292,7 +452,10 @@ export function SessionForm({
           <input
             className="w-full bg-white/[0.06] border border-white/10 rounded-lg px-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none focus:border-white/25"
             value={formatDatePickerValue(date)}
-            onChange={e => setDate(parseDatePickerValue(e.target.value))}
+            onChange={e => {
+              resetSchedulingFeedback()
+              setDate(parseDatePickerValue(e.target.value))
+            }}
             placeholder="Обрати дату"
             aria-label="Обрати дату"
             type="date"
@@ -303,7 +466,10 @@ export function SessionForm({
           <input
             className="w-full bg-white/[0.06] border border-white/10 rounded-lg px-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none focus:border-white/25"
             value={time}
-            onChange={e => setTime(e.target.value)}
+            onChange={e => {
+              resetSchedulingFeedback()
+              setTime(e.target.value)
+            }}
             placeholder="19:00"
             aria-label="Обрати час"
             type="time"
@@ -316,7 +482,10 @@ export function SessionForm({
         <input
           className="w-full bg-white/[0.06] border border-white/10 rounded-lg px-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none focus:border-white/25"
           value={topic}
-          onChange={e => setTopic(e.target.value)}
+          onChange={e => {
+            resetSchedulingFeedback()
+            setTopic(e.target.value)
+          }}
           placeholder="Щотижнева сесія балансу"
           required
         />
@@ -328,7 +497,10 @@ export function SessionForm({
           <select
             className="w-full bg-white/[0.06] border border-white/10 rounded-lg px-3 py-2 text-[13px] text-white focus:outline-none focus:border-white/25"
             value={currentParticipantUserId}
-            onChange={e => setParticipantUserId(e.target.value)}
+            onChange={e => {
+              resetSchedulingFeedback()
+              setParticipantUserId(e.target.value)
+            }}
             required
           >
             <option value="">Оберіть користувача</option>
@@ -416,12 +588,13 @@ export function SessionForm({
       )}
 
       {isGroupPractice && (
-        <div>
+        <div className="space-y-2">
           <label className="text-[11px] text-white/40 mb-1 block">Місткість</label>
           <input
             className="w-full bg-white/[0.06] border border-white/10 rounded-lg px-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none focus:border-white/25"
             value={String(maxAttendees)}
             onChange={e => {
+              resetSchedulingFeedback()
               const nextValue = Number(e.target.value)
               if (!Number.isNaN(nextValue)) {
                 setMaxAttendees(nextValue)
@@ -431,6 +604,18 @@ export function SessionForm({
             type="number"
             min={1}
           />
+          <p
+            className={
+              groupScheduleState.kind === 'success'
+                ? GROUP_SCHEDULE_SUCCESS_CLASS
+                : groupScheduleState.kind === 'warning'
+                  ? GROUP_SCHEDULE_WARNING_CLASS
+                  : GROUP_SCHEDULE_INFO_CLASS
+            }
+            role="status"
+          >
+            {groupScheduleState.message}
+          </p>
         </div>
       )}
 
@@ -455,8 +640,8 @@ export function SessionForm({
       <div className="flex gap-2 pt-1">
         <button
           type="submit"
-          disabled={isLoading}
-          className="flex-1 py-2 rounded-lg bg-[rgba(var(--accent-rgb),0.12)] border border-[rgba(var(--accent-rgb),0.3)] text-[rgb(var(--accent-rgb))] text-[13px] font-semibold hover:bg-[rgba(var(--accent-rgb),0.2)] transition-all disabled:opacity-50"
+          disabled={creationBlocked}
+          className="flex-1 rounded-lg border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.12)] py-2 text-[13px] font-semibold text-[rgb(var(--accent-rgb))] transition-all hover:bg-[rgba(var(--accent-rgb),0.2)] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-white/40 disabled:opacity-100"
         >
           {isLoading ? loadingLabel : submitLabel}
         </button>
