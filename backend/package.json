@@ -20,6 +20,7 @@
     "user:consolidation:dry": "tsx src/scripts/user-consolidation-backfill.ts",
     "user:consolidation:apply": "tsx src/scripts/user-consolidation-backfill.ts --apply",
     "user:consolidation:apply:clear-name": "tsx src/scripts/user-consolidation-backfill.ts --apply --clear-legacy-name",
+    "coach:daily-briefing:resend": "node dist/src/scripts/coach-daily-briefing-resend.js",
     "vercel-build": "pnpm run build"
   },
   "dependencies": {

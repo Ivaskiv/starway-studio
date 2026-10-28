@@ -51,4 +51,19 @@ describe('sendOpsTelegramMessage', () => {
 
     expect(receipt).toHaveBeenCalledWith({ messageId: '1' })
   })
+
+  it('does not fall back to the coach bot when a manual operational send forbids it', async () => {
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'main-ops-token'
+    process.env.TEST_COACH_BOT_TOKEN = 'coach-token'
+    process.env.STARWAY_OPS_CHAT_ID = '-1003829747010'
+
+    const mainSend = sendByToken.get('main-ops-token')
+    const callsBefore = mainSend?.mock.calls.length ?? 0
+    mainSend?.mockRejectedValueOnce(new Error('main bot unavailable'))
+
+    await expect(sendOpsTelegramMessage('manual resend', undefined, { allowCoachFallback: false })).resolves.toBe(false)
+
+    expect(mainSend).toHaveBeenCalledTimes(callsBefore + 1)
+    expect(sendByToken.get('coach-token')).toBeUndefined()
+  })
 })

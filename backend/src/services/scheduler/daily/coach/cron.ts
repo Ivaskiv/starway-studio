@@ -23,7 +23,11 @@ export async function coachDailyBriefingCron(): Promise<void> {
   const snapshot = await loadDailyCoachBriefingData()
   const text = await buildCoachDailyBriefingText(snapshot)
   const agentsUrl = await resolveCoachAgentsUrl()
-  await sendCoachPanelReport(text, [
+  await sendCoachPanelReport(text, buildCoachDailyBriefingButtons(agentsUrl))
+}
+
+export function buildCoachDailyBriefingButtons(agentsUrl: string) {
+  return [
     [
       { text: 'Контент', callback_data: 'coach-content:planner' },
       { text: 'Продажі', callback_data: 'coach-content:payments' },
@@ -36,7 +40,7 @@ export async function coachDailyBriefingCron(): Promise<void> {
     [
       { text: 'Агенти', url: agentsUrl },
     ],
-  ])
+  ]
 }
 
 export async function coachWeeklyPlannerTuesdayCron(): Promise<void> {

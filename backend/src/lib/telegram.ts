@@ -575,6 +575,8 @@ export async function sendOpsTelegramMessage(
   routeMeta?: {
     messageType?: string
     source?: string
+    /** Manual operational sends must never fall back to another bot identity. */
+    allowCoachFallback?: boolean
   },
   onDelivered?: (receipt: { messageId: string | null }) => Promise<void> | void,
 ): Promise<boolean> {
@@ -631,6 +633,10 @@ export async function sendOpsTelegramMessage(
   // coach bot first: its expected 400 would make normal delivery noisy.
   const delivered = await sendVia(bot, 'mainBot')
   if (delivered) return true
+
+  if (routeMeta?.allowCoachFallback === false) {
+    return false
+  }
 
   console.warn(
     `[OPS_ROUTE_FALLBACK] messageType=${messageType} chatId=${chatId} source=${source} from=mainBot to=coachBot`,
