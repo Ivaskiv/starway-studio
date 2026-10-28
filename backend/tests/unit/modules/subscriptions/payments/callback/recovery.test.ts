@@ -30,8 +30,8 @@ describe('recoverApprovedWayForPayCommercePayment', () => {
     mocks.checkStatus.mockResolvedValue({
       orderReference,
       transactionStatus: 'Approved',
-      amount: 1,
-      currency: 'UAH',
+      amount: 60,
+      currency: 'EUR',
       clientAccountId: 'e8262934-9454-4926-b734-65d03bca699e',
       transactionId: 'provider-transaction-1',
     })
@@ -65,8 +65,8 @@ describe('recoverApprovedWayForPayCommercePayment', () => {
     expect(mocks.processPayment).toHaveBeenNthCalledWith(1, expect.objectContaining({
       order_reference: orderReference,
       transaction_status: 'Approved',
-      amount: 1,
-      currency: 'UAH',
+      amount: 60,
+      currency: 'EUR',
       transaction_id: 'provider-transaction-1',
     }), expect.anything())
     expect(mocks.notifyCommercePaid).toHaveBeenCalledTimes(2)

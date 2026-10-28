@@ -58,6 +58,8 @@ export type TelegramAiRequestContext = Readonly<{
   nextZoom: Readonly<{
     scheduledAt: string
     topic: string
+    previousScheduledAt?: string
+    isRescheduled?: boolean
   }> | null
   unfinishedActions: ReadonlyArray<Readonly<{
     id: string
@@ -116,6 +118,22 @@ function resolveChatId(ctx: Context): string {
   return typeof chatId === 'string' || typeof chatId === 'number'
     ? String(chatId)
     : ''
+}
+
+function readRescheduleHistory(requests: unknown): {
+  previousScheduledAt?: string
+  isRescheduled?: boolean
+} {
+  if (!requests || Array.isArray(requests) || typeof requests !== 'object') {
+    return {}
+  }
+
+  const previousScheduledAt = (requests as Record<string, unknown>).previousScheduledAt
+  if (typeof previousScheduledAt !== 'string' || !Number.isFinite(new Date(previousScheduledAt).getTime())) {
+    return {}
+  }
+
+  return { previousScheduledAt, isRescheduled: true }
 }
 
 function buildAnonymousRequestContextFromChatId(
@@ -280,6 +298,7 @@ async function buildLinkedRequestContext(
       select: {
         scheduledAt: true,
         topic: true,
+        requests: true,
       },
     }),
   ])
@@ -406,6 +425,7 @@ async function buildLinkedRequestContext(
       ? {
         scheduledAt: nextZoom.scheduledAt.toISOString(),
         topic: nextZoom.topic,
+        ...readRescheduleHistory(nextZoom.requests),
       }
       : null,
     unfinishedActions: unfinishedTasks.map((task) => ({

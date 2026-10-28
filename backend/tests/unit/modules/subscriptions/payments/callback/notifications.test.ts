@@ -217,7 +217,7 @@ describe('callback.notifications — canonical Focus URL', () => {
     expect(serialized).toContain('Обери найближчу Zoom-практику та запишись.')
     expect(serialized).toContain(`"label":"${AB_TEST_TRIAL_ZOOM_SUCCESS_CTA_TEXT}"`)
     expect(serialized).toContain('"kind":"web_app"')
-    expect(serialized).toContain('"value":"https://app.starway.test/miniapp/zoom-calendar?intent=booking"')
+    expect(serialized).toContain('"value":"https://app.starway.test/miniapp/zoom-calendar?intent=booking&zoomRole=user"')
     expect(serialized).not.toContain('Доступ до ФОКУСУ активовано')
     expect(serialized).not.toContain('Перейди в закритий канал')
     expect(serialized).not.toContain('ПЕРЕЙТИ В КАНАЛ')

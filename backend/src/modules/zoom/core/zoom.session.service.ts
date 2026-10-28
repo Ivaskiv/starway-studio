@@ -1,13 +1,45 @@
-import { Prisma, ZoomStatus } from '@starway/db/prisma-client'
+import { Prisma, ZoomSessionType, ZoomStatus } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { bot } from '../../../lib/telegram.js'
 import type { ZoomSession } from '../types.js'
-import { resolveRequestedSessionType } from '../shared/zoom.session-selection.js'
+import {
+  getKyivDateKey,
+  isGroupPracticeRequest,
+  isKyivMonday,
+  resolveRequestedSessionType,
+  selectCanonicalMondayGroupPracticeSessions,
+} from '../shared/zoom.session-selection.js'
 import { assertWeeklyPrivateLimit } from '../private/zoom.private-booking.service.js'
 import { afterZoomOperation } from './zoom.operations.service.js'
 import { notifySubscribersNewSession } from '../notifications/zoom.subscriber-notifications.service.js'
 
-function isGroupPracticeRequest(requests: unknown): boolean { return Boolean(requests && !Array.isArray(requests) && typeof requests === 'object' && (requests as Record<string, unknown>).type === 'group_practice') }
+export async function findCanonicalMondayGroupPractice(input: {
+  expertId: string
+  scheduledAt: Date
+}): Promise<ZoomSession | null> {
+  if (!isKyivMonday(input.scheduledAt)) return null
+
+  // The query is deliberately wider than one UTC day because the canonical
+  // business date is Kyiv-local and shifts with daylight-saving time.
+  const searchRadiusMs = 26 * 60 * 60 * 1000
+  const candidates = await prisma.zoomSession.findMany({
+    where: {
+      expertId: input.expertId,
+      scheduledAt: {
+        gte: new Date(input.scheduledAt.getTime() - searchRadiusMs),
+        lte: new Date(input.scheduledAt.getTime() + searchRadiusMs),
+      },
+      status: { not: ZoomStatus.CANCELLED },
+      requests: { path: ['type'], equals: 'group_practice' },
+    },
+    orderBy: { scheduledAt: 'asc' },
+  })
+
+  const targetDate = getKyivDateKey(input.scheduledAt)
+  return selectCanonicalMondayGroupPracticeSessions(candidates)
+    .find((session) => getKyivDateKey(session.scheduledAt) === targetDate)
+    ?? null
+}
 
 export async function createZoomSession(
   expertId: string,
@@ -19,45 +51,12 @@ export async function createZoomSession(
     await assertWeeklyPrivateLimit(expertId, scheduledAt)
   }
 
-  console.log('[zoom/service createZoomSession] input:', {
+  return createFullSession({
     expertId,
-    scheduledAt: scheduledAt?.toISOString?.() ?? String(scheduledAt),
+    scheduledAt,
     topic,
-    type:
-      requests && typeof requests === 'object' && !Array.isArray(requests)
-        ? ((requests as Record<string, unknown>).type ?? null)
-        : null,
+    requests: requests as Prisma.InputJsonValue,
   })
-  let session: ZoomSession
-  try {
-    session = await prisma.zoomSession.create({
-      data: {
-        expertId, // ← прямий expertId (найпростіший і найшвидший спосіб)
-        scheduledAt,
-        topic,
-        requests: requests as Prisma.InputJsonValue,
-        status: ZoomStatus.SCHEDULED,
-      },
-    })
-  } catch (err) {
-    console.error('[zoom/service createZoomSession] ERROR:', err)
-    throw err
-  }
-  console.log('[zoom/service createZoomSession] created:', session.id)
-
-  void afterZoomOperation(bot, {
-    operation: 'create',
-    sessionId: session.id,
-    affectedUserIds: [],
-  }).catch((err) => console.error('[zoom] afterZoomOperation failed:', err))
-
-  if (isGroupPracticeRequest(session.requests)) {
-    void notifySubscribersNewSession(bot, session).catch((err) =>
-      console.error('[zoom] notify failed:', err)
-    )
-  }
-
-  return session
 }
 
 export async function getUpcomingZoom(): Promise<ZoomSession | null> {
@@ -108,6 +107,51 @@ export async function cancelSession(
   return session
 }
 
+/**
+ * Deletes disposable coach inventory only. A committed Individual session is
+ * deliberately not treated as a slot: its cancellation and history remain on
+ * the existing lifecycle path.
+ */
+export async function deleteFreeIndividualSlot(input: {
+  sessionId: string
+  expertId: string
+}): Promise<ZoomSession> {
+  return prisma.$transaction(async tx => {
+    // A booking inserts a foreign-key reference to this row. The lock makes
+    // the safety check and delete one boundary: the booking either commits
+    // first and protects the slot, or observes the deletion and fails cleanly.
+    await tx.$queryRaw`SELECT id FROM "ZoomSession" WHERE id = ${input.sessionId} FOR UPDATE`
+    const session = await tx.zoomSession.findUnique({
+      where: { id: input.sessionId },
+      include: {
+        attendees: { select: { id: true } },
+        commerceRequests: { select: { id: true } },
+      },
+    })
+
+    if (!session) throw new Error('SESSION_NOT_FOUND')
+    if (session.expertId !== input.expertId) throw new Error('FORBIDDEN')
+
+    const requestedType = resolveRequestedSessionType(session.requests)
+    const isIndividual = requestedType === 'individual'
+      || session.type === ZoomSessionType.INDIVIDUAL
+      || session.type === ZoomSessionType.PRIVATE
+    const isDisposableSlot = isIndividual
+      // A coach may remove a cancelled inventory slot, but never a cancelled
+      // booking: attendee, commerce and report checks below distinguish them.
+      && (session.status === ZoomStatus.SCHEDULED || session.status === ZoomStatus.CANCELLED)
+      && session.postSessionReport === null
+      && session.attendees.length === 0
+      // Keep all commerce history intact; the schema relation also blocks a
+      // late delete if another transaction commits a request first.
+      && session.commerceRequests.length === 0
+
+    if (!isDisposableSlot) throw new Error('SLOT_NOT_DELETABLE')
+
+    return tx.zoomSession.delete({ where: { id: session.id } })
+  })
+}
+
 export async function createFullSession(
   data: {
     expertId?: string
@@ -120,6 +164,14 @@ export async function createFullSession(
     suppressSessionNotification?: boolean
   }
 ): Promise<ZoomSession> {
+  if (data.expertId && isGroupPracticeRequest(data.requests)) {
+    const existingCanonicalPractice = await findCanonicalMondayGroupPractice({
+      expertId: data.expertId,
+      scheduledAt: data.scheduledAt,
+    })
+    if (existingCanonicalPractice) return existingCanonicalPractice
+  }
+
   console.log('[zoom/service createFullSession] input:', {
     expertId: data.expertId ?? null,
     scheduledAt: data.scheduledAt?.toISOString?.() ?? String(data.scheduledAt),

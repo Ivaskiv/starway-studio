@@ -69,16 +69,20 @@ function dedupeQuestionTexts(questionTexts: string[]): string[] {
   })
 }
 
-export async function getQuestionSummariesBySessionId(sessionIds: string[]) {
+type BookingQuestionSummary = {
+  questionPreviews: string[]
+  questionsCount: number
+  remainingQuestionsCount: number
+  myQuestion: { text: string; position: number } | null
+  questionsByUser: Map<string, string>
+}
+
+export async function getQuestionSummariesBySessionId(
+  sessionIds: string[],
+  userId?: string,
+): Promise<Map<string, BookingQuestionSummary>> {
   if (sessionIds.length === 0) {
-    return new Map<
-      string,
-      {
-        questionPreviews: string[]
-        questionsCount: number
-        remainingQuestionsCount: number
-      }
-    >()
+    return new Map<string, BookingQuestionSummary>()
   }
 
   const questionEvents = await prisma.event.findMany({
@@ -103,14 +107,7 @@ export async function getQuestionSummariesBySessionId(sessionIds: string[]) {
 
   const questionsBySessionId = new Map<string, string[]>()
 
-  const summaries = new Map<
-    string,
-    {
-      questionPreviews: string[]
-      questionsCount: number
-      remainingQuestionsCount: number
-    }
-  >()
+  const summaries = new Map<string, BookingQuestionSummary>()
   const sessionsWithStarterQuestions = await prisma.zoomSession.findMany({
     where: {
       id: { in: sessionIds },
@@ -142,10 +139,14 @@ export async function getQuestionSummariesBySessionId(sessionIds: string[]) {
   }
   for (const sessionId of sessionIds) {
     const starterQuestions = starterQuestionsBySessionId.get(sessionId) ?? []
-    const userQuestions = resolveEffectiveBookingQuestions({
+    const effectiveQuestions = resolveEffectiveBookingQuestions({
       sessionId,
       questionEvents,
-    }).map((question) => question.text)
+    })
+    const userQuestions = effectiveQuestions.map((question) => question.text)
+    const myQuestionIndex = userId
+      ? effectiveQuestions.findIndex((question) => question.userId === userId)
+      : -1
 
     questionsBySessionId.set(sessionId, userQuestions)
 
@@ -155,9 +156,16 @@ export async function getQuestionSummariesBySessionId(sessionIds: string[]) {
     ])
 
     summaries.set(sessionId, {
+      questionsByUser: new Map(effectiveQuestions.map((question) => [question.userId, question.text])),
       questionPreviews: questions,
       questionsCount: questions.length,
       remainingQuestionsCount: Math.max(questions.length - 3, 0),
+      myQuestion: myQuestionIndex >= 0
+        ? {
+            text: effectiveQuestions[myQuestionIndex].text,
+            position: myQuestionIndex + 1,
+          }
+        : null,
     })
   }
 

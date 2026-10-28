@@ -7,6 +7,7 @@ vi.mock('../../../../../src/db/client.ts', () => ({
   prisma: {
     user: {
       findFirst: vi.fn(),
+      findMany: vi.fn(async () => []),
     },
     zoomSession: {
       findFirst: vi.fn(),
@@ -102,6 +103,16 @@ vi.mock('../../../../../src/modules/zoom/calendar/zoom.calendar.service.ts', () 
   })),
 }))
 
+vi.mock('../../../../../src/modules/zoom/booking/zoom.availability.service.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../../src/modules/zoom/booking/zoom.availability.service.ts')>()
+  return {
+    ...actual,
+    getIndividualAvailabilityForScheduledAt: vi.fn(async () => ({
+      candidate: { available: true, reason: null },
+    })),
+  }
+})
+
 vi.mock('../../../../../src/modules/ai-operator/operator.service.ts', () => ({
   AI_OPERATOR_ACTIONS: {},
   isCoachDialogueAwaiting: vi.fn(async () => false),
@@ -142,6 +153,7 @@ import {
   generateCoachZoomWebDeepLink,
 } from '../../../../../src/modules/deeplinks/service.ts'
 import { getCoachWeeklyDiary } from '../../../../../src/modules/zoom/calendar/zoom.calendar.service.ts'
+import { getCalendarRequests } from '../../../../../src/modules/zoom/commerce/zoom.commerce-request.service.ts'
 import { switchLocalTestPersona } from '../../../../../src/scripts/user-sync-test-state.ts'
 
 type RegisteredHandler = (ctx: any) => Promise<unknown> | unknown
@@ -255,9 +267,9 @@ describe('registerCoachBotHandlers', () => {
       ['awaiting-first', { status: 'APPROVED_PENDING_PAYMENT' as const, participantName: 'Vira' }],
       ['awaiting-second', { status: 'APPROVED_PENDING_PAYMENT' as const, participantName: 'Oksana' }],
       ['awaiting-third', { status: 'APPROVED_PENDING_PAYMENT' as const, participantName: 'Marta' }],
-    ]))
+    ]), new Set(['free-first', 'free-second', 'free-future']))
 
-    expect(text).toContain('7 сесій · 1 оплачені · 3 очікують оплати · 3 вільні')
+    expect(text).toContain('7 сесій · 1 оплачені · 3 очікують оплати · 3 вільні для запису')
     expect(text).toMatch(/<b>СЬОГОДНІ<\/b>\s+13:00 · Вільний слот\s+14:00 · Вільний слот/)
     expect(text).toMatch(/<b>ПОТРЕБУЄ УВАГИ<\/b>\s+08.09 · 15:00 · Vira · Очікує оплати\s+09.09 · 14:00 · Oksana · Очікує оплати/)
     expect(text).not.toContain('Marta')
@@ -265,6 +277,40 @@ describe('registerCoachBotHandlers', () => {
     expect(text).not.toContain('Оплату не підтверджено')
     expect(text).not.toContain('Клієнт: —')
     expect(text).not.toContain('<b>Разом:')
+  })
+
+  it('counts only resolver-confirmed future individual inventory as bookable', () => {
+    const diary = {
+      week: {
+        from: '2026-09-07T00:00:00.000Z',
+        to: '2026-09-13T20:59:59.999Z',
+        timezone: 'Europe/Kyiv',
+      },
+      sessions: [
+        {
+          id: 'past-free', scheduledAt: '2026-09-07T10:00:00.000Z', topic: 'Індивідуальна сесія', status: 'SCHEDULED', type: 'individual',
+          attendeesCount: 0, remainingSlots: 1, participantNames: [], challengerName: null, opponentName: null, challengerId: null, opponentId: null, winnerId: null, goalA: null, goalB: null, progressA: 0, progressB: 0, battleStatus: null, questionPreviews: [],
+        },
+        {
+          id: 'future-blocked', scheduledAt: '2026-09-09T10:00:00.000Z', topic: 'Індивідуальна сесія', status: 'SCHEDULED', type: 'individual',
+          attendeesCount: 0, remainingSlots: 1, participantNames: [], challengerName: null, opponentName: null, challengerId: null, opponentId: null, winnerId: null, goalA: null, goalB: null, progressA: 0, progressB: 0, battleStatus: null, questionPreviews: [],
+        },
+        {
+          id: 'future-bookable', scheduledAt: '2026-09-10T10:00:00.000Z', topic: 'Індивідуальна сесія', status: 'SCHEDULED', type: 'individual',
+          attendeesCount: 0, remainingSlots: 1, participantNames: [], challengerName: null, opponentName: null, challengerId: null, opponentId: null, winnerId: null, goalA: null, goalB: null, progressA: 0, progressB: 0, battleStatus: null, questionPreviews: [],
+        },
+      ],
+    } as never
+
+    const text = formatCoachWeeklyDiaryMessage(
+      diary,
+      'Vira',
+      new Date('2026-09-08T09:00:00.000Z'),
+      new Map(),
+      new Set(['future-bookable']),
+    )
+
+    expect(text).toContain('3 сесії · 0 оплачені · 0 очікують оплати · 1 вільні для запису')
   })
 
   it('uses the Ukrainian missing-name fallback for a commerce-linked individual session', () => {
@@ -402,7 +448,7 @@ describe('registerCoachBotHandlers', () => {
     expect(text).toContain('Вітаю, Vira! 👋')
     expect(text).toContain('<b>ТВІЙ РОЗКЛАД НА ЦЕЙ ТИЖДЕНЬ</b>')
     expect(text).toContain('07.09–13.09')
-    expect(text).toContain('4 сесії · 3 оплачені · 0 очікують оплати · 0 вільні')
+    expect(text).toContain('4 сесії · 0 оплачені · 0 очікують оплати · 0 вільні')
     expect(text).toMatch(/<b>СЬОГОДНІ<\/b>\s+19:00 · V3 · Потребує дії\s+20:00 · Vira vs V3 · Підтверджена/)
     expect(text).not.toContain('Групова практика «Фокус»')
     expect(text).not.toContain('<b>ЧТ 10.09</b>')
@@ -472,7 +518,72 @@ describe('registerCoachBotHandlers', () => {
     expect(text).toContain('0 сесій · 0 оплачені · 0 очікують оплати · 0 вільні')
     expect(text).toMatch(/<b>СЬОГОДНІ<\/b>\s+Сьогодні сесій немає\./)
     expect(text).not.toContain('<b>Разом:')
+    expect(JSON.stringify(ctx.reply.mock.calls[1]?.[1]?.reply_markup.inline_keyboard)).not.toContain('РОЗГЛЯНУТИ ЗАЯВКУ')
     expect(getCoachWeeklyDiary).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('keeps pending requests visible without adding per-request Telegram actions', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-08T12:00:00.000Z'))
+    const individual = (id: string, scheduledAt: string, status: 'SCHEDULED' | 'CANCELLED' = 'SCHEDULED') => ({
+      id,
+      scheduledAt,
+      topic: 'Індивідуальна сесія',
+      status,
+      type: 'individual',
+      attendeesCount: 0,
+      remainingSlots: 1,
+      participantNames: [],
+      challengerName: null,
+      opponentName: null,
+      challengerId: null,
+      opponentId: null,
+      winnerId: null,
+      goalA: null,
+      goalB: null,
+      progressA: 0,
+      progressB: 0,
+      battleStatus: null,
+      questionPreviews: [],
+    })
+    vi.mocked(getCoachWeeklyDiary).mockResolvedValue({
+      week: {
+        from: '2026-09-07T00:00:00.000Z',
+        to: '2026-09-13T20:59:59.999Z',
+        timezone: 'Europe/Kyiv',
+      },
+      sessions: [
+        individual('request-one-session', '2026-09-08T14:00:00.000Z'),
+        individual('request-two-session', '2026-09-08T15:00:00.000Z'),
+        individual('paid-session', '2026-09-08T16:00:00.000Z'),
+        individual('cancelled-session', '2026-09-08T17:00:00.000Z', 'CANCELLED'),
+      ],
+    })
+    vi.mocked(getCalendarRequests).mockResolvedValue([
+      { id: 'request-one', zoomSessionId: 'request-one-session', requesterUserId: 'user-one', status: 'REQUESTED' },
+      { id: 'request-two', zoomSessionId: 'request-two-session', requesterUserId: 'user-two', status: 'REQUESTED' },
+      { id: 'paid-request', zoomSessionId: 'paid-session', requesterUserId: 'user-paid', status: 'PAID' },
+      { id: 'cancelled-request', zoomSessionId: 'cancelled-session', requesterUserId: 'user-cancelled', status: 'CANCELLED' },
+    ] as never)
+    vi.mocked(prisma.user.findMany).mockResolvedValue([
+      { id: 'user-one', firstName: 'V3', lastName: null, email: null },
+      { id: 'user-two', firstName: 'Vira', lastName: null, email: null },
+    ] as never)
+    const telegramBot = createTelegramBotMock()
+    registerCoachBotHandlers(telegramBot as never)
+    const startHandler = telegramBot.start.mock.calls[0]?.[0] as RegisteredHandler
+    const ctx = createCoachCtx()
+
+    await startHandler(ctx)
+
+    const [text, payload] = ctx.reply.mock.calls[1]
+    expect(text).toContain('V3 · Очікує підтвердження')
+    expect(text).toContain('Vira · Очікує підтвердження')
+    expect(JSON.stringify(payload.reply_markup.inline_keyboard)).not.toContain('РОЗГЛЯНУТИ ЗАЯВКУ')
+    expect(payload.reply_markup.inline_keyboard[0]).toEqual([
+      expect.objectContaining({ text: 'ZOOM КАЛЕНДАР' }),
+    ])
     vi.useRealTimers()
   })
 

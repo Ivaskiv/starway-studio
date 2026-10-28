@@ -37,6 +37,7 @@ import {
   timeValue,
   validateIndividualWindow,
   RegularSchedule,
+  WeekPreview,
   ZoomAvailabilityEditor,
 } from '../../../src/features/zoom/ZoomAvailabilityEditor'
 
@@ -125,9 +126,9 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
     weekDays.splice(0, weekDays.length, ...weekDays.map((day) => ({ ...day, source: 'recurring' as const, hasOverride: false })))
 
     try {
-      const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+      const markup = renderToStaticMarkup(createElement(WeekPreview, {
         weekAnchor: new Date('2026-09-23T12:00:00.000Z'), sessions: [],
-        onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+        onSelectSession: vi.fn(),
       }))
 
       expect(markup).toContain('Тиждень вже за звичним графіком.')
@@ -138,9 +139,9 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
   })
 
   it('renders exactly seven compact canonical week rows without opening date editors', () => {
-    const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+    const markup = renderToStaticMarkup(createElement(WeekPreview, {
       weekAnchor: new Date('2026-09-23T12:00:00.000Z'), sessions: [],
-      onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+      onSelectSession: vi.fn(),
     }))
 
     expect(markup.match(/data-availability-week-row/g)).toHaveLength(7)
@@ -157,13 +158,13 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
   })
 
   it('keeps the availability overview compact without duplicating calendar sessions until editing', () => {
-    const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+    const markup = renderToStaticMarkup(createElement(WeekPreview, {
       weekAnchor: new Date('2026-09-23T12:00:00.000Z'),
       sessions: [{
         id: 'scheduled-session', scheduledAt: '2026-09-22T14:30:00.000Z', topic: 'Індивідуальна сесія',
         status: 'SCHEDULED', type: 'individual', zoomLink: '', canEdit: true, durationMinutes: 60,
       }],
-      onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+      onSelectSession: vi.fn(),
     }))
 
     expect(markup).not.toContain('data-availability-sessions="2026-09-22"')
@@ -172,18 +173,30 @@ describe('ZoomAvailabilityEditor recurring-window contract', () => {
   })
 
   it('shows the OFF day without duplicating its existing session in availability overview', () => {
-    const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+    const markup = renderToStaticMarkup(createElement(WeekPreview, {
       weekAnchor: new Date('2026-09-23T12:00:00.000Z'),
       sessions: [{
         id: 'off-day-session', scheduledAt: '2026-09-24T07:00:00.000Z', topic: 'Раніше запланована зустріч',
         status: 'SCHEDULED', type: 'individual', zoomLink: '', canEdit: true, durationMinutes: 60,
       }],
-      onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+      onSelectSession: vi.fn(),
     }))
 
     expect(markup).toContain('data-availability-week-row="2026-09-24"')
     expect(markup).not.toContain('data-availability-sessions="2026-09-24"')
     expect(markup).not.toContain('Раніше запланована зустріч')
+  })
+
+  it('opens availability on the regular schedule shown first in Preview #20', () => {
+    const markup = renderToStaticMarkup(createElement(ZoomAvailabilityEditor, {
+      weekAnchor: new Date('2026-09-23T12:00:00.000Z'), sessions: [],
+      onPreviousWeek: vi.fn(), onNextWeek: vi.fn(), onCurrentWeek: vi.fn(),
+    }))
+
+    expect(markup).toContain('Твій стандартний робочий тиждень.')
+    expect(markup).toContain('час за Києвом')
+    expect(markup).toContain('data-availability-regular-row')
+    expect(markup).not.toContain('data-availability-week-row')
   })
 
   it('renders compact regular schedule rows with ON/OFF badges and split recurring windows', () => {

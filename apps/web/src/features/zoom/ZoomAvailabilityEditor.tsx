@@ -3,7 +3,7 @@ import { CalendarClock, ChevronLeft, ChevronRight, Info, Pencil, RotateCcw, User
 import { BaseModal } from '@/features/modals/BaseModal'
 import { useGetAvailabilityQuery, useGetAvailabilityWeekQuery, useSaveAvailabilityMutation, useSaveAvailabilityWeekMutation } from './zoom.api'
 import type { AvailabilitySlot, AvailabilityWeekChange, AvailabilityWeekDay, ZoomCalendarSession } from './zoom.types'
-import { addKyivDays, getKyivDateKey, getKyivWeekRange } from './utils/zoomDateTime.utils'
+import { addKyivDays, getKyivDateKey, getKyivWeekRange, KYIV_TIME_LABEL } from './utils/zoomDateTime.utils'
 
 const DAYS = ['Неділя', 'Понеділок', 'Вівторок', 'Середа', 'Четвер', "П’ятниця", 'Субота']
 const MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня']
@@ -79,7 +79,7 @@ function availabilityDateParts(date: Date) {
   return { weekday, numericDate }
 }
 
-function AvailabilitySessionRow({ session }: { session: ZoomCalendarSession }) {
+function AvailabilitySessionRow({ session, onSelectSession }: { session: ZoomCalendarSession; onSelectSession: (session: ZoomCalendarSession) => void }) {
   const isIndividual = session.type === 'individual'
   const isGroupPractice = session.type === 'group_practice'
   const Icon = isIndividual ? UserRound : isGroupPractice ? UsersRound : CalendarClock
@@ -88,7 +88,7 @@ function AvailabilitySessionRow({ session }: { session: ZoomCalendarSession }) {
     ? `ФОКУС · ${session.attendeesCount}${session.remainingSlots !== undefined ? `/${session.attendeesCount + session.remainingSlots}` : ''} учасників`
     : null
 
-  return <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-100"><Icon className="h-4 w-4" aria-hidden="true" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-white/70">{formatSessionTime(session.scheduledAt, session.durationMinutes)}</p><p className="truncate text-sm font-semibold text-white">{type}</p><p className="truncate text-xs text-white/50">{occupancy ?? session.topic}</p></div><ChevronRight className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" /></div>
+  return <button type="button" onClick={() => onSelectSession(session)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2.5 text-left"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-100"><Icon className="h-4 w-4" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-white/70">{formatSessionTime(session.scheduledAt, session.durationMinutes)}</span><span className="block truncate text-sm font-semibold text-white">{type}</span><span className="block truncate text-xs text-white/50">{occupancy ?? session.topic}</span></span><ChevronRight className="h-4 w-4 shrink-0 text-white/45" aria-hidden="true" /></button>
 }
 
 export function getWeekDateKeys(weekAnchor: Date) {
@@ -146,7 +146,7 @@ export function RegularSchedule({ slots, onChange }: { slots: AvailabilitySlot[]
   })}</div>
 }
 
-function WeekPreview({ weekAnchor, sessions }: { weekAnchor: Date; sessions: ZoomCalendarSession[] }) {
+export function WeekPreview({ weekAnchor, sessions, onSelectSession }: { weekAnchor: Date; sessions: ZoomCalendarSession[]; onSelectSession: (session: ZoomCalendarSession) => void }) {
   const from = getWeekDateKeys(weekAnchor)[0]!
   const weekDates = useMemo(() => getWeekDateKeys(weekAnchor), [from])
   const { data: persistedDays = [], isFetching, isError, refetch } = useGetAvailabilityWeekQuery(from)
@@ -214,7 +214,7 @@ function WeekPreview({ weekAnchor, sessions }: { weekAnchor: Date; sessions: Zoo
         {day.hasOverride && <p className="mb-2 text-[10px] font-semibold text-sky-100">ЗМІНЕНО ДЛЯ ЦІЄЇ ДАТИ</p>}
         {day.windows.length ? <div className="space-y-2">{day.windows.map((slot) => editingId === slot.id ? <AvailabilityWindowEditor key={slot.id} slot={slot} onChange={(next) => updateWindows(day.date, day.windows.map((item) => item.id === slot.id ? next : item))} onDelete={() => { updateWindows(day.date, day.windows.filter((item) => item.id !== slot.id)); setEditingId(null) }} onDone={() => setEditingId(null)} /> : <button type="button" key={slot.id} onClick={() => setEditingId(slot.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-left"><span className="text-sm text-white">{timeValue(slot.hour, slot.minute)} — {timeValue(slot.endHour ?? slot.hour + 1, slot.endMinute ?? slot.minute)}</span><span className="text-xs font-semibold text-sky-100">ЗМІНИТИ</span></button>)}</div> : <p className="text-sm text-white/55">Вихідний день. Додай час для цього конкретного дня.</p>}
         <div className="mt-3 flex flex-wrap gap-3"><button type="button" onClick={() => updateWindows(day.date, [...day.windows, createIndividualWindow(availabilityDayOfWeek(date))])} className="text-xs font-semibold text-sky-100">+ ДОДАТИ ЧАС</button>{day.windows.length > 0 && <button type="button" onClick={() => updateWindows(day.date, [])} className="text-xs font-semibold text-white/55">ЗРОБИТИ ВИХІДНИМ</button>}{day.hasOverride && <button type="button" disabled={isLoading || savingDate === day.date} onClick={() => void persistChanges([{ date: day.date, reset: true }], day.date)} className="text-xs font-semibold text-white/55 disabled:opacity-40">ПОВЕРНУТИ ЗВИЧНИЙ ГРАФІК</button>}</div>
-        {dateSessions.length > 0 && <div data-availability-sessions={day.date} className="mt-3 space-y-2 border-t border-white/10 pt-3"><p className="text-xs text-white/55">Заплановані зустрічі залишаються без змін.</p>{dateSessions.map((session) => <AvailabilitySessionRow key={session.id} session={session} />)}</div>}
+        {dateSessions.length > 0 && <div data-availability-sessions={day.date} className="mt-3 space-y-2 border-t border-white/10 pt-3"><p className="text-xs text-white/55">Заплановані зустрічі залишаються без змін.</p>{dateSessions.map((session) => <AvailabilitySessionRow key={session.id} session={session} onSelectSession={onSelectSession} />)}</div>}
       </div>}
     </section>
   })}
@@ -236,10 +236,10 @@ function WeekPreview({ weekAnchor, sessions }: { weekAnchor: Date; sessions: Zoo
   </div>
 }
 
-export function ZoomAvailabilityEditor({ weekAnchor, sessions, onPreviousWeek, onNextWeek, onCurrentWeek }: { weekAnchor: Date; sessions: ZoomCalendarSession[]; onPreviousWeek: () => void; onNextWeek: () => void; onCurrentWeek: () => void }) {
+export function ZoomAvailabilityEditor({ weekAnchor, sessions, onPreviousWeek, onNextWeek, onCurrentWeek, onSelectSession = () => undefined }: { weekAnchor: Date; sessions: ZoomCalendarSession[]; onPreviousWeek: () => void; onNextWeek: () => void; onCurrentWeek: () => void; onSelectSession?: (session: ZoomCalendarSession) => void }) {
   const { data: persistedSlots = [], refetch: refetchAvailability } = useGetAvailabilityQuery()
   const [saveAvailability, { isLoading }] = useSaveAvailabilityMutation()
-  const [mode, setMode] = useState<AvailabilityEditorMode>('week')
+  const [mode, setMode] = useState<AvailabilityEditorMode>('regular')
   const [draft, setDraft] = useState<AvailabilitySlot[]>(persistedSlots)
   const [saveError, setSaveError] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -266,13 +266,13 @@ export function ZoomAvailabilityEditor({ weekAnchor, sessions, onPreviousWeek, o
     {mode === 'week' ? <>
       <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-700/60 px-1 py-2">
         <button type="button" aria-label="Попередній тиждень доступності" onClick={onPreviousWeek} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-white/80"><ChevronLeft className="h-4 w-4" /></button>
-        <p className="flex-1 text-center text-[11px] font-semibold">{formatWeekRange(weekRange.from, weekRange.to)}</p>
+        <p className="flex-1 text-center text-[11px] font-semibold"><span className="block">{formatWeekRange(weekRange.from, weekRange.to)}</span><span className="mt-0.5 block text-[10px] font-medium text-white/45">{KYIV_TIME_LABEL}</span></p>
         <button type="button" onClick={onCurrentWeek} className="rounded-lg border border-sky-400/50 bg-sky-950/50 px-2 py-2 text-[10px] text-sky-200">Сьогодні</button>
         <button type="button" aria-label="Наступний тиждень доступності" onClick={onNextWeek} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-white/80"><ChevronRight className="h-4 w-4" /></button>
       </div>
-      <WeekPreview weekAnchor={weekAnchor} sessions={sessions} />
+      <WeekPreview weekAnchor={weekAnchor} sessions={sessions} onSelectSession={onSelectSession} />
     </> : <>
-      <div className="rounded-lg border border-slate-700/60 bg-slate-900/45 p-3"><h3 className="text-sm font-semibold">ЗВИЧНИЙ ГРАФІК</h3><p className="mt-1 text-xs leading-4 text-slate-400">Твій стандартний робочий тиждень.<br />Використовується для нових бронювань.</p></div>
+      <div className="rounded-lg border border-slate-700/60 bg-slate-900/45 p-3"><div className="flex items-baseline justify-between gap-3"><h3 className="text-sm font-semibold">ЗВИЧНИЙ ГРАФІК</h3><p className="shrink-0 text-[10px] font-medium text-white/45">{KYIV_TIME_LABEL}</p></div><p className="mt-1 text-xs leading-4 text-slate-400">Твій стандартний робочий тиждень.<br />Використовується для нових бронювань.</p></div>
       <RegularSchedule slots={draft} onChange={(next) => { setDraft(next); setSaved(false); setSaveError(false) }} />
       <div className="flex items-start gap-3 rounded-lg border border-slate-700/60 bg-slate-900/45 p-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-200/60" /><p className="text-[10px] leading-4 text-slate-400">Зміна звичного графіка впливає на нові бронювання.<br />Вже заплановані зустрічі не змінюються.</p></div>
       {saved && <p className="text-sm text-emerald-200">Звичний графік оновлено.</p>}

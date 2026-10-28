@@ -14,7 +14,7 @@
     "build": "pnpm --dir ../packages/shared build && pnpm --dir ../packages/ai build && pnpm --dir ../packages/db build && tsc && tsc-alias -p tsconfig.json",
     "start": "tsx dist/index.js",
     "start:interactive": "tsx dist/index.js",
-    "start:background": "tsx dist/background/index.js",
+    "start:background": "node dist/src/background/index.js",
     "clean": "rm -rf dist",
     "typecheck": "pnpm --dir ../packages/shared build && pnpm --dir ../packages/ai build && pnpm --dir ../packages/db build && tsc --noEmit",
     "user:consolidation:dry": "tsx src/scripts/user-consolidation-backfill.ts",

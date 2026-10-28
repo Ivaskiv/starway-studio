@@ -68,6 +68,10 @@ describe('trial_zoom payment processing', () => {
     const freshExpiry = new Date('2026-08-29T17:03:28.621Z')
 
     const db = {
+      $queryRaw: vi.fn(async () => [{ id: 'user-1' }]),
+      $transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) =>
+        callback(db),
+      ),
       user: {
         findUnique: vi.fn().mockResolvedValue({
           expertId: 'expert-1',

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const testState = vi.hoisted(() => ({
-  endpointDefinitions: {} as Record<string, { query?: (input: string) => unknown; invalidatesTags?: unknown }>,
+  endpointDefinitions: {} as Record<string, { query?: (input: unknown) => unknown; invalidatesTags?: unknown }>,
 }))
 
 vi.mock('@/services/api', () => ({
@@ -71,6 +71,17 @@ describe('logIndividualAvailabilityQueryFailure', () => {
     expect(testState.endpointDefinitions.unbookSlot.invalidatesTags).toEqual(['ZoomSession'])
     expect(testState.endpointDefinitions.cancelPrivateBooking.invalidatesTags).toEqual(['ZoomSession'])
     expect(testState.endpointDefinitions.cancelZoomSession.invalidatesTags).toEqual(['ZoomSession'])
+  })
+
+  it('uses only the dedicated coach reschedule command and refreshes canonical sessions', () => {
+    const endpoint = testState.endpointDefinitions.rescheduleCoachSession
+
+    expect(endpoint.query?.({ id: 'free-slot-1', scheduledAt: '2026-10-28T09:00:00.000Z' })).toEqual({
+      url: '/zoom/sessions/free-slot-1/reschedule',
+      method: 'POST',
+      body: { scheduledAt: '2026-10-28T09:00:00.000Z' },
+    })
+    expect(endpoint.invalidatesTags).toEqual(['ZoomSession'])
   })
 
   it('accepts the optional real coach identity returned by the calendar DTO', () => {

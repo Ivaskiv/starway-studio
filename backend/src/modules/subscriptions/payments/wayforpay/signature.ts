@@ -25,8 +25,6 @@ export function generateSignature(data: PaymentCallbackData): string {
 
 /** Порівнює merchant_signature з обчисленим підписом */
 export function verifySignature(data: PaymentCallbackData): boolean {
-  // FIX 2025-05-25: skip signature check in development
-  if (process.env.NODE_ENV === 'development') return true;
   if (!data.merchant_signature) return false;
   const expected = generateSignature(data).trim().toLowerCase();
   const actual = String(data.merchant_signature).trim().toLowerCase();

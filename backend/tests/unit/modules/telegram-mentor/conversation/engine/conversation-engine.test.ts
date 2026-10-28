@@ -9,25 +9,25 @@ const mocks = vi.hoisted(() => ({
   appendTelegramConversationTurn: vi.fn(),
 }))
 
-vi.mock('../../../../ai/gateway/index.ts', () => ({
+vi.mock('@/modules/ai/gateway/index.js', () => ({
   getTelegramAgentGateway: () => ({
     execute: mocks.gatewayExecute,
   }),
 }))
 
-vi.mock('../../../services/claude-intelligence.service.js', () => ({
+vi.mock('@/services/claude-intelligence.service.js', () => ({
   claudeIntelligenceService: {
     getConversationHistory: mocks.getConversationHistory,
   },
 }))
 
-vi.mock('../../../services/context/intelligence.ts', () => ({
+vi.mock('@/modules/telegram-mentor/services/context/intelligence.js', () => ({
   resolveTelegramIntelligence: mocks.resolveTelegramIntelligence,
   appendTelegramConversationTurn: mocks.appendTelegramConversationTurn,
   resolveTelegramSupportUrl: vi.fn(() => 'https://t.me/test_support'),
 }))
 
-vi.mock('../../../services/context/request.ts', () => ({
+vi.mock('@/modules/telegram-mentor/services/context/request.js', () => ({
   getTelegramAiRequestContext: mocks.getTelegramAiRequestContext,
 }))
 
@@ -35,11 +35,11 @@ vi.mock('@/products/ab-system/telegram/service.js', () => ({
   handleAbTestCallback: mocks.handleAbTestCallback,
 }))
 
-vi.mock('../../../handlers/status.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/status.js', () => ({
   handleStatus: vi.fn(),
 }))
 
-import { TelegramConversationEngine } from '../conversationEngine.ts'
+import { TelegramConversationEngine } from '@/modules/telegram-mentor/conversation/engine/conversationEngine.ts'
 
 describe('TelegramConversationEngine', () => {
   const baseRequestContext = {

@@ -1,5 +1,5 @@
 import type { CalendarView, ZoomCalendarSession } from '../../zoom.types'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   CalendarDays,
   ChevronLeft,
@@ -14,6 +14,7 @@ import {
   getUserZoomCommercePresentation,
   getSessionMeta,
   getSlotDotClass,
+  isSameDay,
   isPastDate,
   isToday,
   isZoomLinkActive,
@@ -23,8 +24,8 @@ import {
   useCalendar,
   type CalendarProps,
 } from '../../hooks/useCalendar'
+import { getKyivDateKey, KYIV_TIME_LABEL, KYIV_TIMEZONE } from '../../utils/zoomDateTime.utils'
 
-import { PreparationModal } from './PreparationModal'
 import { QuestionModal } from './QuestionModal'
 import { DaySessionsSheet } from './DaySessionsSheet'
 import { SessionCard } from './SessionCard'
@@ -54,6 +55,19 @@ const UK_MONTH_GENITIVE = [
   'листопада',
   'грудня',
 ]
+
+function formatCalendarDateValue(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseCalendarDateValue(value: string): Date | null {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day, 12)
+}
 
 export function routeUserBookingAttempt({
   session,
@@ -87,6 +101,28 @@ export function isAvailableIndividualSlot(session: ZoomCalendarSession): boolean
     && session.status !== 'CANCELLED'
     && session.status !== 'COMPLETED'
   )
+}
+
+export function findNearestBookableUserSession(
+  sessions: ZoomCalendarSession[],
+  now: Date,
+  hasFocusAccess?: boolean,
+): ZoomCalendarSession | null {
+  return sessions
+    .filter((session) => {
+      if (new Date(session.scheduledAt) <= now) return false
+      if (session.status === 'COMPLETED' || session.status === 'CANCELLED' || session.commerceStatus) return false
+
+      const type = getNormalizedSessionType(session)
+      if (type === 'individual' || type === 'private') return isAvailableIndividualSlot(session)
+      if (type !== 'group' && type !== 'group_practice' && type !== 'intensive') return false
+
+      return hasFocusAccess !== false
+        && !session.isMyBooking
+        && session.slotStatus !== 'booked'
+        && (session.remainingSlots ?? 1) > 0
+    })
+    .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())[0] ?? null
 }
 
 function getSessionCapacityLabel(session: ZoomCalendarSession): string | null {
@@ -166,10 +202,18 @@ function getUserWeekSessionIcon(session: ZoomCalendarSession): LucideIcon {
 
 function getUserWeekSessionTime(session: ZoomCalendarSession): string {
   const startsAt = new Date(session.scheduledAt)
-  const start = startsAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+  const start = startsAt.toLocaleTimeString('uk-UA', {
+    timeZone: KYIV_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
   if (!session.durationMinutes) return start
   const endsAt = new Date(startsAt.getTime() + session.durationMinutes * 60 * 1000)
-  const end = endsAt.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+  const end = endsAt.toLocaleTimeString('uk-UA', {
+    timeZone: KYIV_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
   return `${start} – ${end}`
 }
 
@@ -229,6 +273,8 @@ export default function Calendar(
 
     view,
     setView,
+    currentDate,
+    setCurrentDate,
     sessions,
 
     monthGrid,
@@ -252,13 +298,6 @@ export default function Calendar(
     bookingQuestionText,
     setBookingQuestionText,
     bookingQuestionError,
-    bookingConfirmation,
-
-    bookingPreparationSessionId,
-    bookingPreparationAnswer,
-    setBookingPreparationAnswer,
-    bookingPreparationError,
-    bookingPreparationSuccess,
 
     createDate,
     setCreateDate,
@@ -271,7 +310,6 @@ export default function Calendar(
     coachUsers,
 
     isSubmittingBookingQuestion,
-    isSubmittingBookingPreparation,
 
     updateSession,
 
@@ -288,10 +326,8 @@ export default function Calendar(
     closeBookingQuestion,
     handleBookingConfirm,
 
-    openBookingPreparation,
-    closeBookingPreparation,
-    handleBookingPreparationConfirm,
   } = useCalendar(props)
+  const [nearestSlotsMessage, setNearestSlotsMessage] = useState<string | null>(null)
   const editingSessionData = editingSession
     ? sessions.find((session) => session.id === editingSession) ?? null
     : null
@@ -302,14 +338,31 @@ export default function Calendar(
       ? `${firstWeekDay.getDate()}–${lastWeekDay.getDate()} ${UK_MONTH_GENITIVE[lastWeekDay.getMonth()]} ${lastWeekDay.getFullYear()}`
       : `${firstWeekDay.getDate()} ${UK_MONTH_GENITIVE[firstWeekDay.getMonth()]} – ${lastWeekDay.getDate()} ${UK_MONTH_GENITIVE[lastWeekDay.getMonth()]} ${lastWeekDay.getFullYear()}`
     : periodLabel
-  const userWeekDaysWithSessions = mode === 'user' && view === 'week'
-    ? weekDays.map((day, index) => ({ day, index, sessions: sessionsOnDay(day) })).filter(({ sessions }) => sessions.length > 0)
+  const selectedUserWeekDay = weekDays.find(day => isSameDay(day, currentDate)) ?? weekDays[0]
+  const userWeekDaysWithSessions = mode === 'user' && view === 'week' && selectedUserWeekDay
+    ? [{
+        day: selectedUserWeekDay,
+        index: weekDays.indexOf(selectedUserWeekDay),
+        sessions: sessionsOnDay(selectedUserWeekDay),
+      }].filter(({ sessions }) => sessions.length > 0)
     : []
 
   const closeDaySheet = () => {
     setIsDaySheetOpen(false)
     setSelectedDate(null)
     setSelectedSessions([])
+  }
+
+  const findNearestAvailableSlots = () => {
+    const nearest = findNearestBookableUserSession(sessions, new Date(), props.hasFocusAccess)
+    if (!nearest) {
+      setNearestSlotsMessage('Найближчих доступних слотів у цьому календарі немає.')
+      return
+    }
+
+    setNearestSlotsMessage(null)
+    const nearestKyivDate = parseCalendarDateValue(getKyivDateKey(new Date(nearest.scheduledAt)))
+    if (nearestKyivDate) setCurrentDate(nearestKyivDate)
   }
 
   const openUserBooking = (session: ZoomCalendarSession) => {
@@ -369,6 +422,7 @@ export default function Calendar(
 
   return (
     <div className={mode === 'user' ? 'flex flex-col gap-2.5' : 'flex flex-col gap-4'}>
+      <p className="text-right text-[10px] font-medium text-white/40">{KYIV_TIME_LABEL}</p>
 
       {/* Today banner */}
       {mode === 'coach' && todaySession && (
@@ -376,7 +430,11 @@ export default function Calendar(
           <div>
             <p className="text-[11px] text-white/40 mb-0.5">Сьогодні</p>
             <p className="text-[13px] font-medium text-white">
-              {new Date(todaySession.scheduledAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+              {new Date(todaySession.scheduledAt).toLocaleTimeString('uk-UA', {
+                timeZone: KYIV_TIMEZONE,
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
               {' — '}
               {todaySession.topic}
             </p>
@@ -460,12 +518,59 @@ export default function Calendar(
           </button>
           <button
             type="button"
-            onClick={() => handleDayClick(new Date())}
+            onClick={() => setCurrentDate(new Date())}
             className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-sky-300/25 bg-sky-500/12 px-2.5 text-[11px] font-semibold text-sky-100 transition-colors hover:bg-sky-500/18"
           >
-            Сьогодні
-            <CalendarDays className="h-3.5 w-3.5" />
+            СЬОГОДНІ
           </button>
+          <label
+            className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.035] text-white/60 transition-colors hover:bg-white/[0.07] hover:text-white"
+            aria-label="Обрати дату"
+          >
+            <CalendarDays className="h-4 w-4" aria-hidden="true" />
+            <input
+              type="date"
+              aria-label="Календар дат"
+              value={formatCalendarDateValue(currentDate)}
+              onChange={(event) => {
+                const date = parseCalendarDateValue(event.currentTarget.value)
+                if (date) setCurrentDate(date)
+              }}
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </label>
+        </div>
+      )}
+
+      {mode === 'user' && view === 'week' && (
+        <div role="group" aria-label="Вибір дня тижня" className="grid grid-cols-7 gap-1 py-2">
+          {weekDays.map((day, index) => {
+            const isSelected = isSameDay(day, currentDate)
+            const hasSessions = sessionsOnDay(day).length > 0
+            return (
+              <button
+                key={day.toISOString()}
+                type="button"
+                aria-label={`${UK_DAY_SHORT[index]}, ${day.getDate()} ${UK_MONTH_GENITIVE[day.getMonth()]}`}
+                aria-pressed={isSelected}
+                data-user-weekday-selector={UK_DAY_SHORT[index]}
+                onClick={() => setCurrentDate(day)}
+                className={[
+                  'flex min-w-0 flex-col items-center gap-1 rounded-xl border px-1 py-2 transition-colors',
+                  isSelected
+                    ? 'border-sky-300/40 bg-sky-500/15 text-sky-100'
+                    : 'border-white/[0.07] bg-white/[0.025] text-white/55 hover:bg-white/[0.06]',
+                ].join(' ')}
+              >
+                <span className="text-[10px] font-semibold">{UK_DAY_SHORT[index]}</span>
+                <span className="text-sm font-semibold">{day.getDate()}</span>
+                <span
+                  className={['h-1 w-1 rounded-full', hasSessions ? 'bg-sky-300' : 'bg-transparent'].join(' ')}
+                  aria-hidden="true"
+                />
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -564,7 +669,11 @@ export default function Calendar(
                           ].join(' ')}
                         >
                           <span className={['block font-semibold', statusVariant.textClass].join(' ')}>
-                            {new Date(s.scheduledAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(s.scheduledAt).toLocaleTimeString('uk-UA', {
+                              timeZone: KYIV_TIMEZONE,
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                             {' '}
                             {s.topic}
                           </span>
@@ -591,24 +700,31 @@ export default function Calendar(
       {view === 'week' && mode !== 'coach' && (
         <div className="flex flex-col" data-zoom-week-view="user-vertical">
           {userWeekDaysWithSessions.length === 0 ? (
-            <section data-zoom-week-empty="user" className="rounded-xl border border-dashed border-white/15 bg-white/[0.025] px-4 py-4 text-center">
-              <p className="text-sm text-white/60">Цього тижня сесій немає.</p>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <section
+              data-zoom-week-empty="user"
+              data-zoom-week-empty-compact="true"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.025] px-3 py-2"
+            >
+              <p className="text-xs text-white/60">На вибраний день сесій немає.</p>
+              <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={props.onFindAvailableSlots}
-                  className="rounded-xl border border-sky-300/25 px-3 py-2 text-xs font-semibold text-sky-100"
+                  onClick={findNearestAvailableSlots}
+                  className="whitespace-nowrap rounded-lg border border-sky-300/25 px-2.5 py-1.5 text-[10px] font-semibold text-sky-100"
                 >
                   НАЙБЛИЖЧІ СЛОТИ
                 </button>
                 <button
                   type="button"
                   onClick={nextPeriod}
-                  className="rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white/85"
+                  className="whitespace-nowrap rounded-lg border border-white/15 px-2.5 py-1.5 text-[10px] font-semibold text-white/85"
                 >
                   НАСТУПНИЙ ТИЖДЕНЬ
                 </button>
               </div>
+              {nearestSlotsMessage && (
+                <p role="status" className="w-full text-xs text-white/55">{nearestSlotsMessage}</p>
+              )}
             </section>
           ) : userWeekDaysWithSessions.map(({ day: d, index: i, sessions: daySessions }) => {
             const today = isToday(d)
@@ -711,6 +827,7 @@ export default function Calendar(
               userId={userId}
               onClose={() => setSelectedSession(null)}
               onRequestBooking={openUserBooking}
+              onFindAvailableSlots={props.onFindAvailableSlots}
               hasFocusAccess={props.hasFocusAccess}
               onRestrictedGroupAction={props.onRestrictedGroupAction}
               onAddToCalendar={handleAddToCalendar}
@@ -728,35 +845,13 @@ export default function Calendar(
           userId={userId}
           onClose={() => setSelectedSession(null)}
           onRequestBooking={openUserBooking}
+          onFindAvailableSlots={props.onFindAvailableSlots}
           hasFocusAccess={props.hasFocusAccess}
           onRestrictedGroupAction={props.onRestrictedGroupAction}
           onAddToCalendar={handleAddToCalendar}
           onEdit={id => { setEditingSession(id); setSelectedSession(null); }}
           onCancel={handleCancel}
         />
-      )}
-
-      {mode === 'user' && bookingConfirmation && (
-        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
-          <div className="whitespace-pre-line">{bookingConfirmation.text}</div>
-          <div className="mt-4">
-            <p>👉 Щоб отримати максимум з цієї зустрічі:</p>
-            <p className="mt-1">зроби 1 крок вже зараз</p>
-            <button
-              type="button"
-              onClick={() => openBookingPreparation(bookingConfirmation.sessionId)}
-              className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-300/15"
-            >
-              Зробити крок
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mode === 'user' && bookingPreparationSuccess && (
-        <div className="rounded-2xl border border-sky-400/20 bg-sky-400/10 p-4 text-sm text-sky-50">
-          {bookingPreparationSuccess}
-        </div>
       )}
 
       {/* Create form (coach + empty day click) */}
@@ -810,17 +905,6 @@ export default function Calendar(
           onChange={setBookingQuestionText}
           onCancel={closeBookingQuestion}
           onConfirm={() => void handleBookingConfirm()}
-        />
-      )}
-
-      {mode === 'user' && bookingPreparationSessionId && (
-        <PreparationModal
-          answer={bookingPreparationAnswer}
-          error={bookingPreparationError}
-          isSubmitting={isSubmittingBookingPreparation}
-          onChange={setBookingPreparationAnswer}
-          onCancel={closeBookingPreparation}
-          onConfirm={() => void handleBookingPreparationConfirm()}
         />
       )}
 

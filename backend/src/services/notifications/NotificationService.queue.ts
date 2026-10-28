@@ -1,4 +1,5 @@
 import { getCommerceCheckoutUrl, hasPaidIndividualParticipation, isLegacyIndividualSession } from '../../modules/zoom/commerce/zoom.commerce-request.service.js'
+import { deliverIndividualPaymentReminder } from '../../modules/zoom/commerce/zoom.commerce-telegram.js'
 import { NotificationChannel, type Prisma, type Notification, NotificationStatus, NotificationType, type NotificationJob, type User, } from '@starway/db/prisma-client'
 import { prisma } from '../../db/client.js'
 import { trackEvent } from '../../modules/events/service.js'
@@ -18,6 +19,10 @@ import type { EventPayload } from './NotificationService.foundation.js'
 import { isJsonObject, toJsonObject, asString, asNumber, DAILY_LIMIT, startOfDay, endOfDay, toPersistedJobPayload } from './NotificationService.foundation.js'
 import { loadDeliveryUser } from './NotificationService.telegram.js'
 import { NotificationServiceBase } from './NotificationService.base.js'
+import {
+  deliverFocusPaymentOnboardingJob,
+  isFocusPaymentOnboardingJobPayload,
+} from '../../modules/subscriptions/payments/callback/focus-onboarding.js'
 
 export abstract class NotificationServiceQueue extends NotificationServiceBase {
   async enqueueJob(event: NotificationEvent, userId: string, runAt: Date, payload?: EventPayload): Promise<NotificationJob> {
@@ -112,11 +117,33 @@ export abstract class NotificationServiceQueue extends NotificationServiceBase {
   async processJob(job: NotificationJob): Promise<void> {
     const persisted = toPersistedJobPayload(job.payload)
     const payload = toJsonObject(persisted.payload)
+    if (isFocusPaymentOnboardingJobPayload(payload)) {
+      await deliverFocusPaymentOnboardingJob(payload)
+      return
+    }
+    if (payload.zoomCommerceEvent === 'PAYMENT_REMINDER_10M') {
+      const requestId = asString(payload.zoomCommerceRequestId)
+      const expectedDeadline = asString(payload.paymentDeadline)
+      if (!requestId || !expectedDeadline) {
+        throw new Error('zoom_commerce_payment_reminder_payload_invalid')
+      }
+      await deliverIndividualPaymentReminder({ requestId, expectedDeadline })
+      return
+    }
     const zoomTimer = asString(payload.flow_timer_id ?? payload.flowTimerId)
     if (zoomTimer === 'ZOOM_REMINDER_2H' || zoomTimer === 'ZOOM_REMINDER_5M') {
       const sessionId = asString(payload.sessionId ?? payload.session_id)
       const session = sessionId ? await prisma.zoomSession.findUnique({ where: { id: sessionId } }) : null
-      if (!session || session.status === 'CANCELLED') return
+      if (!session || session.status !== 'SCHEDULED') {
+        console.info('[notifications] skipped zoom reminder by session status', {
+          sessionId,
+          status: session?.status ?? 'MISSING',
+          timerId: zoomTimer,
+          userId: persisted.userId,
+          scheduledAt: asString(payload.scheduledAt) ?? job.runAt.toISOString(),
+        })
+        return
+      }
       if (isLegacyIndividualSession(session)) {
         const requestId = asString(payload.individual_payment_request_id)
         if (requestId) {

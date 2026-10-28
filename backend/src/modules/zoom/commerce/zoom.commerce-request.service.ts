@@ -1,5 +1,6 @@
-import { Prisma, type ZoomCommerceKind, type ZoomCommerceRequest } from '@starway/db/prisma-client'
+import { NotificationType, Prisma, type ZoomCommerceKind, type ZoomCommerceRequest } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
+import { notificationJobService } from '../../../services/notifications/services/NotificationJobService.js'
 import {
   buildShortWayForPayCheckoutUrl,
   refreshCheckoutSessionPayload,
@@ -28,6 +29,8 @@ type IndividualInvoicePreparation =
 const pendingStatuses = ['CREATED', 'OPENED', 'PROCESSING'] as const
 const PRODUCTION_INDIVIDUAL_PAYMENT = { amount: 60, currency: 'EUR' } as const
 const DEVELOPMENT_INDIVIDUAL_PAYMENT = { amount: 1, currency: 'UAH' } as const
+export const INDIVIDUAL_PAYMENT_REMINDER_EVENT = 'PAYMENT_REMINDER_10M'
+const TEN_MINUTES_MS = 10 * 60 * 1000
 export const INDIVIDUAL_REQUEST_CONTEXT_ERROR =
   'Опиши запит кількома словами, щоб коуч розумів, з чим ти приходиш.'
 
@@ -47,9 +50,16 @@ export function validateIndividualRequestContext(value: string): string | null {
 }
 
 export function resolveZoomIndividualPaymentTerms() {
-  return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
-    ? DEVELOPMENT_INDIVIDUAL_PAYMENT
-    : PRODUCTION_INDIVIDUAL_PAYMENT
+  const production = process.env.NODE_ENV === 'production'
+  const price = production
+    ? PRODUCTION_INDIVIDUAL_PAYMENT
+    : DEVELOPMENT_INDIVIDUAL_PAYMENT
+
+  return {
+    ...price,
+    environment: production ? 'production' : 'development',
+    testMode: !production,
+  } as const
 }
 
 export type LegacyIndividualOrphanClassification = 'PROVEN_PAID' | 'PROVEN_UNPAID' | 'AMBIGUOUS'
@@ -214,12 +224,78 @@ function isActive(checkout: Awaited<ReturnType<typeof checkoutFor>>, now: Date) 
     && pendingStatuses.some(status => status === checkout.status))
 }
 
+function canSettleVerifiedCheckout(
+  checkout: Awaited<ReturnType<typeof checkoutFor>>,
+  now: Date,
+) {
+  return isActive(checkout, now)
+    // PROCESSING is entered only after the signed Approved provider callback
+    // reaches the callback owner.  Let that verified in-flight callback win
+    // over a concurrently due expiry scan.
+    || Boolean(checkout && checkout.status === 'PROCESSING' && !checkout.invalidatedAt)
+}
+
+export function resolveIndividualPaymentReminderSchedule(input: {
+  requestId: string
+  userId: string
+  deadline: Date
+  now?: Date
+}) {
+  const now = input.now ?? new Date()
+  const runAt = new Date(input.deadline.getTime() - TEN_MINUTES_MS)
+  if (runAt <= now) return null
+
+  const deadlineIso = input.deadline.toISOString()
+  return {
+    runAt,
+    idempotencyKey: `zoom-commerce:${input.requestId}:${deadlineIso}:${INDIVIDUAL_PAYMENT_REMINDER_EVENT}`,
+    payload: {
+      zoomCommerceEvent: INDIVIDUAL_PAYMENT_REMINDER_EVENT,
+      zoomCommerceRequestId: input.requestId,
+      paymentDeadline: deadlineIso,
+      idempotencyKey: `zoom-commerce:${input.requestId}:${deadlineIso}:${INDIVIDUAL_PAYMENT_REMINDER_EVENT}`,
+    },
+  }
+}
+
+async function scheduleIndividualPaymentReminder(request: ZoomCommerceRequest) {
+  if (request.kind !== 'INDIVIDUAL' || request.status !== 'APPROVED_PENDING_PAYMENT') return null
+  const checkout = await prisma.checkoutSession.findFirst({
+    where: { orderReference: request.checkoutOrderReference ?? undefined },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!checkout || !request.checkoutOrderReference) return null
+  const schedule = resolveIndividualPaymentReminderSchedule({
+    requestId: request.id,
+    userId: request.requesterUserId,
+    deadline: checkout.expiresAt,
+  })
+  if (!schedule) return null
+
+  const job = await notificationJobService.enqueueOnce(NotificationType.AI_REMINDER, {
+    event: INDIVIDUAL_PAYMENT_REMINDER_EVENT,
+    userId: request.requesterUserId,
+    payload: schedule.payload,
+  }, schedule.runAt, schedule.idempotencyKey)
+  await notificationJobService.cancelZoomCommercePaymentReminder(request.id, schedule.idempotencyKey)
+  return job
+}
+
+async function cancelIndividualPaymentReminder(requestId: string, db: Db) {
+  // Tests and transaction-local callers can inject a repository client. The
+  // durable queue is the production singleton and must not be touched by an
+  // isolated fake database.
+  if (db !== prisma) return 0
+  return notificationJobService.cancelZoomCommercePaymentReminder(requestId)
+}
+
 function assertPaymentBinding(
   request: ZoomCommerceRequest,
   checkout: NonNullable<Awaited<ReturnType<typeof checkoutFor>>>,
   input: PaymentInput,
 ) {
   const payload = checkout.payload as Record<string, unknown>
+  const runtimeTerms = resolveZoomIndividualPaymentTerms()
   if (input.userId !== request.requesterUserId || input.zoomSessionId !== request.zoomSessionId
     || input.paymentKind !== paymentKind(request) || input.amount !== Number(request.amount)
     || input.currency !== request.currency || checkout.userId !== input.userId
@@ -228,8 +304,10 @@ function assertPaymentBinding(
     || payload.zoomCommerceRequestId !== request.id || payload.zoomSessionId !== request.zoomSessionId
     || payload.userId !== request.requesterUserId
     || (request.kind === 'INDIVIDUAL' && (
-      input.amount !== resolveZoomIndividualPaymentTerms().amount
-      || input.currency !== resolveZoomIndividualPaymentTerms().currency
+      input.amount !== runtimeTerms.amount
+      || input.currency !== runtimeTerms.currency
+      || payload.paymentEnvironment !== runtimeTerms.environment
+      || payload.testMode !== runtimeTerms.testMode
     ))) {
     throw new Error('COMMERCE_PAYMENT_BINDING_MISMATCH')
   }
@@ -259,6 +337,10 @@ async function refreshActiveCheckoutPayload(
     zoomCommerceRequestId: request.id,
     zoomSessionId: request.zoomSessionId,
     userId: request.requesterUserId,
+    ...(request.kind === 'INDIVIDUAL' ? {
+      paymentEnvironment: resolveZoomIndividualPaymentTerms().environment,
+      testMode: resolveZoomIndividualPaymentTerms().testMode,
+    } : {}),
   }
   if (previousPayload?.battleEntryMeta !== undefined) {
     payload.battleEntryMeta = previousPayload.battleEntryMeta
@@ -348,47 +430,6 @@ async function ensureIndividualInvoice(
   })
 }
 
-async function expireApprovals(tx: Tx, expertId: string) {
-  const now = new Date()
-  const requests = await tx.zoomCommerceRequest.findMany({
-    where: { expertId, status: 'APPROVED_PENDING_PAYMENT' },
-  })
-
-  for (const request of requests) {
-    const approvedAt = request.approvedAt
-    const checkout = await checkoutFor(tx, request)
-
-    if (
-      request.kind === 'INDIVIDUAL'
-      && approvedAt
-      && (
-        resolveIndividualPaymentDeadline({
-          approvedAt,
-          scheduledAt: request.scheduledAt,
-        }) <= now
-        || !isActive(checkout, now)
-      )
-    ) {
-      await tx.zoomCommerceRequest.update({
-        where: { id: request.id },
-        data: { status: 'EXPIRED' },
-      })
-      continue
-    }
-
-    // Preserve legacy checkout-expiry semantics for non-individual commerce.
-    if (
-      request.kind !== 'INDIVIDUAL'
-      && !isActive(checkout, now)
-    ) {
-      await tx.zoomCommerceRequest.update({
-        where: { id: request.id },
-        data: { status: 'EXPIRED' },
-      })
-    }
-  }
-}
-
 export async function expireDueIndividualPaymentWindows(
   now = new Date(),
   db: Db = prisma,
@@ -398,7 +439,6 @@ export async function expireDueIndividualPaymentWindows(
       kind: 'INDIVIDUAL',
       status: 'APPROVED_PENDING_PAYMENT',
       approvedAt: { not: null },
-      scheduledAt: { gt: now },
     },
     orderBy: { scheduledAt: 'asc' },
   })
@@ -406,38 +446,36 @@ export async function expireDueIndividualPaymentWindows(
   const expired = []
 
   for (const candidate of candidates) {
-    const approvedAt = candidate.approvedAt
-    if (!approvedAt) continue
-
-    const deadline = resolveIndividualPaymentDeadline({
-      approvedAt,
-      scheduledAt: candidate.scheduledAt,
-    })
-
-    if (deadline > now) continue
-
     const transitioned = await db.$transaction(async tx => {
-      await tx.$queryRaw`
-        SELECT id
-        FROM "ZoomCommerceRequest"
-        WHERE id = ${candidate.id}
-        FOR UPDATE
-      `
+      // Payment confirmation and expiration share this lock order. A verified
+      // callback therefore either finishes first, or sees the expired,
+      // invalidated checkout and cannot confirm a slot that was reassigned.
+      const current = await lockRequest(tx, candidate.id)
+      if (current.kind !== 'INDIVIDUAL' || current.status !== 'APPROVED_PENDING_PAYMENT') return null
+      const checkout = await checkoutFor(tx, current)
+      if (!checkout || checkout.expiresAt > now) return null
 
-      const current = await tx.zoomCommerceRequest.findUniqueOrThrow({
-        where: { id: candidate.id },
+      // A signed Approved callback marks the checkout PROCESSING before it
+      // enters the commerce transaction. Do not steal its reservation while
+      // that verified settlement is in flight; its retry remains eligible to
+      // finalize this exact checkout.
+      if (checkout.status === 'PROCESSING' && !checkout.invalidatedAt) return null
+      if (checkout.status === 'COMPLETED') return null
+
+      await tx.checkoutSession.update({
+        where: { id: checkout.id },
+        data: { status: 'EXPIRED', invalidatedAt: now },
       })
-
-      // Payment wins if another transaction already completed it.
-      if (current.status !== 'APPROVED_PENDING_PAYMENT') return null
-
       return tx.zoomCommerceRequest.update({
         where: { id: current.id },
         data: { status: 'EXPIRED' },
       })
     })
 
-    if (transitioned) expired.push(transitioned)
+    if (transitioned) {
+      expired.push(transitioned)
+      await cancelIndividualPaymentReminder(transitioned.id, db)
+    }
   }
 
   return expired
@@ -461,7 +499,16 @@ async function assertSlot(tx: Tx, request: ZoomCommerceRequest) {
     db: tx,
     excludeCommerceRequestId: request.id,
   })
-  if (!availability.candidate.available) throw new Error('COMMERCE_SLOT_OCCUPIED')
+  // The REQUESTED record was created only after the canonical availability
+  // check. A later coach schedule change must not invalidate that existing
+  // commitment at approval time. Other committed calendar conflicts still
+  // reject the approval through the same resolver.
+  if (
+    !availability.candidate.available
+    && availability.candidate.reason !== 'Час недоступний у розкладі коуча'
+  ) {
+    throw new Error('COMMERCE_SLOT_OCCUPIED')
+  }
 }
 
 function readBattleMeta(requests: unknown) {
@@ -485,6 +532,17 @@ export async function createRequest(input: {
   kind: ZoomCommerceKind; requesterUserId: string; expertId: string
   zoomSessionId?: string | null; scheduledAt: Date; amount: number; currency: string
 }, db: Db = prisma) {
+  validateCreateRequestInput(input)
+  return db.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zoom-intent:${input.kind}:${input.requesterUserId}:${input.expertId}`}))`
+    return createRequestInTransaction(tx, input)
+  })
+}
+
+function validateCreateRequestInput(input: {
+  kind: ZoomCommerceKind; requesterUserId: string; expertId: string
+  zoomSessionId?: string | null; scheduledAt: Date; amount: number; currency: string
+}) {
   if (!Number.isFinite(input.amount) || input.amount <= 0 || !/^[A-Z]{3}$/.test(input.currency)
     || !Number.isFinite(input.scheduledAt.getTime()) || input.scheduledAt <= new Date()) {
     throw new Error('COMMERCE_INVALID_REQUEST')
@@ -495,19 +553,16 @@ export async function createRequest(input: {
   )) {
     throw new Error('COMMERCE_INDIVIDUAL_PRICE_MISMATCH')
   }
-  return db.$transaction(async tx => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zoom-intent:${input.kind}:${input.requesterUserId}:${input.expertId}`}))`
-    return createRequestInTransaction(tx, input)
-  })
 }
 
-async function createRequestInTransaction(
+export async function createRequestWithIdentityInTransaction(
   tx: Tx,
   input: {
     kind: ZoomCommerceKind; requesterUserId: string; expertId: string
     zoomSessionId?: string | null; scheduledAt: Date; amount: number; currency: string
   },
 ) {
+  validateCreateRequestInput(input)
   const existing = await tx.zoomCommerceRequest.findFirst({
     where: { kind: input.kind, requesterUserId: input.requesterUserId, expertId: input.expertId,
       ...(input.kind === 'INDIVIDUAL' ? { zoomSessionId: input.zoomSessionId, scheduledAt: input.scheduledAt } : {}),
@@ -515,7 +570,18 @@ async function createRequestInTransaction(
       scheduledAt: input.kind === 'BATTLE' ? { gt: new Date() } : input.scheduledAt },
     orderBy: { createdAt: 'desc' },
   })
-  return existing ?? tx.zoomCommerceRequest.create({ data: input })
+  if (existing) return { request: existing, created: false }
+  return { request: await tx.zoomCommerceRequest.create({ data: input }), created: true }
+}
+
+export async function createRequestInTransaction(
+  tx: Tx,
+  input: {
+    kind: ZoomCommerceKind; requesterUserId: string; expertId: string
+    zoomSessionId?: string | null; scheduledAt: Date; amount: number; currency: string
+  },
+) {
+  return (await createRequestWithIdentityInTransaction(tx, input)).request
 }
 
 export async function createUserIndividualRequest(input: {
@@ -724,7 +790,6 @@ export async function approveRequest(
 ) {
   const approved = await db.$transaction(async tx => {
     await lockRequest(tx, id, expertId)
-    await expireApprovals(tx, expertId)
     const request = await tx.zoomCommerceRequest.findUniqueOrThrow({ where: { id } })
     if (request.status === 'APPROVED_PENDING_PAYMENT' || request.status === 'PAID') {
       const checkout = await checkoutFor(tx, request)
@@ -753,6 +818,9 @@ export async function approveRequest(
     } })
     const payment = buildPaymentRequest({ userId: request.requesterUserId, productId: kind,
       amount: Number(request.amount), currency: request.currency, payRef: orderReference })
+    const individualTerms = request.kind === 'INDIVIDUAL'
+      ? resolveZoomIndividualPaymentTerms()
+      : null
     if (request.kind === 'INDIVIDUAL') {
       payment.returnUrl = zoomIndividualPaymentReturnUrl()
     }
@@ -770,6 +838,10 @@ export async function approveRequest(
     const checkoutUrl = await buildShortWayForPayCheckoutUrl(checkoutBaseUrl(), {
       ...payment, paymentKind: kind, zoomCommerceRequestId: id,
       zoomSessionId: request.zoomSessionId, userId: request.requesterUserId, battleEntryMeta,
+      ...(individualTerms ? {
+        paymentEnvironment: individualTerms.environment,
+        testMode: individualTerms.testMode,
+      } : {}),
     }, undefined, tx, paymentDeadline)
     return request.kind === 'INDIVIDUAL'
       ? { request: approved, checkoutUrl: null, individualInvoiceRequestId: approved.id }
@@ -777,23 +849,27 @@ export async function approveRequest(
   })
   if (!approved.individualInvoiceRequestId) return approved
 
-  return {
+  const result = {
     request: approved.request,
     checkoutUrl: await ensureIndividualInvoice(db, approved.individualInvoiceRequestId, createInvoice),
   }
+  if (db === prisma) await scheduleIndividualPaymentReminder(result.request)
+  return result
 }
 
 export async function rejectRequest(id: string, expertId: string, db: Db = prisma) {
-  return db.$transaction(async tx => {
+  const rejected = await db.$transaction(async tx => {
     const request = await lockRequest(tx, id, expertId)
     if (request.status === 'REJECTED') return request
     if (request.status !== 'REQUESTED') throw new Error('COMMERCE_ILLEGAL_TRANSITION')
     return tx.zoomCommerceRequest.update({ where: { id }, data: { status: 'REJECTED', rejectedAt: new Date() } })
   })
+  await cancelIndividualPaymentReminder(rejected.id, db)
+  return rejected
 }
 
 export async function cancelRequest(id: string, requesterUserId: string, db: Db = prisma) {
-  return db.$transaction(async tx => {
+  const cancelled = await db.$transaction(async tx => {
     const request = await lockRequest(tx, id)
     if (request.requesterUserId !== requesterUserId) throw new Error('COMMERCE_REQUESTER_MISMATCH')
     if (request.kind !== 'INDIVIDUAL') throw new Error('COMMERCE_CANCEL_KIND_UNSUPPORTED')
@@ -809,6 +885,8 @@ export async function cancelRequest(id: string, requesterUserId: string, db: Db 
     }
     return tx.zoomCommerceRequest.update({ where: { id }, data: { status: 'CANCELLED' } })
   })
+  await cancelIndividualPaymentReminder(cancelled.id, db)
+  return cancelled
 }
 
 export async function resolveByPaymentReference(orderReference: string, db: Db = prisma) {
@@ -825,23 +903,7 @@ export async function getUserCalendarRequestsForWindow(input: {
   to: Date
   includeInactive?: boolean
 }, db: Db = prisma) {
-  return db.$transaction(async tx => {
-    const approvals = await tx.zoomCommerceRequest.findMany({
-      where: {
-        requesterUserId: input.requesterUserId,
-        scheduledAt: { gte: input.from, lt: input.to },
-        status: 'APPROVED_PENDING_PAYMENT',
-      },
-      select: { expertId: true },
-      distinct: ['expertId'],
-    })
-
-    for (const expertId of approvals.map(row => row.expertId).sort()) {
-      await tx.$queryRaw`SELECT id FROM "Expert" WHERE id = ${expertId} FOR UPDATE`
-      await expireApprovals(tx, expertId)
-    }
-
-    return tx.zoomCommerceRequest.findMany({
+  return db.zoomCommerceRequest.findMany({
       where: {
         requesterUserId: input.requesterUserId,
         scheduledAt: { gte: input.from, lt: input.to },
@@ -869,7 +931,6 @@ export async function getUserCalendarRequestsForWindow(input: {
         { createdAt: 'desc' },
         { id: 'desc' },
       ],
-    })
   })
 }
 
@@ -895,13 +956,9 @@ export async function getCalendarRequests(input: {
 }
 
 export async function getPendingForCoach(expertId: string, db: Db = prisma) {
-  return db.$transaction(async tx => {
-    await tx.$queryRaw`SELECT id FROM "Expert" WHERE id = ${expertId} FOR UPDATE`
-    await expireApprovals(tx, expertId)
-    return tx.zoomCommerceRequest.findMany({ where: {
+  return db.zoomCommerceRequest.findMany({ where: {
       expertId, status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT'] },
     }, orderBy: { createdAt: 'asc' } })
-  })
 }
 
 export async function markRequestPaid(
@@ -909,7 +966,7 @@ export async function markRequestPaid(
   db: Db = prisma,
   finalize?: (tx: Tx, request: ZoomCommerceRequest) => Promise<void>,
 ) {
-  return db.$transaction(async tx => {
+  const result = await db.$transaction(async tx => {
     const original = await tx.zoomCommerceRequest.findUniqueOrThrow({
       where: { checkoutOrderReference: input.orderReference },
     })
@@ -919,7 +976,7 @@ export async function markRequestPaid(
     assertPaymentBinding(request, checkout, input)
     if (request.status === 'PAID') return { request, duplicate: true }
     if (request.status !== 'APPROVED_PENDING_PAYMENT') throw new Error('COMMERCE_ILLEGAL_TRANSITION')
-    if (!isActive(checkout, new Date())) throw new Error('COMMERCE_APPROVAL_EXPIRED')
+    if (!canSettleVerifiedCheckout(checkout, new Date())) throw new Error('COMMERCE_APPROVAL_EXPIRED')
     await assertSlot(tx, request)
     const paidAt = new Date()
     if (finalize) await finalize(tx, request)
@@ -938,6 +995,10 @@ export async function markRequestPaid(
     } })
     return { request: paid, duplicate: false }
   })
+  if (result.request.kind === 'INDIVIDUAL') {
+    await cancelIndividualPaymentReminder(result.request.id, db)
+  }
+  return result
 }
 
 export async function hasPaidIndividualParticipation(
@@ -978,4 +1039,23 @@ export async function getCommerceCheckoutUrl(
   return checkoutResult.individualInvoiceRequestId
     ? ensureIndividualInvoice(db, checkoutResult.individualInvoiceRequestId, createInvoice)
     : checkoutResult.checkoutUrl
+}
+
+/** Read-only calendar projection: never creates or refreshes a checkout invoice. */
+export async function getExistingIndividualCheckoutUrl(
+  requestId: string,
+  userId: string,
+  db: Db = prisma,
+): Promise<string | null> {
+  return db.$transaction(async tx => {
+    const request = await tx.zoomCommerceRequest.findUnique({ where: { id: requestId } })
+    if (!request
+      || request.kind !== 'INDIVIDUAL'
+      || request.requesterUserId !== userId
+      || request.status !== 'APPROVED_PENDING_PAYMENT'
+      || request.scheduledAt <= new Date()) return null
+    const checkout = await checkoutFor(tx, request)
+    if (!isActive(checkout, new Date())) return null
+    return invoiceUrlFromPayload(jsonRecord(checkout!.payload) ?? {})
+  })
 }

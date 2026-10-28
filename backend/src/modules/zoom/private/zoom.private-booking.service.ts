@@ -9,12 +9,12 @@ import {
 } from '../../../lib/telegram.js'
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js'
 import {
-  createRequest,
+  createRequestWithIdentityInTransaction,
   resolveZoomIndividualPaymentTerms,
 } from '../commerce/zoom.commerce-request.service.js'
 import { getIndividualAvailabilityForScheduledAt } from '../booking/zoom.availability.service.js'
 import { afterZoomOperation } from '../core/zoom.operations.service.js'
-import { endOfKyivWeek, startOfKyivWeek } from '../shared/zoom.time.utils.js'
+import { endOfKyivWeek, formatKyivTimeLabel, startOfKyivWeek } from '../shared/zoom.time.utils.js'
 
 const WEEKLY_LIMIT = 3
 const WEEKLY_PRIVATE_LIMIT_MESSAGE = 'Цього тижня всі слоти зайняті. Запропонувати наступний тиждень?'
@@ -100,51 +100,72 @@ export async function getAvailablePrivateSlots(
 }
 
 export async function bookPrivateSlot(userId: string, sessionId: string, questionText?: string) {
-  const session = await prisma.zoomSession.findUnique({
-    where: { id: sessionId },
-    include: { _count: { select: { attendees: true } } },
-  })
-  if (!session) throw new Error('session_not_found')
-  if (!isIndividualSession(session)) throw new Error('not_private_session')
-  if (!session.expertId) throw new Error('expert_not_found')
-  if (session.status !== ZoomStatus.SCHEDULED || session.scheduledAt <= new Date()) throw new Error('slot_unavailable')
-  if (session._count.attendees >= 1) throw new Error('slot_full')
-
-  const existing = await prisma.zoomCommerceRequest.findFirst({
-    where: { kind: 'INDIVIDUAL', requesterUserId: userId, zoomSessionId: sessionId,
-      status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT', 'PAID'] } },
-    orderBy: { createdAt: 'desc' },
-  })
-  if (existing) return { success: true, request: existing }
-
-  const availability = await getIndividualAvailabilityForScheduledAt({
-    expertId: session.expertId,
-    scheduledAt: session.scheduledAt,
-  })
-  if (!availability.candidate.available) throw new Error('slot_unavailable')
-
-  const individualPayment = resolveZoomIndividualPaymentTerms()
-  const request = await createRequest({
-    kind: 'INDIVIDUAL', requesterUserId: userId, expertId: session.expertId,
-    zoomSessionId: session.id, scheduledAt: session.scheduledAt,
-    amount: individualPayment.amount, currency: individualPayment.currency,
-  })
-  if (questionText?.trim()) {
-    await prisma.event.upsert({ where: { id: `zoom-context:${request.id}` }, update: {},
-      create: { id: `zoom-context:${request.id}`, userId, type: 'ZOOM_COMMERCE_CONTEXT', source: 'web',
-        payload: { requestId: request.id, questionText: questionText.trim() } } })
-  }
-  await notifyPrivateSessionRequest({
-    commerceRequestId: request.id,
-    sessionId: session.id,
-    userId,
-  }).catch((error: unknown) => {
-    console.error('[zoom/private request] coach notification failed', {
-      commerceRequestId: request.id,
-      error: error instanceof Error ? error.message : String(error),
+  const result = await prisma.$transaction(async (tx) => {
+    const session = await tx.zoomSession.findUnique({
+      where: { id: sessionId },
+      include: { _count: { select: { attendees: true } } },
     })
+    if (!session) throw new Error('session_not_found')
+    if (!isIndividualSession(session)) throw new Error('not_private_session')
+    if (!session.expertId) throw new Error('expert_not_found')
+
+    // Keep the canonical request lock order, then lock this exact inventory row
+    // before validating its still-current availability.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zoom-intent:INDIVIDUAL:${userId}:${session.expertId}`}))`
+    await tx.$queryRaw`SELECT id FROM "ZoomSession" WHERE id = ${sessionId} FOR UPDATE`
+
+    const currentSession = await tx.zoomSession.findUnique({
+      where: { id: sessionId },
+      include: { _count: { select: { attendees: true } } },
+    })
+    if (!currentSession) throw new Error('session_not_found')
+    if (!isIndividualSession(currentSession)) throw new Error('not_private_session')
+    if (!currentSession.expertId) throw new Error('expert_not_found')
+    if (currentSession.status !== ZoomStatus.SCHEDULED || currentSession.scheduledAt <= new Date()) throw new Error('slot_unavailable')
+    if (currentSession._count.attendees >= 1) throw new Error('slot_full')
+
+    const existing = await tx.zoomCommerceRequest.findFirst({
+      where: { kind: 'INDIVIDUAL', requesterUserId: userId, zoomSessionId: sessionId,
+        status: { in: ['REQUESTED', 'APPROVED_PENDING_PAYMENT', 'PAID'] } },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (existing) return { request: existing, created: false }
+
+    const availability = await getIndividualAvailabilityForScheduledAt({
+      expertId: currentSession.expertId,
+      scheduledAt: currentSession.scheduledAt,
+      db: tx,
+      excludeSessionId: currentSession.id,
+    })
+    if (!availability.candidate.available) throw new Error('slot_unavailable')
+
+    const individualPayment = resolveZoomIndividualPaymentTerms()
+    const created = await createRequestWithIdentityInTransaction(tx, {
+      kind: 'INDIVIDUAL', requesterUserId: userId, expertId: currentSession.expertId,
+      zoomSessionId: currentSession.id, scheduledAt: currentSession.scheduledAt,
+      amount: individualPayment.amount, currency: individualPayment.currency,
+    })
+    if (questionText?.trim() && created.created) {
+      await tx.event.upsert({ where: { id: `zoom-context:${created.request.id}` }, update: {},
+        create: { id: `zoom-context:${created.request.id}`, userId, type: 'ZOOM_COMMERCE_CONTEXT', source: 'web',
+          payload: { requestId: created.request.id, questionText: questionText.trim() } } })
+    }
+    return created
   })
-  return { success: true, request }
+
+  if (result.created) {
+    await notifyPrivateSessionRequest({
+      commerceRequestId: result.request.id,
+      sessionId,
+      userId,
+    }).catch((error: unknown) => {
+      console.error('[zoom/private request] coach notification failed', {
+        commerceRequestId: result.request.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+  return { success: true, request: result.request }
 }
 
 export async function notifyPrivateSessionRequest(input: {
@@ -249,9 +270,7 @@ export async function notifyPrivateSessionPayment(input: {
   const date = session.scheduledAt.toLocaleDateString('uk-UA', {
     timeZone: 'Europe/Kyiv', day: '2-digit', month: 'long', year: 'numeric',
   })
-  const time = session.scheduledAt.toLocaleTimeString('uk-UA', {
-    timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit',
-  })
+  const time = formatKyivTimeLabel(session.scheduledAt)
   const userName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || 'Користувач'
   const coachName = [coach?.firstName, coach?.lastName].filter(Boolean).join(' ').trim()
   await Promise.all([
@@ -359,9 +378,7 @@ export async function notifyAssignedPrivateSession(input: {
   const date = session.scheduledAt.toLocaleDateString('uk-UA', {
     timeZone: 'Europe/Kyiv', day: '2-digit', month: 'long', year: 'numeric',
   })
-  const time = session.scheduledAt.toLocaleTimeString('uk-UA', {
-    timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit',
-  })
+  const time = formatKyivTimeLabel(session.scheduledAt)
   const userName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || 'Користувач'
   const coachName = [coach?.firstName, coach?.lastName].filter(Boolean).join(' ').trim()
   const paymentLabel = formatIndividualPayment(Number(commerceRequest.amount), commerceRequest.currency)
@@ -372,11 +389,7 @@ export async function notifyAssignedPrivateSession(input: {
       })
     : null
   const paymentDeadline = checkout?.expiresAt
-    ? checkout.expiresAt.toLocaleTimeString('uk-UA', {
-        timeZone: 'Europe/Kyiv',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+    ? formatKyivTimeLabel(checkout.expiresAt)
     : null
   await Promise.all([
     userChatId

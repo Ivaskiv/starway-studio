@@ -524,6 +524,7 @@ export async function sendDedupedTelegramMessage(
   text: string,
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
   transportBot: Telegraf = bot,
+  onDelivered?: (receipt: { messageId: string | null }) => Promise<void> | void,
 ): Promise<boolean> {
   const normalizedOptions = options
     ? JSON.stringify(options)
@@ -540,7 +541,12 @@ export async function sendDedupedTelegramMessage(
     return false
   }
 
-  await transportBot.telegram.sendMessage(chatId, text, options)
+  const sent = await transportBot.telegram.sendMessage(chatId, text, options)
+  await onDelivered?.({
+    messageId: typeof (sent as { message_id?: unknown }).message_id === 'number'
+      ? String((sent as { message_id: number }).message_id)
+      : null,
+  })
   lastMessageHashes.set(chatId, { hash, sentAt: now })
   return true
 }
@@ -549,8 +555,9 @@ export async function sendUserTelegramMessage(
   chatId: string,
   text: string,
   options?: Parameters<typeof bot.telegram.sendMessage>[2],
+  onDelivered?: (receipt: { messageId: string | null }) => Promise<void> | void,
 ): Promise<boolean> {
-  return sendDedupedTelegramMessage(chatId, text, options)
+  return sendDedupedTelegramMessage(chatId, text, options, bot, onDelivered)
 }
 
 
@@ -569,6 +576,7 @@ export async function sendOpsTelegramMessage(
     messageType?: string
     source?: string
   },
+  onDelivered?: (receipt: { messageId: string | null }) => Promise<void> | void,
 ): Promise<boolean> {
   const chatId = resolveOpsChatId()
 
@@ -602,6 +610,7 @@ export async function sendOpsTelegramMessage(
         text,
         options,
         transportBot,
+        onDelivered,
       )
 
       console.info(

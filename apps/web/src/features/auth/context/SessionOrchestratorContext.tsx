@@ -234,6 +234,21 @@ export function shouldDeferSessionResolution(params: {
   return !params.restoreAttempted && params.authRestoreStatus === 'idle' && !params.isAuthenticated
 }
 
+export function shouldRetryTelegramSessionRestore(params: {
+  isTelegramAuthContext: boolean
+  visibilityState: DocumentVisibilityState
+  isAuthenticated: boolean
+  authRestoreStatus: AuthRestoreStatus
+}): boolean {
+  return (
+    params.isTelegramAuthContext
+    && params.visibilityState !== 'hidden'
+    && !params.isAuthenticated
+    && params.authRestoreStatus !== 'restoring'
+    && params.authRestoreStatus !== 'ready'
+  )
+}
+
 function SessionModalHost() {
   const orchestrator = useSessionOrchestrator()
   const navigate = useNavigate()
@@ -418,6 +433,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   const themeRef = useRef(theme)
   const sessionModalKindRef = useRef(sessionModal.kind)
   const hadPendingDeepLinkSessionOnEntryRef = useRef(hasPendingDeepLinkSession)
+  const authRestoreStatusRef = useRef(authRestoreStatus)
 
   useEffect(() => {
     locationPathRef.current = location.pathname
@@ -451,6 +467,10 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   useEffect(() => {
     isAuthenticatedRef.current = isAuthenticated
   }, [isAuthenticated])
+
+  useEffect(() => {
+    authRestoreStatusRef.current = authRestoreStatus
+  }, [authRestoreStatus])
 
   useEffect(() => {
     dispatchRef.current = dispatch
@@ -506,6 +526,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
       tokenFound: hadEvidence,
       routeGuardTriggered: isProtectedPath(locationPathRef.current),
     })
+    authRestoreStatusRef.current = 'restoring'
     setAuthRestoreStatus('restoring')
     setAppState('auth_restoring')
     setRestoreAttempted(true)
@@ -527,6 +548,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
         setRestoreAtAndStatus(now)
         if (restored) {
           setRestoreFailureWithEvidence(false)
+          authRestoreStatusRef.current = 'ready'
           setAuthRestoreStatus('ready')
           logAuthTrace('hydrationFinished', {
             reason,
@@ -539,6 +561,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
         }
 
         setRestoreFailureWithEvidence(hadEvidence)
+        authRestoreStatusRef.current = 'failed'
         setAuthRestoreStatus('failed')
         logAuthTrace('hydrationFinished', {
           reason,
@@ -554,6 +577,7 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
         const durationMs = Date.now() - now
         setRestoreAtAndStatus(now)
         setRestoreFailureWithEvidence(hadEvidence)
+        authRestoreStatusRef.current = 'failed'
         setAuthRestoreStatus('failed')
         logAuthTrace('hydrationFinished', {
           reason,
@@ -741,9 +765,17 @@ export function SessionOrchestratorProvider({ children }: { children: ReactNode 
   ])
 
   useEffect(() => {
-    const retryTelegramRestore = () => {
-      if (document.visibilityState === 'hidden' || isAuthenticatedRef.current || !isTelegramMiniAppAuthContext()) return
-      void restoreSession('manual')
+    const retryTelegramRestore = (event: Event) => {
+      if (!shouldRetryTelegramSessionRestore({
+        isTelegramAuthContext: isTelegramMiniAppAuthContext(),
+        visibilityState: document.visibilityState,
+        isAuthenticated: isAuthenticatedRef.current,
+        authRestoreStatus: authRestoreStatusRef.current,
+      })) {
+        return
+      }
+
+      void restoreSession(event.type === 'visibilitychange' ? 'visibility' : 'focus')
     }
     window.addEventListener('focus', retryTelegramRestore)
     window.addEventListener('load', retryTelegramRestore)

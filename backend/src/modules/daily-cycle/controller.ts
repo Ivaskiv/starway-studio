@@ -67,9 +67,8 @@ export async function getToday(req: AuthenticatedRequest, res: Response) {
       return res.json(entry)
     }
 
-    const expertId = user.expertId ?? await ensureUserExpertId(user.id);
     const cached = await getCachedTodayEntry(user.id)
-    const entry = cached ?? await getOrCreateTodayEntry(user.id, expertId);
+    const entry = cached ?? await getOrCreateTodayEntry(user.id);
 
     res.json(entry);
   } catch (err) {

@@ -1,6 +1,7 @@
 import type { Telegraf } from 'telegraf'
 
 import { launchBot } from '../lib/telegram.js'
+import { prisma } from '../db/client.js'
 import { assertTelegramBotIdentity } from '../modules/telegram-mentor/runtime/botConfig.js'
 import { buildZoomCalendarUrl } from '../modules/zoom/urls.js'
 import { syncTelegramWebhookContract } from './telegramWebhookSync.js'
@@ -31,6 +32,32 @@ type CachedPrivateMenu = {
 }
 
 const privateMenuCache = new WeakMap<Telegraf, Map<string, CachedPrivateMenu>>()
+
+function logZoomCalendarButtonDebug(input: {
+  source: string
+  chatId: string | undefined
+  finalUrl: string
+  mode: 'web_app' | 'url'
+}): void {
+  let route = 'invalid_url'
+  try {
+    route = new URL(input.finalUrl).pathname
+  } catch {
+    // The final URL is still logged below so a malformed configuration is visible.
+  }
+
+  console.info('[ZOOM_CALENDAR_BUTTON_DEBUG]', {
+    source: input.source,
+    chatId: input.chatId ?? null,
+    finalUrl: input.finalUrl,
+    mode: input.mode,
+    envBase: {
+      TELEGRAM_WEBAPP_BASE_URL: process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
+      PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
+    },
+    route,
+  })
+}
 
 type MainTelegramConsumerInput = {
   bot: Telegraf
@@ -201,6 +228,12 @@ export async function applyZoomMenuForChat(
 
   try {
     const target = normalizedChatId ? { chatId: Number(normalizedChatId) } : {}
+    logZoomCalendarButtonDebug({
+      source: 'telegramConsumerStartup.applyZoomMenuForChat',
+      chatId: normalizedChatId,
+      finalUrl: expectedMenu.web_app.url,
+      mode: 'web_app',
+    })
     await setPersistentZoomCalendarMenu(bot, expectedMenu, target)
 
     if (normalizedChatId && (options.force || process.env.NODE_ENV !== 'production')) {
@@ -283,6 +316,56 @@ async function configurePersistentZoomCalendarMenu(
   }
 }
 
+async function refreshKnownUserZoomCalendarMenus(
+  bot: Telegraf,
+  logger: StartupLogger,
+): Promise<void> {
+  if (!isDevelopmentRuntime()) return
+
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { telegramChatId: { not: null } },
+          { telegramLinks: { some: { isActive: true, chatId: { not: null } } } },
+        ],
+      },
+      select: {
+        telegramChatId: true,
+        telegramLinks: {
+          where: { isActive: true, chatId: { not: null } },
+          select: { chatId: true },
+        },
+      },
+    })
+    const chatIds = new Set<string>()
+
+    for (const user of users) {
+      for (const chatId of [
+        user.telegramChatId,
+        ...user.telegramLinks.map(link => link.chatId),
+      ]) {
+        if (chatId && Number.isFinite(Number(chatId))) {
+          chatIds.add(chatId)
+        }
+      }
+    }
+
+    for (const chatId of chatIds) {
+      await applyZoomMenuForChat(bot, chatId, logger, {
+        zoomRole: 'user',
+        force: true,
+      })
+    }
+  } catch (error) {
+    logger.warn('[TELEGRAM_ZOOM_MENU_SCOPE_REFRESH_SKIPPED]', {
+      role: 'user',
+      error: safeStartupErrorMessage(error),
+    })
+  }
+}
+
 function isStartCommand(ctx: { message?: unknown }): boolean {
   const message = ctx.message
   if (!message || typeof message !== 'object' || !('text' in message)) return false
@@ -316,6 +399,13 @@ async function configureMainBotCommands(
    * Failure must propagate.
    */
   await configurePersistentZoomCalendarMenu(bot, 'user', logger)
+
+  /*
+   * Telegram private-chat menu scopes override the bot default. Local
+   * tunnels change on restart, so refresh persisted USER scopes before the
+   * consumer is reported ready; no incoming /start is required.
+   */
+  await refreshKnownUserZoomCalendarMenus(bot, logger)
 
   /*
    * Telegram slash commands are secondary setup.

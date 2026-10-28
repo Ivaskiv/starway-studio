@@ -7,7 +7,7 @@ import { dirname, resolve } from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 
-import { prisma, withRetry } from '../db/client.js'
+import { assertZoomAttendanceCheckpointSchema, prisma, withRetry } from '../db/client.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
@@ -105,6 +105,7 @@ export async function connectDatabaseWithRetry(retries = 3, delayMs = 3000): Pro
     try {
       await withRetry(() => prisma.$connect())
       await withRetry(() => prisma.$queryRaw`SELECT 1`)
+      await assertZoomAttendanceCheckpointSchema()
       return
     } catch (error) {
       if (index < retries - 1) {

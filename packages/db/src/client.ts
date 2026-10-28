@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PrismaClient } from '../generated/client/index.js'
+import { requireVerifiedDatabaseTls } from './database-tls.js'
 
 const currentFilePath = fileURLToPath(import.meta.url)
 const currentDirPath = dirname(currentFilePath)
@@ -86,7 +87,7 @@ function dumpForensicQuerySnapshots(source: string): void {
 }
 
 function normalizeDatabaseUrl(input: string | undefined): string | undefined {
-  const raw = String(input ?? '').trim()
+  const raw = requireVerifiedDatabaseTls(input)
   if (!raw) {
     return undefined
   }
@@ -185,7 +186,7 @@ function applyRuntimePoolLimit(input: string | undefined): string | undefined {
       const envKey = url.hostname.includes('pooler.supabase.com')
         ? 'PRISMA_POOL_CONNECTION_LIMIT'
         : 'PRISMA_DIRECT_CONNECTION_LIMIT'
-      const fallback = url.hostname.includes('pooler.supabase.com') ? '5' : '3'
+      const fallback = url.hostname.includes('pooler.supabase.com') ? '5' : '1'
       url.searchParams.set(
         'connection_limit',
         getConfiguredPoolLimit({ url, envKey, fallback })
@@ -253,6 +254,70 @@ const directUrl = applyRuntimePoolLimit(
   resolveSupabasePassword(process.env.DIRECT_URL)
 )
 
+function selectRuntimeDatabaseUrl(): string | undefined {
+  if (process.env.NODE_ENV === 'development') {
+    if (!directUrl) {
+      throw new Error(
+        '[db] DIRECT_URL must be configured for local development; refusing pooler fallback'
+      )
+    }
+
+    return directUrl
+  }
+
+  return databaseUrl ?? directUrl
+}
+
+const runtimeDatabaseUrl = selectRuntimeDatabaseUrl()
+const runtimeDatabaseSource =
+  process.env.NODE_ENV === 'development'
+    ? 'direct'
+    : databaseUrl
+      ? 'database'
+      : directUrl
+        ? 'direct'
+        : 'unconfigured'
+
+export type RuntimePrismaDatasourceTarget = {
+  configured: boolean
+  source: 'database' | 'direct' | 'unconfigured'
+  host: string
+  port: string
+}
+
+/**
+ * Reports the exact datasource URL passed to the Prisma singleton without
+ * exposing credentials or query parameters. Runtime health must not infer this
+ * from DATABASE_URL because development intentionally selects DIRECT_URL.
+ */
+export function getRuntimePrismaDatasourceTarget(): RuntimePrismaDatasourceTarget {
+  if (!runtimeDatabaseUrl) {
+    return {
+      configured: false,
+      source: 'unconfigured',
+      host: 'missing',
+      port: 'missing',
+    }
+  }
+
+  try {
+    const url = new URL(runtimeDatabaseUrl)
+    return {
+      configured: true,
+      source: runtimeDatabaseSource,
+      host: url.hostname || 'unknown',
+      port: url.port || 'default',
+    }
+  } catch {
+    return {
+      configured: true,
+      source: runtimeDatabaseSource,
+      host: 'invalid-url',
+      port: 'invalid-url',
+    }
+  }
+}
+
 if (databaseUrl) {
   process.env.DATABASE_URL = databaseUrl
 }
@@ -281,7 +346,7 @@ const prismaClientSingleton = () =>
       : ['error'],
     datasources: {
       db: {
-        url: databaseUrl ?? directUrl,
+        url: runtimeDatabaseUrl,
       },
     },
   })

@@ -127,4 +127,26 @@ describe('getTelegramAiRequestContextForUser', () => {
       status: 'trial',
     })
   })
+
+  it('passes a USER only the canonical new and prior time of their nearest rescheduled Group Practice', async () => {
+    mockGetUserAccessState.mockResolvedValue({ state: 'FOCUS_ACTIVE', isActive: true, hasFocus: true })
+    mockZoomSessionFindFirst.mockResolvedValue({
+      scheduledAt: new Date('2026-11-02T18:00:00.000Z'),
+      topic: 'ФОКУС · Zoom-практика',
+      requests: { type: 'group_practice', previousScheduledAt: '2026-10-26T18:00:00.000Z' },
+    })
+
+    const context = await getTelegramAiRequestContextForUser('user-1', 'chat-1')
+
+    expect(context.nextZoom).toEqual({
+      scheduledAt: '2026-11-02T18:00:00.000Z',
+      topic: 'ФОКУС · Zoom-практика',
+      previousScheduledAt: '2026-10-26T18:00:00.000Z',
+      isRescheduled: true,
+    })
+    expect(mockZoomSessionFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ attendees: { some: { userId: 'user-1' } } }),
+      select: expect.objectContaining({ requests: true }),
+    }))
+  })
 })

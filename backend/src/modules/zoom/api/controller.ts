@@ -27,6 +27,7 @@ import {
   getZoomBookingNotificationContext,
   getUserPreviousZoomSessionRecap,
   markAttended,
+  saveSelfReportedAttendance,
   registerAttendee,
   saveBookingPreparationForAttendee,
   saveBookingQuestionForAttendee,
@@ -34,6 +35,7 @@ import {
 } from '../index.js';
 import { ZoomSessionWithAttendance } from '../types.js';
 import { EXCHANGE_PRICE, getZoomExchangeAccessPolicy } from '../../subscriptions/payments/focus-access.js';
+import { formatKyivTimeLabel } from '../shared/zoom.time.utils.js';
 
 async function notifyCoachAboutZoomBooking(
   userId: string,
@@ -44,13 +46,12 @@ async function notifyCoachAboutZoomBooking(
     const context = await getZoomBookingNotificationContext(userId, sessionId)
     if (!context) return
 
-    const scheduledLabel = context.session.scheduledAt.toLocaleString('uk-UA', {
+    const scheduledDate = context.session.scheduledAt.toLocaleDateString('uk-UA', {
       timeZone: 'Europe/Kyiv',
       day: 'numeric',
       month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
     })
+    const scheduledLabel = `${scheduledDate} · ${formatKyivTimeLabel(context.session.scheduledAt)}`
 
     const usernameLine = context.username ? `\n@${context.username}` : ''
 
@@ -63,8 +64,6 @@ async function notifyCoachAboutZoomBooking(
             '',
             scheduledLabel,
             `Питання №${context.myQuestion.position} у черзі`,
-            '',
-            `«${context.myQuestion.text}»`,
             '',
             `Учасників: ${context.attendeesCount}`,
           ].join('\n')
@@ -564,6 +563,34 @@ export async function markAttendedHandler(req: AuthenticatedRequest, res: Respon
   }
 }
 
+export async function saveSelfReportedAttendanceHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id
+    const attended = req.body?.attended
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (typeof attended !== 'boolean') return res.status(400).json({ error: 'attended must be boolean' })
+
+    const result = await saveSelfReportedAttendance({
+      userId,
+      sessionId: req.params.sessionId,
+      attended,
+    })
+    return res.status(200).json({
+      selfReportedAttended: result.attendee.selfReportedAttended,
+      selfReportedAt: result.attendee.selfReportedAt?.toISOString() ?? null,
+      idempotent: result.idempotent,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'ATTENDANCE_CHECKPOINT_FORBIDDEN') {
+      return res.status(403).json({ error: 'attendance_checkpoint_forbidden' })
+    }
+    if (error instanceof Error && error.message === 'ATTENDANCE_CHECKPOINT_INELIGIBLE') {
+      return res.status(409).json({ error: 'attendance_checkpoint_ineligible' })
+    }
+    next(error)
+  }
+}
+
 export async function postSessionReport(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { sessionId } = req.params;
@@ -592,22 +619,85 @@ export async function getMySessions(req: AuthenticatedRequest, res: Response, ne
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     // Знаходимо всі attendee записи юзера
-    const attendees = await prisma.zoomSessionAttendee.findMany({
+    const [attendees, cancellationEvents] = await Promise.all([
+      prisma.zoomSessionAttendee.findMany({
       where:   { userId },
-      include: { session: true },
+      include: {
+        session: {
+          include: {
+            // The USER history projection must not infer a personal commerce
+            // state from another user's request for the same slot.
+            commerceRequests: {
+              where: { requesterUserId: userId },
+              select: { id: true, status: true },
+              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+              take: 1,
+            },
+          },
+        },
+      },
       orderBy: { session: { scheduledAt: 'desc' } },
-    });
+      }),
+      prisma.event.findMany({
+        where: {
+          userId,
+          type: 'ZOOM_BOOKING_CANCELLED',
+          source: 'zoom-booking',
+          state: 'RECORDED',
+        },
+        select: { id: true, payload: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
 
-    const result: ZoomSessionWithAttendance[] = attendees.map(a => ({
-      ...a.session,
-      scheduledAt:        a.session.scheduledAt.toISOString(),
-      createdAt:          a.session.createdAt.toISOString(),
-      updatedAt:          a.session.updatedAt.toISOString(),
-      requests:           (a.session.requests as any[]) ?? [],
-      postSessionReport:  a.session.postSessionReport as any ?? null,
-      isRegistered:       true,
-      attendeeId:         a.id,
-    }));
+    const activeBookings: ZoomSessionWithAttendance[] = attendees.map(a => {
+      const { commerceRequests, ...session } = a.session
+      const requests = session.requests as { type?: unknown } | unknown[] | null
+      const commerceRequest = commerceRequests[0] ?? null
+      const isCompletedGroupPractice = session.status === 'COMPLETED'
+        && (Array.isArray(requests) || requests?.type === 'group_practice')
+
+      return {
+        ...session,
+        scheduledAt:        session.scheduledAt.toISOString(),
+        createdAt:          session.createdAt.toISOString(),
+        updatedAt:          session.updatedAt.toISOString(),
+        requests:           (session.requests as any[]) ?? [],
+        postSessionReport:  isCompletedGroupPractice ? null : (session.postSessionReport as any ?? null),
+        isRegistered:       true,
+        attendeeId:         a.id,
+        commerceRequestId:  commerceRequest?.id ?? null,
+        commerceStatus:     commerceRequest?.status ?? null,
+      }
+    });
+    const cancelledBookings: ZoomSessionWithAttendance[] = cancellationEvents.flatMap((event) => {
+      const payload = event.payload as Record<string, unknown> | null
+      const sessionId = typeof payload?.sessionId === 'string' ? payload.sessionId : null
+      const attendeeId = typeof payload?.attendeeId === 'string' ? payload.attendeeId : null
+      const scheduledAt = typeof payload?.scheduledAt === 'string' ? payload.scheduledAt : null
+      const topic = typeof payload?.topic === 'string' ? payload.topic : null
+      const type = typeof payload?.type === 'string' ? payload.type : null
+      if (!sessionId || !attendeeId || !scheduledAt || !topic || !type) return []
+
+      return [{
+        // The Event id is a stable logical-booking identity. It deliberately
+        // differs from sessionId so a later rebooking of the same group slot
+        // cannot overwrite this cancelled history card in the USER merge.
+        id: event.id,
+        expertId: null,
+        scheduledAt,
+        topic,
+        status: 'CANCELLED',
+        requests: [],
+        postSessionReport: null,
+        createdAt: event.createdAt.toISOString(),
+        updatedAt: event.createdAt.toISOString(),
+        type,
+        isRegistered: true,
+        attendeeId,
+      }]
+    })
+    const result = [...activeBookings, ...cancelledBookings]
 
     const [previousSessionRecapResult, latestWeeklyReportResult] =
       await Promise.allSettled([

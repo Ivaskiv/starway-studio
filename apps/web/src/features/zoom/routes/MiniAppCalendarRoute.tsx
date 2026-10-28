@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useAppSelector } from '@/app/hooks'
 import { useSessionOrchestrator } from '@/features/auth/context/SessionOrchestratorContext'
 import { selectCurrentUser, selectUserRole } from '@/features/auth/services/auth.slice'
@@ -21,20 +20,6 @@ export default function MiniAppCalendarRoute() {
   const isUserPreview = canSwitchZoomRole && requestedZoomRole === 'user'
   const isCoach = canSwitchZoomRole && !isUserPreview
   const isRestoringSession = authRestoreStatus === 'idle' || authRestoreStatus === 'restoring'
-
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      const webApp = window.Telegram?.WebApp
-      console.info('[USER_ZOOM_MENU_TRACE]', {
-        phase: 'calendar_route_bootstrap',
-        pathname: window.location.pathname,
-        search: window.location.search,
-        hasTelegramWebApp: Boolean(webApp),
-        hasInitData: Boolean(webApp?.initData?.trim()),
-      })
-    }
-    if (!user?.id) void restoreSession('manual')
-  }, [user?.id, restoreSession])
 
   const roleSwitch = canSwitchZoomRole ? (
     <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-1">
@@ -67,7 +52,11 @@ export default function MiniAppCalendarRoute() {
       {isCoach ? (
         <main className="mx-auto w-full max-w-md px-4 py-4 pb-28">
           {location.hash === '#more' && roleSwitch}
-          <CoachZoomPanel expertId={user?.expertId ?? null} activeScreen={({ '#participants': 'participants', '#battle': 'battle', '#analytics': 'analytics', '#more': 'more' } as const)[location.hash] ?? 'calendar'} />
+          <CoachZoomPanel
+            expertId={user?.expertId ?? null}
+            requestId={searchParams.get('requestId')}
+            activeScreen={({ '#participants': 'participants', '#battle': 'battle', '#analytics': 'analytics', '#more': 'more' } as const)[location.hash] ?? 'calendar'}
+          />
         </main>
       ) : user ? (
         <main className="mx-auto w-full max-w-6xl px-4 py-4 pb-28">

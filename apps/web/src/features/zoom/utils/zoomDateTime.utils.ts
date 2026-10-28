@@ -1,5 +1,15 @@
 export const KYIV_TIMEZONE = 'Europe/Kyiv'
+export const KYIV_TIME_LABEL = 'час за Києвом'
 export const DEFAULT_ZOOM_SESSION_DURATION_MINUTES = 60
+
+export function formatKyivTime(value: Date): string {
+  return new Intl.DateTimeFormat('uk-UA', {
+    timeZone: KYIV_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(value)
+}
 
 export function getKyivDateKey(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', {

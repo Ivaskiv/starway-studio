@@ -68,7 +68,7 @@ import {
   saveBookingQuestionForAttendee,
 } from '../../../../src/modules/zoom/booking/zoom.booking.service.js'
 import { getCalendarSessions, getCurrentWeekZoomOverview } from '../../../../src/modules/zoom/calendar/zoom.calendar.service.js'
-import { getUserLatestWeeklyReportSummary, getUserPreviousZoomSessionRecap } from '../../../../src/modules/zoom/reports/zoom.reports.service.js'
+import { getQuestionSummariesBySessionId, getUserLatestWeeklyReportSummary, getUserPreviousZoomSessionRecap } from '../../../../src/modules/zoom/reports/zoom.reports.service.js'
 import { selectTrialZoomEligibleSession } from '../../../../src/modules/zoom/shared/zoom.session-selection.js'
 import * as focusAccessModule from '../../../../src/modules/subscriptions/payments/focus-access.js'
 
@@ -81,6 +81,19 @@ describe('zoom booking service', () => {
       queue = next.then(() => undefined, () => undefined)
       return next
     })
+  })
+
+  it('keeps effective group questions keyed by canonical user and session after edits', async () => {
+    mockZoomSessionFindMany.mockResolvedValue([{ id: 'session-1', requests: {} }])
+    mockEventFindMany.mockResolvedValue([
+      { userId: 'b', payload: { sessionId: 'session-1', questionText: 'B' }, createdAt: new Date('2099-01-01T00:00:00Z') },
+      { userId: 'a', payload: { sessionId: 'session-1', questionText: 'A old' }, createdAt: new Date('2099-01-02T00:00:00Z') },
+      { userId: 'a', payload: { sessionId: 'session-1', questionText: 'A new' }, createdAt: new Date('2099-01-03T00:00:00Z') },
+      { userId: 'c', payload: { sessionId: 'other', questionText: 'foreign' }, createdAt: new Date('2099-01-04T00:00:00Z') },
+    ])
+    const summary = (await getQuestionSummariesBySessionId(['session-1'], 'a')).get('session-1')
+    expect([...summary!.questionsByUser]).toEqual([['b', 'B'], ['a', 'A new']])
+    expect(summary?.myQuestion).toEqual({ text: 'A new', position: 2 })
   })
 
   it.each([false, true])('Individual attendee requires persisted paid commerce: %s', async (paid) => {
@@ -362,7 +375,7 @@ await expect(
 ).resolves.toBeUndefined()
   })
 
-it('allows booking another session for trial entitlement', async () => {
+it('rejects a second group practice for the one-session trial entitlement', async () => {
       vi.spyOn(focusAccessModule, 'getUserAccessState').mockResolvedValue({
       state: 'PREMIUM',
       isActive: false,
@@ -404,7 +417,7 @@ await expect(
     userId: 'user-1',
     sessionId: 'session-late',
   }),
-).resolves.toBeUndefined()
+).rejects.toThrow('TRIAL_ZOOM_SESSION_NOT_ALLOWED')
 
 })
 
@@ -661,33 +674,23 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
       expertId: undefined,
     })
 
-    expect(mockZoomSessionFindMany).toHaveBeenCalledWith({
-      where: {
+    expect(mockZoomSessionFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
         scheduledAt: {
           gte: new Date('2026-08-01T00:00:00.000Z'),
           lte: new Date('2026-08-14T00:00:00.000Z'),
         },
-        status: { not: 'CANCELLED' },
         OR: [
           { requests: { path: ['type'], equals: 'group_practice' } },
-          { requests: { path: ['type'], equals: 'individual' } },
-          { type: 'GROUP' },
-        ],
-      },
-      include: {
-        _count: { select: { attendees: true } },
-        attendees: {
-          select: {
-            userId: true,
-            goalText: true,
-            progress: true,
-            attended: true,
-            user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          {
+            type: 'GROUP',
+            NOT: { requests: { path: ['type'], equals: 'individual' } },
           },
-        },
-      },
-      orderBy: { scheduledAt: 'asc' },
-    })
+          { attendees: { some: { userId: 'user-1' } } },
+          { commerceRequests: { some: { requesterUserId: 'user-1' } } },
+        ],
+      }),
+    }))
     expect(sessions).toHaveLength(1)
     expect(sessions[0]).toMatchObject({
       id: 'session-1',
@@ -752,9 +755,12 @@ it('allows booking for FREE_WEEK1 without paid focus entitlement', async () => {
         where: expect.objectContaining({
           OR: [
             { requests: { path: ['type'], equals: 'group_practice' } },
-            { requests: { path: ['type'], equals: 'individual' } },
-            { type: 'GROUP' },
+            {
+              type: 'GROUP',
+              NOT: { requests: { path: ['type'], equals: 'individual' } },
+            },
             { attendees: { some: { userId: 'user-1' } } },
+            { commerceRequests: { some: { requesterUserId: 'user-1' } } },
           ],
         }),
       }),

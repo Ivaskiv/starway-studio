@@ -61,6 +61,7 @@ import {
 } from '../../../modules/telegram-mentor/session.js'
 import { getDevTestPaymentButton } from '../../../modules/telegram-mentor/keyboards.js'
 import { planMessage } from '../../../modules/telegram-mentor/conversation/delivery/planDelivery.js'
+import { telegramContentRegistry } from '../../../modules/telegram-mentor/content/contentRegistry.js'
 
 const FOCUS_PAYMENT_EVIDENCE_ACK_MSG =
   'Дякую. Чек і деталі платежу передано в STARWAY OPS.\n\nПовернемося з відповіддю після перевірки транзакції.'
@@ -165,6 +166,57 @@ export async function renderCurrentFocusStateMenu(
 ): Promise<void> {
   const { sendStateMenu } = await import('../../../modules/telegram-mentor/handlers/start.menu.js')
   await sendStateMenu(ctx, userId)
+}
+
+/**
+ * Local-bot entry point for the canonical one-time trial Zoom checkout.
+ * The checkout service remains the sole owner of price, order reference and
+ * repeat-use protection; this function only presents its result in Telegram.
+ */
+export async function handleTrialZoomPaymentAction(
+  ctx: Context,
+  userId: string | null,
+): Promise<boolean> {
+  if (!userId) {
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'trial_zoom_checkout_missing_user',
+      telegramContentRegistry.replies.trialZoomCheckoutUnavailable,
+    )
+    return true
+  }
+
+  try {
+    const checkout = await buildEcosystemPaymentCheckoutSession(
+      'trial_zoom',
+      'single',
+      userId,
+      'telegram',
+    )
+
+    await planMessage(
+      ctx,
+      'ctx.reply',
+      'trial_zoom_checkout_opened',
+      telegramContentRegistry.replies.trialZoomCheckout,
+      {
+        inline_keyboard: [[{
+          text: 'ОПЛАТИТИ 1 ГРН',
+          url: checkout.checkoutUrl,
+        }]],
+      },
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    const reply = message === 'TRIAL_ZOOM_ALREADY_USED'
+      ? telegramContentRegistry.replies.trialZoomAlreadyUsed
+      : telegramContentRegistry.replies.trialZoomCheckoutUnavailable
+
+    await planMessage(ctx, 'ctx.reply', 'trial_zoom_checkout_unavailable', reply)
+  }
+
+  return true
 }
 
 export async function handleFocusPaymentAction(

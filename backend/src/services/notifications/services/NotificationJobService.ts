@@ -14,8 +14,21 @@ export class NotificationJobService {
     })
   }
 
+  async enqueueOnce(
+    type: NotificationType,
+    payload: Record<string, unknown>,
+    runAt: Date,
+    idempotencyKey: string,
+  ): Promise<NotificationJob> {
+    return notificationJobRepository.createOnce({ type, payload, runAt }, idempotencyKey)
+  }
+
   async claimDuePending(limit?: number): Promise<NotificationJob[]> {
     return notificationJobRepository.claimDuePending(limit)
+  }
+
+  async claimDuePendingById(jobId: string): Promise<NotificationJob | null> {
+    return notificationJobRepository.claimDuePendingById(jobId)
   }
 
   async markDone(id: string): Promise<NotificationJob> {
@@ -34,6 +47,10 @@ export class NotificationJobService {
   async cancelByUserAndTypes(userId: string, types: NotificationType[]): Promise<number> {
     const result = await notificationJobRepository.cancelByUserAndTypes(userId, types)
     return result.count
+  }
+
+  async cancelZoomCommercePaymentReminder(requestId: string, keepIdempotencyKey?: string): Promise<number> {
+    return notificationJobRepository.cancelZoomCommercePaymentReminder(requestId, keepIdempotencyKey)
   }
 }
 

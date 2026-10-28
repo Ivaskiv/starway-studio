@@ -1,4 +1,5 @@
 import type { Context } from 'telegraf'
+import { randomUUID } from 'node:crypto'
 import { prisma } from '../../../db/client.js'
 import {
   bot,
@@ -16,8 +17,13 @@ import {
   resolveIndividualPaymentDeadline,
 } from './zoom.commerce-request.service.js'
 import { buildZoomCalendarUrl } from '../urls.js'
+import { telegramContentRegistry } from '../../telegram-mentor/content/contentRegistry.js'
+import { formatKyivTimeLabel } from '../shared/zoom.time.utils.js'
 
 const dialogueType = 'ZOOM_COMMERCE_DIALOGUE'
+const EXPIRY_DELIVERY_LEASE_MS = 5 * 60 * 1000
+const expiryRecipients = ['USER', 'COACH', 'OPS'] as const
+type ExpiryRecipient = (typeof expiryRecipients)[number]
 
 export function commerceActions(requestId: string) {
   return { inline_keyboard: [[
@@ -41,20 +47,65 @@ function formatCommerceDate(value: Date): string {
     month: '2-digit',
     year: 'numeric',
   })
-  const time = value.toLocaleTimeString('uk-UA', {
-    timeZone: 'Europe/Kyiv',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const time = formatKyivTimeLabel(value)
   return `${date} · ${time}`
 }
 
 function formatPaymentDeadline(value: Date): string {
-  return value.toLocaleTimeString('uk-UA', {
-    timeZone: 'Europe/Kyiv',
-    hour: '2-digit',
-    minute: '2-digit',
+  return formatKyivTimeLabel(value)
+}
+
+/** Called only by the durable NotificationJob worker. */
+export async function deliverIndividualPaymentReminder(input: {
+  requestId: string
+  expectedDeadline: string
+}): Promise<'sent' | 'skipped'> {
+  const request = await requestContext(input.requestId)
+  if (
+    !request
+    || request.kind !== 'INDIVIDUAL'
+    || request.status !== 'APPROVED_PENDING_PAYMENT'
+    || !request.checkoutOrderReference
+  ) return 'skipped'
+
+  const checkout = await prisma.checkoutSession.findFirst({
+    where: { orderReference: request.checkoutOrderReference },
+    orderBy: { createdAt: 'desc' },
   })
+  if (
+    !checkout
+    || checkout.expiresAt.toISOString() !== input.expectedDeadline
+    || checkout.expiresAt <= new Date()
+    || checkout.invalidatedAt
+    || !['CREATED', 'OPENED'].includes(checkout.status)
+  ) return 'skipped'
+
+  const chatId = request.requester.telegramChatId ?? request.requester.telegramLinks[0]?.chatId
+  const checkoutUrl = chatId
+    ? await getCommerceCheckoutUrl(request.id, request.requesterUserId)
+    : null
+  if (!chatId || !checkoutUrl) return 'skipped'
+
+  const delivered = await sendUserTelegramMessage(
+    String(chatId),
+    [
+      telegramContentRegistry.zoomCommerce.paymentReminderHeading,
+      '',
+      telegramContentRegistry.zoomCommerce.paymentReminderBody,
+      `Резервування діє до ${formatPaymentDeadline(checkout.expiresAt)}.`,
+      telegramContentRegistry.zoomCommerce.paymentReminderKeepSlot,
+    ].join('\n'),
+    {
+      reply_markup: {
+        inline_keyboard: [[{
+          text: telegramContentRegistry.zoomCommerce.paymentReminderCta,
+          url: checkoutUrl,
+        }]],
+      },
+    },
+  )
+  if (!delivered) throw new Error('COMMERCE_PAYMENT_REMINDER_DELIVERY_FAILED')
+  return 'sent'
 }
 
 function requesterName(
@@ -78,6 +129,11 @@ function commercePriceLabel(
   request: NonNullable<Awaited<ReturnType<typeof requestContext>>>,
 ): string {
   return `${Number(request.amount)} ${request.currency === 'EUR' ? '€' : request.currency}`
+}
+
+/** Stable, compact reference for recipients who are already authorized for this request. */
+function shortRequestReference(requestId: string): string {
+  return requestId.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()
 }
 
 function opsRequestSummary(
@@ -196,56 +252,67 @@ export async function handleCommerceCallback(ctx: Context): Promise<boolean> {
   } else {
     const approved = await approveRequest(request.id, request.expertId)
     await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => undefined)
-    const checkoutUrl = await getCommerceCheckoutUrl(request.id, request.requesterUserId)
-    if (approved.request.status === 'APPROVED_PENDING_PAYMENT' && checkoutUrl) {
-      const paymentDeadline = approved.request.kind === 'INDIVIDUAL' && approved.request.approvedAt
-        ? resolveIndividualPaymentDeadline({
-          approvedAt: approved.request.approvedAt,
-          scheduledAt: approved.request.scheduledAt,
-        })
-        : null
-      await sendUserTelegramMessage(
-        String(userChatId),
-        [
-          '✅ СЕСІЮ ПІДТВЕРДЖЕНО',
-          '',
-          'Коуч підтвердив твій запис.',
-          'Щоб закріпити сесію, оплати її.',
-          ...(paymentDeadline ? ['', `Заверши оплату до ${formatPaymentDeadline(paymentDeadline)}.`] : []),
-          '',
-          userPaymentSummary(request),
-        ].join('\n'),
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: `💳 ОПЛАТИТИ ${commercePriceLabel(request)}`, url: checkoutUrl },
-              ],
-              [
-                {
-                  text: '📅 ВІДКРИТИ КАЛЕНДАР',
-                  web_app: {
-                    url: buildZoomCalendarUrl(),
+    try {
+      const checkoutUrl = await getCommerceCheckoutUrl(request.id, request.requesterUserId)
+      if (approved.request.status === 'APPROVED_PENDING_PAYMENT' && checkoutUrl) {
+        const paymentDeadline = approved.request.kind === 'INDIVIDUAL' && approved.request.approvedAt
+          ? resolveIndividualPaymentDeadline({
+            approvedAt: approved.request.approvedAt,
+            scheduledAt: approved.request.scheduledAt,
+          })
+          : null
+        await sendUserTelegramMessage(
+          String(userChatId),
+          [
+            telegramContentRegistry.zoomCommerce.approvalPendingHeading,
+            '',
+            telegramContentRegistry.zoomCommerce.approvalPendingBody,
+            'Щоб закріпити сесію, оплати її.',
+            ...(paymentDeadline ? ['', `Заверши оплату до ${formatPaymentDeadline(paymentDeadline)}.`] : []),
+            '',
+            userPaymentSummary(request),
+          ].join('\n'),
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: `💳 ОПЛАТИТИ ${commercePriceLabel(request)}`, url: checkoutUrl },
+                ],
+                [
+                  {
+                    text: '📅 ВІДКРИТИ КАЛЕНДАР',
+                    web_app: {
+                      url: buildZoomCalendarUrl(),
+                    },
                   },
-                },
+                ],
               ],
-            ],
+            },
           },
-        },
-      )
+        )
+        await sendUserTelegramMessage(
+          String(ctx.chat!.id),
+          [
+            telegramContentRegistry.zoomCommerce.approvalOpsHeading,
+            '',
+            `👤 ${requesterName(request)}`,
+            `📅 ${formatCommerceDate(request.scheduledAt)}`,
+            ...(request.zoomSession?.topic ? [`💬 ${request.zoomSession.topic}`] : []),
+            `💳 ${commercePriceLabel(request)}`,
+            '',
+            telegramContentRegistry.zoomCommerce.approvalOpsStatus,
+          ].join('\n'),
+        )
+      }
+    } catch (error) {
+      console.error('[zoom commerce] approval delivery failed after persisted approval', {
+        requestId: request.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
       await sendUserTelegramMessage(
         String(ctx.chat!.id),
-        [
-          '✅ ЗАПИТ ПІДТВЕРДЖЕНО',
-          '',
-          `👤 ${requesterName(request)}`,
-          `📅 ${formatCommerceDate(request.scheduledAt)}`,
-          ...(request.zoomSession?.topic ? [`💬 ${request.zoomSession.topic}`] : []),
-          `💳 ${commercePriceLabel(request)}`,
-          '',
-          '🕒 Статус: Очікує оплату',
-        ].join('\n'),
-      )
+        'Сесію підтверджено. Не вдалося доставити повідомлення користувачу. Повторне натискання не створить нову оплату.',
+      ).catch(() => undefined)
     }
   }
   return true
@@ -416,14 +483,14 @@ export async function notifyCommercePaid(orderReference: string) {
       ? sendUserTelegramMessage(
         String(userChatId),
         [
-          '✅ ОПЛАТУ ПІДТВЕРДЖЕНО',
+          telegramContentRegistry.zoomCommerce.paidHeading,
           '',
           'Твоя індивідуальна Zoom-сесія оплачена.',
           '',
           `📅 ${formatCommerceDate(request.scheduledAt)}`,
           ...(meaningfulQuestion ? [`💬 ${meaningfulQuestion}`] : []),
           '',
-          'Запис підтверджено.',
+          telegramContentRegistry.zoomCommerce.confirmedBooking,
         ].join('\n'),
         { reply_markup: { inline_keyboard: buttons } },
       )
@@ -445,7 +512,7 @@ export async function notifyCommercePaid(orderReference: string) {
         `💳 ${commercePriceLabel(request)}`,
         `🧾 ${orderReference}`,
         '',
-        'Статус: PAID',
+        telegramContentRegistry.zoomCommerce.paidStatus,
       ].join('\n'),
       undefined,
       { messageType: 'zoom_commerce_paid', source: 'notifyCommercePaid' },
@@ -498,217 +565,166 @@ export async function notifyCommercePaid(orderReference: string) {
     throw new Error('COMMERCE_PAYMENT_NOTIFICATION_DELIVERY_FAILED')
   }
 }
-
-
-
-type PaymentNudgeKind =
-  | 'INDIVIDUAL_MID_WINDOW'
-  | 'INDIVIDUAL_DEADLINE_MINUS_10M'
-
-export function resolvePaymentNudges(input: {
-  approvedAt: Date
-  deadline: Date
-}): Array<{
-  kind: PaymentNudgeKind
-  dueAt: Date
-  text: string
-}> {
-  const MINUTE = 60 * 1000
-  const deadlineLabel = formatPaymentDeadline(input.deadline)
-  const midWindowDueAt = new Date(
-    input.approvedAt.getTime() + (input.deadline.getTime() - input.approvedAt.getTime()) / 2,
-  )
-  const deadlineMinusTenMinutes = new Date(input.deadline.getTime() - 10 * MINUTE)
-  const nudges: Array<{ kind: PaymentNudgeKind; dueAt: Date; text: string }> = []
-
-  if (
-    midWindowDueAt > input.approvedAt
-    && Math.abs(midWindowDueAt.getTime() - deadlineMinusTenMinutes.getTime()) >= MINUTE
-  ) {
-    nudges.push({
-      kind: 'INDIVIDUAL_MID_WINDOW',
-      dueAt: midWindowDueAt,
-      text: [
-        'Оплата сесії ще не завершена.',
-        `Заверши оплату до ${deadlineLabel}.`,
-      ].join('\n'),
-    })
-  }
-
-  if (deadlineMinusTenMinutes > input.approvedAt) {
-    nudges.push({
-      kind: 'INDIVIDUAL_DEADLINE_MINUS_10M',
-      dueAt: deadlineMinusTenMinutes,
-      text: [
-        'До завершення оплати залишилось 10 хвилин.',
-        `Заверши оплату до ${deadlineLabel}.`,
-        'Після дедлайну слот буде звільнено.',
-      ].join('\n'),
-    })
-  }
-
-  return nudges
-}
-
-async function sendPaymentNudgeOnce(input: {
-  requestId: string
-  requesterUserId: string
-  kind: PaymentNudgeKind
-  now: Date
-}): Promise<void> {
-  const eventId =
-    `zoom-payment-nudge:${input.requestId}:${input.kind}`
-
-  const existing = await prisma.event.findUnique({
-    where: { id: eventId },
+async function reconcileExpiryEventState(eventId: string): Promise<void> {
+  const deliveries = await prisma.eventDelivery.findMany({
+    where: { eventId },
     select: { state: true },
   })
+  if (deliveries.length === 0) return
 
-  if (existing?.state === 'DELIVERED') return
+  const states = deliveries.map((delivery) => delivery.state)
+  const terminal = states.every((state) => state === 'DELIVERED' || state === 'SKIPPED')
+  const noFurtherSafeDelivery = states.every((state) => state !== 'PENDING' && state !== 'SENDING')
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { state: terminal ? 'DELIVERED' : noFurtherSafeDelivery ? 'UNKNOWN' : 'SENDING' },
+  })
+}
 
-  if (!existing) {
-    await prisma.event.create({
-      data: {
-        id: eventId,
-        userId: input.requesterUserId,
-        type: 'ZOOM_PAYMENT_NUDGE',
-        source: 'scheduler',
-        state: 'PENDING',
-        payload: {
-          requestId: input.requestId,
-          kind: input.kind,
-        },
-      },
-    }).catch(() => undefined)
+async function markExpiryDeliveryUnknown(deliveryId: string, leaseToken: string, error: string) {
+  await prisma.eventDelivery.updateMany({
+    where: { id: deliveryId, state: 'SENDING', leaseToken },
+    data: { state: 'UNKNOWN', leaseToken: null, leaseExpiresAt: null, lastError: error },
+  })
+}
+
+async function deliverExpiryRecipient(input: {
+  requestId: string
+  deliveryId: string
+  recipient: ExpiryRecipient
+  leaseToken: string
+}): Promise<void> {
+  const request = await requestContext(input.requestId)
+  if (!request || request.kind !== 'INDIVIDUAL' || request.status !== 'EXPIRED') {
+    await prisma.eventDelivery.updateMany({
+      where: { id: input.deliveryId, state: 'SENDING', leaseToken: input.leaseToken },
+      data: { state: 'SKIPPED', leaseToken: null, leaseExpiresAt: null, lastError: 'request_not_expired' },
+    })
+    return
   }
 
-  const claimed = await prisma.event.updateMany({
-    where: {
-      id: eventId,
-      state: { in: ['PENDING', 'FAILED'] },
-    },
-    data: { state: 'SENDING' },
-  })
-
-  if (!claimed.count) return
+  const markDelivered = async (receipt: { messageId: string | null }) => {
+    await prisma.eventDelivery.updateMany({
+      where: { id: input.deliveryId, state: 'SENDING', leaseToken: input.leaseToken },
+      data: {
+        state: 'DELIVERED',
+        leaseToken: null,
+        leaseExpiresAt: null,
+        deliveredAt: new Date(),
+        telegramMessageId: receipt.messageId,
+        lastError: null,
+      },
+    })
+  }
+  const markSkipped = async (reason: string) => {
+    await prisma.eventDelivery.updateMany({
+      where: { id: input.deliveryId, state: 'SENDING', leaseToken: input.leaseToken },
+      data: { state: 'SKIPPED', leaseToken: null, leaseExpiresAt: null, lastError: reason },
+    })
+  }
+  const topic = request.zoomSession?.topic?.trim() || '—'
 
   try {
-    const request = await requestContext(input.requestId)
-    if (
-      !request
-      || request.kind !== 'INDIVIDUAL'
-      || request.status !== 'APPROVED_PENDING_PAYMENT'
-      || !request.approvedAt
-    ) {
-      await prisma.event.update({ where: { id: eventId }, data: { state: 'FAILED' } })
+    if (input.recipient === 'USER') {
+      const chatId = request.requester.telegramChatId ?? request.requester.telegramLinks[0]?.chatId
+      if (!chatId) return markSkipped('user_chat_unavailable')
+      const delivered = await sendUserTelegramMessage(
+        String(chatId),
+        [commerceTypeLabel(request), `📅 ${formatCommerceDate(request.scheduledAt)}`,
+          `🆔 Запит ${shortRequestReference(request.id)}`, '',
+          telegramContentRegistry.zoomCommerce.expirationBody, '',
+          'Якщо хочеш записатися — обери новий зручний час.'].join('\n'),
+        { reply_markup: { inline_keyboard: [[{
+          text: telegramContentRegistry.zoomCommerce.expirationChooseTimeCta,
+          web_app: { url: buildZoomCalendarUrl() },
+        }], [{ text: telegramContentRegistry.zoomCommerce.paymentSupportCta, callback_data: 'user_home:support' }]] } },
+        markDelivered,
+      )
+      if (!delivered) await markExpiryDeliveryUnknown(input.deliveryId, input.leaseToken, 'telegram_deduplicated_without_receipt')
       return
     }
 
-    const deadline = resolveIndividualPaymentDeadline({
-      approvedAt: request.approvedAt,
-      scheduledAt: request.scheduledAt,
-    })
-    const nudge = resolvePaymentNudges({
-      approvedAt: request.approvedAt,
-      deadline,
-    }).find((candidate) => candidate.kind === input.kind)
-    const chatId = request.requester.telegramChatId ?? request.requester.telegramLinks[0]?.chatId
-    const checkoutUrl = input.now < deadline
-      ? await getCommerceCheckoutUrl(request.id, request.requesterUserId)
-      : null
-    if (!nudge || nudge.dueAt > input.now || !chatId || !checkoutUrl) {
-      await prisma.event.update({ where: { id: eventId }, data: { state: 'FAILED' } })
+    if (input.recipient === 'COACH') {
+      const coach = await prisma.user.findFirst({
+        where: { expertId: request.expertId, deletedAt: null },
+        select: { telegramChatId: true, telegramLinks: { select: { chatId: true }, take: 1 } },
+      })
+      const chatId = coach?.telegramChatId ?? coach?.telegramLinks[0]?.chatId
+      if (!chatId) return markSkipped('coach_chat_unavailable')
+      const delivered = await sendDedupedTelegramMessage(
+        String(chatId),
+        ['❌ СЛОТ ЗВІЛЬНЕНО', '', commerceTypeLabel(request), `👤 ${requesterName(request)}`,
+          `📅 ${formatCommerceDate(request.scheduledAt)}`, `🆔 Запит ${shortRequestReference(request.id)}`,
+          `💬 ${topic}`, '', 'Статус: Час оплати вичерпано — слот звільнено.'].join('\n'),
+        undefined,
+        coachBot,
+        markDelivered,
+      )
+      if (!delivered) await markExpiryDeliveryUnknown(input.deliveryId, input.leaseToken, 'telegram_deduplicated_without_receipt')
       return
     }
 
-    await sendUserTelegramMessage(
-      String(chatId),
-      nudge.text,
-      {
-        reply_markup: {
-          inline_keyboard: [[
-            {
-              text: '💳 ОПЛАТИТИ СЕСІЮ',
-              url: checkoutUrl,
-            },
-          ]],
-        },
-      },
+    const delivered = await sendOpsTelegramMessage(
+      ['❌ ЧАС ОПЛАТИ ВИЧЕРПАНО', '', commerceTypeLabel(request), `👤 ${requesterName(request)}`,
+        `📅 ${formatCommerceDate(request.scheduledAt)}`, `🧾 Запит ${request.id}`, `💬 ${topic}`,
+        `💳 ${commercePriceLabel(request)}`, '', '❌ Статус: Не оплачено · слот звільнено'].join('\n'),
+      undefined,
+      { messageType: 'zoom_commerce_expired', source: 'notifyCommerceExpired' },
+      markDelivered,
     )
-
-    await prisma.event.update({
-      where: { id: eventId },
-      data: { state: 'DELIVERED' },
-    })
+    if (!delivered) await markExpiryDeliveryUnknown(input.deliveryId, input.leaseToken, 'telegram_delivery_outcome_unknown')
   } catch (error) {
-    await prisma.event.update({
-      where: { id: eventId },
-      data: { state: 'FAILED' },
-    }).catch(() => undefined)
-
-    throw error
+    await markExpiryDeliveryUnknown(
+      input.deliveryId,
+      input.leaseToken,
+      error instanceof Error ? error.message : 'telegram_delivery_outcome_unknown',
+    )
   }
+}
+
+async function processFutureExpiryEvent(eventId: string, requestId: string, now: Date): Promise<void> {
+  // Legacy Events have no recipient records and are deliberately never replayed.
+  const deliveryCount = await prisma.eventDelivery.count({ where: { eventId } })
+  if (deliveryCount === 0) return
+
+  await prisma.eventDelivery.updateMany({
+    where: { eventId, state: 'SENDING', leaseExpiresAt: { lt: now } },
+    data: { state: 'UNKNOWN', leaseToken: null, leaseExpiresAt: null, lastError: 'delivery_lease_expired_outcome_unknown' },
+  })
+
+  for (;;) {
+    const candidate = await prisma.eventDelivery.findFirst({
+      where: { eventId, state: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, recipient: true },
+    })
+    if (!candidate) break
+    const leaseToken = randomUUID()
+    const claimed = await prisma.eventDelivery.updateMany({
+      where: { id: candidate.id, state: 'PENDING' },
+      data: {
+        state: 'SENDING',
+        leaseToken,
+        leaseExpiresAt: new Date(now.getTime() + EXPIRY_DELIVERY_LEASE_MS),
+        attemptStartedAt: now,
+        attemptCount: { increment: 1 },
+      },
+    })
+    if (!claimed.count) continue
+    await prisma.event.update({ where: { id: eventId }, data: { state: 'SENDING' } })
+    await deliverExpiryRecipient({
+      requestId,
+      deliveryId: candidate.id,
+      recipient: candidate.recipient as ExpiryRecipient,
+      leaseToken,
+    })
+  }
+  await reconcileExpiryEventState(eventId)
 }
 
 export async function processZoomPaymentLifecycleNotifications(
   now = new Date(),
 ): Promise<void> {
-  const pending = await prisma.zoomCommerceRequest.findMany({
-    where: {
-      kind: 'INDIVIDUAL',
-      status: 'APPROVED_PENDING_PAYMENT',
-      approvedAt: { not: null },
-      scheduledAt: { gt: now },
-    },
-    include: {
-      requester: {
-        select: {
-          telegramChatId: true,
-          telegramLinks: {
-            select: { chatId: true },
-            take: 1,
-          },
-        },
-      },
-    },
-  })
-
-  for (const request of pending) {
-    if (!request.approvedAt) continue
-
-    const deadline = resolveIndividualPaymentDeadline({
-      approvedAt: request.approvedAt,
-      scheduledAt: request.scheduledAt,
-    })
-
-    if (now >= deadline) continue
-
-    const nudges = resolvePaymentNudges({
-      approvedAt: request.approvedAt,
-      deadline,
-    })
-
-    for (const nudge of nudges) {
-      if (nudge.dueAt > now) continue
-      if (nudge.dueAt >= deadline) continue
-
-      await sendPaymentNudgeOnce({
-        requestId: request.id,
-        requesterUserId: request.requesterUserId,
-        kind: nudge.kind,
-        now,
-      }).catch((error) => {
-        console.error('[zoom/payment-nudge] delivery failed', {
-          requestId: request.id,
-          kind: nudge.kind,
-          error: error instanceof Error
-            ? error.message
-            : String(error),
-        })
-      })
-    }
-  }
-
   // Retry EXPIRED delivery until it is durably marked DELIVERED.
   const expired = await prisma.zoomCommerceRequest.findMany({
     where: {
@@ -723,15 +739,15 @@ export async function processZoomPaymentLifecycleNotifications(
   for (const request of expired) {
     const eventId = `zoom-commerce-expired:${request.id}`
 
-    const existing = await prisma.event.findUnique({
+    let existing = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { state: true },
+      select: { id: true, state: true },
     })
 
     if (existing?.state === 'DELIVERED') continue
 
     if (!existing) {
-      await prisma.event.create({
+      existing = await prisma.event.create({
         data: {
           id: eventId,
           userId: request.requesterUserId,
@@ -741,40 +757,12 @@ export async function processZoomPaymentLifecycleNotifications(
           payload: {
             requestId: request.id,
           },
+          deliveries: { create: expiryRecipients.map((recipient) => ({ recipient })) },
         },
-      }).catch(() => undefined)
+      }).catch(async () => prisma.event.findUnique({ where: { id: eventId }, select: { id: true, state: true } }))
     }
 
-    const claimed = await prisma.event.updateMany({
-      where: {
-        id: eventId,
-        state: { in: ['PENDING', 'FAILED'] },
-      },
-      data: { state: 'SENDING' },
-    })
-
-    if (!claimed.count) continue
-
-    try {
-      await notifyCommerceExpired(request.id)
-
-      await prisma.event.update({
-        where: { id: eventId },
-        data: { state: 'DELIVERED' },
-      })
-    } catch (error) {
-      await prisma.event.update({
-        where: { id: eventId },
-        data: { state: 'FAILED' },
-      }).catch(() => undefined)
-
-      console.error('[zoom/expired] delivery failed', {
-        requestId: request.id,
-        error: error instanceof Error
-          ? error.message
-          : String(error),
-      })
-    }
+    if (existing) await processFutureExpiryEvent(existing.id, request.id, now)
   }
 }
 
@@ -794,18 +782,26 @@ export async function notifyCommerceExpired(requestId: string) {
     await sendUserTelegramMessage(
       String(userChatId),
       [
-        'Час на оплату завершився. Слот звільнено.',
+        commerceTypeLabel(request),
+        `📅 ${formatCommerceDate(request.scheduledAt)}`,
+        `🆔 Запит ${shortRequestReference(request.id)}`,
+        '',
+        telegramContentRegistry.zoomCommerce.expirationBody,
         '',
         'Якщо хочеш записатися — обери новий зручний час.',
       ].join('\n'),
       {
         reply_markup: {
-          inline_keyboard: [[
-            {
-              text: '📅 ВІДКРИТИ КАЛЕНДАР',
+          inline_keyboard: [
+            [{
+              text: telegramContentRegistry.zoomCommerce.expirationChooseTimeCta,
               web_app: { url: userCalendarUrl },
-            },
-          ]],
+            }],
+            [{
+              text: telegramContentRegistry.zoomCommerce.paymentSupportCta,
+              callback_data: 'user_home:support',
+            }],
+          ],
         },
       },
     )
@@ -817,8 +813,10 @@ export async function notifyCommerceExpired(requestId: string) {
     [
       '❌ ЧАС ОПЛАТИ ВИЧЕРПАНО',
       '',
+      commerceTypeLabel(request),
       `👤 ${requesterName(request)}`,
       `📅 ${formatCommerceDate(request.scheduledAt)}`,
+      `🧾 Запит ${request.id}`,
       `💬 ${topic}`,
       `💳 ${commercePriceLabel(request)}`,
       '',
@@ -856,12 +854,13 @@ export async function notifyCommerceExpired(requestId: string) {
       [
         '❌ СЛОТ ЗВІЛЬНЕНО',
         '',
+        commerceTypeLabel(request),
         `👤 ${requesterName(request)}`,
         `📅 ${formatCommerceDate(request.scheduledAt)}`,
+        `🆔 Запит ${shortRequestReference(request.id)}`,
         `💬 ${topic}`,
         '',
-        'Користувач не завершив оплату.',
-        'Цей час знову доступний.',
+        'Статус: Час оплати вичерпано — слот звільнено.',
       ].join('\n'),
       undefined,
       coachBot,

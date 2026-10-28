@@ -1,4 +1,14 @@
 export const KYIV_TIME_ZONE = 'Europe/Kyiv'
+export const KYIV_TIME_LABEL = 'час за Києвом'
+
+export function formatKyivTimeLabel(value: Date): string {
+  const time = value.toLocaleTimeString('uk-UA', {
+    timeZone: KYIV_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `${time} (${KYIV_TIME_LABEL})`
+}
 
 export function getKyivNow(now = new Date()): Date {
   return new Date(now.toLocaleString('en-US', { timeZone: KYIV_TIME_ZONE }))

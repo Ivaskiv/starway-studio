@@ -41,4 +41,14 @@ describe('sendOpsTelegramMessage', () => {
     )
     expect(sendByToken.get('coach-token')).toBeUndefined()
   })
+
+  it('exposes the Telegram message receipt to the existing sender callback', async () => {
+    process.env.TEST_TELEGRAM_BOT_TOKEN = 'main-ops-token'
+    process.env.STARWAY_OPS_CHAT_ID = '-1003829747010'
+    const receipt = vi.fn()
+
+    await expect(sendOpsTelegramMessage('OPS receipt regression', undefined, undefined, receipt)).resolves.toBe(true)
+
+    expect(receipt).toHaveBeenCalledWith({ messageId: '1' })
+  })
 })

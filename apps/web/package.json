@@ -64,6 +64,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.16",
     "cors": "^2.8.6",
+    "jsdom": "26.1.0",
     "morgan": "^1.10.1",
     "postcss": "^8.4.32",
     "sass": "^1.97.3",

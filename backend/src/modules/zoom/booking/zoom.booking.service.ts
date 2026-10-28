@@ -2,6 +2,7 @@ import { hasPaidIndividualParticipation, isLegacyIndividualSession } from '../co
 import { ZoomSessionType, ZoomStatus } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js'
+import { selectTrialZoomEligibleSession } from '../shared/zoom.session-selection.js'
 import type { ZoomSessionAttendee } from '../types.js'
 
 function isGroupPracticeSession(session: {
@@ -294,6 +295,34 @@ export async function assertCanBookGroupPracticeSession(args: {
   if (!session) throw new Error('session_not_found')
   if (session.status !== ZoomStatus.SCHEDULED) {
     throw new Error('session_unavailable')
+  }
+
+  if (access.state === 'PREMIUM') {
+    const eligibleSessions = await prisma.zoomSession.findMany({
+      where: {
+        status: ZoomStatus.SCHEDULED,
+        scheduledAt: { gte: new Date() },
+        OR: [
+          { type: ZoomSessionType.GROUP },
+          { requests: { path: ['type'], equals: 'group_practice' } },
+        ],
+      },
+      select: {
+        id: true,
+        scheduledAt: true,
+        type: true,
+        requests: true,
+      },
+      orderBy: { scheduledAt: 'asc' },
+    })
+    const eligibleSession = selectTrialZoomEligibleSession(
+      eligibleSessions,
+      access.expiresAt,
+    )
+
+    if (eligibleSession?.id !== sessionId) {
+      throw new Error('TRIAL_ZOOM_SESSION_NOT_ALLOWED')
+    }
   }
 
   const existingAttendee = session.attendees?.[0] ?? null

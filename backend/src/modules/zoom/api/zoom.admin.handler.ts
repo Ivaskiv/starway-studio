@@ -2,6 +2,7 @@ import { isLegacyIndividualSession } from '../commerce/zoom.commerce-request.ser
 // backend/src/modules/zoom/zoom.admin.handler.ts
 // Coach/admin-only handlers: finalize battle result, update session
 
+import { appendFile } from 'node:fs/promises';
 import type { NextFunction, Response } from 'express';
 import type { AuthenticatedRequest } from '../../../types/globalTypes.js';
 import {
@@ -20,6 +21,7 @@ import {
   INDIVIDUAL_REQUEST_CONTEXT_ERROR,
   getCalendarRequests as getZoomCommerceCalendarRequests,
   getUserCalendarRequestsForWindow,
+  getExistingIndividualCheckoutUrl,
   getCommerceCheckoutUrl,
   resolveZoomIndividualPaymentTerms,
   getRequestById as getZoomCommerceRequestById,
@@ -47,6 +49,7 @@ import {
   initiateZoomSwap,
   isActiveFocusSubscriber,
 } from '../index.js';
+import { deleteFreeIndividualSlot } from '../core/zoom.session.service.js';
 import { getZoomLeaderboard } from '../battle/zoom.leaderboard.js';
 import {
   getAvailability,
@@ -56,6 +59,7 @@ import {
   getIndividualAvailabilitySummary,
   hasCoachCalendarConflict,
   intervalsOverlap,
+  rescheduleCoachManagedSession,
   saveAvailability,
   saveAvailabilityWeek,
   generateSessionsFromAvailability,
@@ -74,6 +78,7 @@ import { syncZoomRegistrationLifecycle } from './controller.js';
 import { getUserAccessState } from '../../subscriptions/payments/focus-access.js';
 import { getCoachParticipants } from '../participants/coach-participants.service.js';
 import { buildZoomCalendarUrl } from '../urls.js';
+import { logger } from '../../../utils/logger.js';
 
 const BATTLE_PARTICIPANTS_REQUIRED = 2;
 const DEFAULT_SESSION_DURATION_MINUTES = 60;
@@ -83,6 +88,74 @@ const COACH_SESSION_CONFLICT_ERROR =
   'На цей час уже запланована інша Zoom-сесія. Оберіть інший час.';
 const GROUP_SCHEDULE_UNAVAILABLE_ERROR =
   'Час групової практики не відповідає звичному графіку коуча.';
+const DEVELOPMENT_COMMERCE_APPROVAL_DIAGNOSTIC_LOG =
+  '/tmp/starway-zoom-commerce-approval-error.log';
+const ZOOM_CALENDAR_HTTP_DIAGNOSTIC_MARKER = 'ZOOM_CALENDAR_HTTP_DIAG_236';
+const ZOOM_CALENDAR_DIAGNOSTIC_USER_ID = 'e8262934-9454-4926-b734-65d03bca699e';
+
+type CalendarResponseDiagnosticRecord = {
+  status?: unknown;
+  commerceRequestId?: unknown;
+  commerceStatus?: unknown;
+};
+
+function logCalendarHttpDiagnosticAfterFinish(input: {
+  req: AuthenticatedRequest;
+  res: Response;
+  role: 'user';
+  from: string;
+  to: string;
+  responseEnvelope: unknown;
+  userOwnedCancelledRequestIds: ReadonlySet<string>;
+}) {
+  if (input.req.user?.id !== ZOOM_CALENDAR_DIAGNOSTIC_USER_ID) return;
+
+  const records = Array.isArray(input.responseEnvelope)
+    ? input.responseEnvelope as CalendarResponseDiagnosticRecord[]
+    : null;
+  const userOwnedCancelledRecords = records?.filter((record) =>
+    record?.commerceStatus === 'CANCELLED'
+    && typeof record.commerceRequestId === 'string'
+    && input.userOwnedCancelledRequestIds.has(record.commerceRequestId),
+  ) ?? [];
+  const requestPath = (input.req.originalUrl ?? input.req.path ?? '/api/zoom/sessions/calendar')
+    .split('?', 1)[0];
+
+  input.res.once('finish', () => {
+    logger.info(`[${ZOOM_CALENDAR_HTTP_DIAGNOSTIC_MARKER}] ${JSON.stringify({
+      marker: ZOOM_CALENDAR_HTTP_DIAGNOSTIC_MARKER,
+      requestPath,
+      role: input.role,
+      from: input.from,
+      to: input.to,
+      canonicalUserMatches: true,
+      finalHttpStatus: input.res.statusCode,
+      calendarRecordsCount: records?.length ?? 'unavailable',
+      userOwnedCancelledCount: userOwnedCancelledRecords.length,
+      cancelledRequestPrefixes: userOwnedCancelledRecords.map((record) =>
+        (record.commerceRequestId as string).slice(0, 8),
+      ),
+    })}`);
+  });
+}
+
+function logDevelopmentCommerceApprovalFailure(httpStatus: number, candidateCode: string) {
+  if (process.env.NODE_ENV !== 'development') return;
+
+  const errorCodePrefix = candidateCode.split(':', 1)[0];
+  const errorCode = /^[A-Z][A-Z0-9_]*$/.test(errorCodePrefix)
+    ? errorCodePrefix
+    : 'UNCLASSIFIED_ERROR';
+  const diagnostic = JSON.stringify({
+    event: 'zoom_commerce_approval_failed',
+    httpStatus,
+    errorCode,
+  });
+
+  console.error('[ZOOM_COMMERCE_APPROVAL_FAILED]', diagnostic);
+  void appendFile(DEVELOPMENT_COMMERCE_APPROVAL_DIAGNOSTIC_LOG, `${diagnostic}\n`, 'utf8')
+    .catch(() => undefined);
+}
 
 const COMMERCE_STATUS_LABELS = {
   user: {
@@ -620,6 +693,51 @@ export async function handleUpdateSession(
   }
 }
 
+export async function handleRescheduleCoachSession(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'unauthorized' })
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, activeRole: true, expertId: true },
+    })
+    const effectiveRole = user?.activeRole ?? user?.role
+    if (!user?.expertId || !['EXPERT', 'ADMIN', 'SUPERADMIN'].includes(effectiveRole ?? '')) {
+      return res.status(403).json({ error: 'reschedule_forbidden' })
+    }
+
+    const scheduledAt = new Date(String(req.body?.scheduledAt ?? ''))
+    const result = await rescheduleCoachManagedSession({
+      sessionId: req.params.id,
+      expertId: user.expertId,
+      scheduledAt,
+      actorUserId: userId,
+    })
+    return res.status(200).json(result)
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'RESCHEDULE_FAILED'
+    const statusByCode: Record<string, number> = {
+      RESCHEDULE_SESSION_NOT_FOUND: 404,
+      RESCHEDULE_FORBIDDEN: 403,
+      RESCHEDULE_INVALID_TIME: 400,
+      RESCHEDULE_SESSION_IMMUTABLE: 409,
+      RESCHEDULE_ATTENDEES_LOCKED: 409,
+      RESCHEDULE_COMMERCE_LOCKED: 409,
+      RESCHEDULE_SWAP_LOCKED: 409,
+      RESCHEDULE_DURATION_UNSUPPORTED: 409,
+      RESCHEDULE_TARGET_UNAVAILABLE: 409,
+      RESCHEDULE_CONCURRENT_MODIFICATION: 409,
+    }
+    if (statusByCode[code]) return res.status(statusByCode[code]).json({ error: code })
+    next(error)
+  }
+}
+
 
 
 export async function handleGetCompletionDraft(
@@ -772,6 +890,40 @@ export async function handleCancelSession(
   }
 }
 
+export async function handleDeleteFreeIndividualSlot(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { expertId: true },
+    })
+    if (!user?.expertId) return res.status(403).json({ error: 'forbidden' })
+
+    const deleted = await deleteFreeIndividualSlot({
+      sessionId: req.params.id,
+      expertId: user.expertId,
+    })
+    return res.status(200).json({ id: deleted.id })
+  } catch (err) {
+    if (err instanceof Error && err.message === 'SESSION_NOT_FOUND') {
+      return res.status(404).json({ error: 'session_not_found' })
+    }
+    if (err instanceof Error && err.message === 'FORBIDDEN') {
+      return res.status(403).json({ error: 'forbidden' })
+    }
+    if (err instanceof Error && err.message === 'SLOT_NOT_DELETABLE') {
+      return res.status(409).json({ error: 'slot_not_deletable' })
+    }
+    next(err)
+  }
+}
+
 export async function handleGetCalendarSessions(
   req: AuthenticatedRequest,
   res: Response,
@@ -795,13 +947,17 @@ export async function handleGetCalendarSessions(
       select: { expertId: true },
     });
 
-    const sessions = await getCalendarSessions({
+    if (role === 'coach' && !user?.expertId) return res.status(403).json({ error: 'forbidden' });
+    const calendarSessions = await getCalendarSessions({
       from: fromDate,
       to: toDate,
       role: (role as 'coach' | 'user') ?? 'user',
       userId,
       expertId: user?.expertId ?? undefined,
     });
+    const sessions = role === 'coach'
+      ? calendarSessions.filter((session) => session.expertId === user?.expertId)
+      : calendarSessions;
 
     const calendarRole = role === 'coach' ? 'coach' : 'user';
     const commerceRequests = calendarRole === 'user'
@@ -822,6 +978,12 @@ export async function handleGetCalendarSessions(
       requester?: { firstName: string | null; lastName: string | null; email: string | null } | null;
     };
     const commerceBySessionId = new Map<string, CalendarCommerceRequest>();
+    // Calendar projection needs the complete persisted history, not just the
+    // request selected for display, to distinguish disposable inventory from a
+    // real individual-session commitment.
+    const sessionIdsWithCommerceHistory = new Set(
+      commerceRequests.flatMap((request) => request.zoomSessionId ? [request.zoomSessionId] : []),
+    );
     for (const request of commerceRequests) {
       if (!request.zoomSessionId || !(request.status in commercePriority)) continue;
       const calendarRequest = request as CalendarCommerceRequest;
@@ -831,7 +993,39 @@ export async function handleGetCalendarSessions(
       }
     }
 
-    const questionSummaries = await getQuestionSummariesBySessionId(sessions.map((session) => session.id));
+    const requestContextById = new Map<string, string>();
+    if (calendarRole === 'user' && commerceRequests.length > 0) {
+      const contexts = await prisma.event.findMany({
+        where: {
+          id: { in: commerceRequests.map((request) => `zoom-context:${request.id}`) },
+          userId,
+          type: 'ZOOM_COMMERCE_CONTEXT',
+        },
+        select: { id: true, payload: true },
+      });
+      for (const context of contexts) {
+        const questionText = (context.payload as { questionText?: unknown } | null)?.questionText;
+        if (typeof questionText === 'string' && questionText.trim()) {
+          requestContextById.set(context.id.slice('zoom-context:'.length), questionText.trim());
+        }
+      }
+    }
+
+    const questionSummaries = await getQuestionSummariesBySessionId(
+      sessions.map((session) => session.id),
+      calendarRole === 'user' ? userId : undefined,
+    );
+    const rescheduleEventIds = calendarRole === 'coach' ? sessions.flatMap((session) => {
+      const meta = session.requests && typeof session.requests === 'object' && !Array.isArray(session.requests) ? session.requests as Record<string, unknown> : {};
+      const previous = typeof meta.previousScheduledAt === 'string' ? new Date(meta.previousScheduledAt) : null;
+      return session.expertId === user?.expertId && meta.type === 'group_practice' && previous && Number.isFinite(previous.getTime())
+        ? [`zoom-group-practice-rescheduled:${session.id}:${previous.getTime()}:${session.scheduledAt.getTime()}`] : [];
+    }) : [];
+    const rescheduleEvents = rescheduleEventIds.length ? await prisma.event.findMany({
+      where: { id: { in: rescheduleEventIds }, type: 'ZOOM_GROUP_PRACTICE_RESCHEDULED' },
+      select: { id: true, createdAt: true },
+    }) : [];
+    const rescheduleEventTimes = new Map(rescheduleEvents.map((event) => [event.id, event.createdAt.toISOString()]));
 
     type SessionRow = typeof sessions[number];
     const getAttendeeName = (attendee: {
@@ -852,6 +1046,7 @@ export async function handleGetCalendarSessions(
     const result = await Promise.all(sessions.map(async (s: SessionRow) => {
       const meta = (s.requests as Record<string, unknown>) ?? {};
       const isArray = Array.isArray(meta);
+      const sessionType = isArray ? 'group_practice' : (meta.type ?? 'group_practice');
       const attendeesCount = (s as { _count?: { attendees?: number } })._count?.attendees ?? 0;
       const maxSlots = isArray ? 50 : typeof meta.maxSlots === 'number' ? meta.maxSlots : 50;
       const isIndividual = isLegacyIndividualSession(s)
@@ -865,6 +1060,8 @@ export async function handleGetCalendarSessions(
           goalText: string | null
           progress: unknown
           attended?: boolean
+          selfReportedAttended?: boolean | null
+          selfReportedAt?: Date | null
           user?: { firstName: string | null; lastName: string | null; email: string | null }
         }>
       }).attendees ?? [];
@@ -876,46 +1073,109 @@ export async function handleGetCalendarSessions(
       const opponentProgress = Array.isArray(opponent?.progress) ? opponent.progress : [];
       const questionSummary = questionSummaries.get(s.id);
       const report = parseZoomPostReport(s.postSessionReport);
+      const isDisposableIndividualSlot = isIndividual
+        && (s.status === 'SCHEDULED' || s.status === 'CANCELLED')
+        && attendeesCount === 0
+        && attendees.length === 0
+        && !sessionIdsWithCommerceHistory.has(s.id)
+        && !report;
       const actualAttendeeCount = attendees.filter((attendee) => attendee.attended === true).length;
       const recordingUrl = report?.audioUrl?.trim() || null;
       const individualPaid = !(isIndividual || commerceRequest?.kind === 'BATTLE') || (commerceRequest?.requesterUserId === userId && commerceRequest.status === 'PAID');
       const canViewRecording = (role === 'coach' || individualPaid) && Boolean(recordingUrl) && (role === 'coach' || Boolean((s as { isMyBooking?: boolean }).isMyBooking));
+      const isGroupPractice = sessionType === 'group_practice';
+      const isOwningCoach = calendarRole === 'coach' && Boolean(user?.expertId && s.expertId === user.expertId);
+      // The immediate predecessor is visible only to the session's coach or
+      // an enrolled user; public inventory must not expose its history.
+      const previousScheduledAt = (calendarRole === 'user'
+        ? Boolean(ownAttendee)
+        : Boolean(user?.expertId && s.expertId === user.expertId))
+        && isGroupPractice
+        && s.status === 'SCHEDULED'
+        && typeof meta.previousScheduledAt === 'string'
+        && Number.isFinite(new Date(meta.previousScheduledAt).getTime())
+        ? meta.previousScheduledAt
+        : null;
+      const isCompletedUserGroupPractice = calendarRole === 'user' && isGroupPractice && s.status === 'COMPLETED';
+      const canSelfReportAttendance = isCompletedUserGroupPractice
+        && Boolean(ownAttendee)
+        && s.scheduledAt.getTime() < Date.now();
+      // A completed group-practice attendee may see the coach's aggregate
+      // outcome, but never the other attendees' identities. Public calendar
+      // viewers retain the existing minimal completed-session projection.
+      const canViewCompletedGroupOutcome = isCompletedUserGroupPractice && Boolean(ownAttendee);
+      const visibleAttendees = isCompletedUserGroupPractice
+        ? attendees.filter((attendee) => attendee.userId === userId)
+        : attendees;
+      const visibleRecordingUrl = role === 'coach' || canViewRecording ? recordingUrl : null;
       return {
         id: s.id,
         coach: s.expert ? { id: s.expert.id, name: s.expert.displayName } : null,
         scheduledAt: s.scheduledAt.toISOString(),
+        ...(previousScheduledAt ? { previousScheduledAt } : {}),
+        ...(previousScheduledAt && isOwningCoach ? {
+          rescheduledAt: rescheduleEventTimes.get(`zoom-group-practice-rescheduled:${s.id}:${new Date(previousScheduledAt).getTime()}:${s.scheduledAt.getTime()}`) ?? null,
+        } : {}),
         topic: s.topic,
         status: s.status,
-        type: isArray ? 'group_practice' : (meta.type ?? 'group_practice'),
+        type: sessionType,
         zoomLink: isArray || (role !== 'coach' && !individualPaid) ? '' : (meta.zoomLink ?? ''),
         attendeesCount,
         notifiedAt24h: isArray ? null : ((meta.notifiedAt24h as string | null) ?? null),
         notifiedAt2h: isArray ? null : ((meta.notifiedAt2h as string | null) ?? null),
-        goalText: isArray ? null : (ownAttendee?.goalText ?? null),
+        goalText: isArray ? null : (
+          ownAttendee?.goalText
+          ?? (calendarRole === 'user' && commerceRequest?.requesterUserId === userId
+            ? requestContextById.get(commerceRequest.id) ?? null
+            : null)
+        ),
         battleProgress: isArray ? [] : ownProgress,
         goalA: isArray ? null : (challenger?.goalText ?? null),
         goalB: isArray ? null : (opponent?.goalText ?? null),
         participantNames: [
-          ...attendees.map((attendee) => getAttendeeName(attendee)).filter(Boolean),
+          ...visibleAttendees.map((attendee) => getAttendeeName(attendee)).filter(Boolean),
           ...(calendarRole === 'coach' && isIndividual && commerceRequesterName
             && !attendees.some((attendee) => getAttendeeName(attendee) === commerceRequesterName)
             ? [commerceRequesterName]
             : []),
         ],
-        attendees: attendees.map((attendee) => ({
+        attendees: visibleAttendees.map((attendee) => ({
           userId: attendee.userId,
           name: getAttendeeName(attendee),
           attended: attendee.attended === true,
+          ...(isGroupPractice && isOwningCoach ? { question: questionSummary?.questionsByUser?.get(attendee.userId) ?? null } : {}),
         })),
-        actualAttendeeCount: report?.actualAttendeeCount ?? actualAttendeeCount,
-        completedAt: report?.completedAt ?? null,
-        completionSource: report?.source ?? null,
-        actualStartedAt: report?.actualStartedAt ?? null,
-        actualEndedAt: report?.actualEndedAt ?? null,
-        outcomeTopic: report?.topic ?? null,
-        summary: report?.summary?.trim() || null,
-        recordingUrl,
-        recordingAvailable: report?.recordingAvailable ?? Boolean(recordingUrl),
+        ...(isCompletedUserGroupPractice
+          ? {
+              isMyAttendanceConfirmed: ownAttendee?.attended === true,
+              canSelfReportAttendance,
+              selfReportedAttended: ownAttendee?.selfReportedAttended ?? null,
+              selfReportedAt: ownAttendee?.selfReportedAt?.toISOString() ?? null,
+              ...(canViewCompletedGroupOutcome
+                ? {
+                    actualAttendeeCount: report?.actualAttendeeCount ?? actualAttendeeCount,
+                    completedAt: report?.completedAt ?? null,
+                    completionSource: report?.source ?? null,
+                    actualStartedAt: report?.actualStartedAt ?? null,
+                    actualEndedAt: report?.actualEndedAt ?? null,
+                    outcomeTopic: report?.topic ?? null,
+                    summary: report?.summary?.trim() || null,
+                  }
+                : {}),
+              recordingUrl: visibleRecordingUrl,
+              recordingAvailable: Boolean(visibleRecordingUrl),
+            }
+          : {
+              actualAttendeeCount: report?.actualAttendeeCount ?? actualAttendeeCount,
+              completedAt: report?.completedAt ?? null,
+              completionSource: report?.source ?? null,
+              actualStartedAt: report?.actualStartedAt ?? null,
+              actualEndedAt: report?.actualEndedAt ?? null,
+              outcomeTopic: report?.topic ?? null,
+              summary: report?.summary?.trim() || null,
+              recordingUrl: visibleRecordingUrl,
+              recordingAvailable: report?.recordingAvailable ?? Boolean(recordingUrl),
+            }),
         canViewRecording,
         challengerName: getAttendeeName(challenger),
         opponentName: getAttendeeName(opponent),
@@ -925,14 +1185,16 @@ export async function handleGetCalendarSessions(
         challengerId: isArray ? null : ((meta.challengerId as string | null) ?? null),
         opponentId: isArray ? null : ((meta.opponentId as string | null) ?? null),
         winnerId: isArray ? null : ((meta.winnerId as string | null) ?? null),
-        questionPreviews: questionSummary?.questionPreviews ?? [],
+        questionPreviews: isGroupPractice && calendarRole === 'user' ? [] : questionSummary?.questionPreviews ?? [],
         questionsCount: questionSummary?.questionsCount ?? 0,
         remainingQuestionsCount: questionSummary?.remainingQuestionsCount ?? 0,
+        myQuestion: calendarRole === 'user' ? questionSummary?.myQuestion ?? null : null,
         canEdit: role === 'coach',
+        isDisposableIndividualSlot,
         checkoutUrl: calendarRole === 'user'
           && commerceRequest?.requesterUserId === userId
           && commerceRequest.status === 'APPROVED_PENDING_PAYMENT'
-          ? await getCommerceCheckoutUrl(commerceRequest.id, userId)
+          ? await getExistingIndividualCheckoutUrl(commerceRequest.id, userId)
           : null,
         paymentDeadline: calendarRole === 'user'
           && commerceRequest?.requesterUserId === userId
@@ -968,6 +1230,22 @@ export async function handleGetCalendarSessions(
         durationMinutes: isArray ? 60 : typeof meta.durationMinutes === 'number' ? meta.durationMinutes : 60,
       };
     }));
+
+    if (calendarRole === 'user') {
+      logCalendarHttpDiagnosticAfterFinish({
+        req,
+        res,
+        role: calendarRole,
+        from,
+        to,
+        responseEnvelope: result,
+        userOwnedCancelledRequestIds: new Set(
+          commerceRequests
+            .filter((request) => request.status === 'CANCELLED')
+            .map((request) => request.id),
+        ),
+      });
+    }
 
     return res.status(200).json(result);
   } catch (err) {
@@ -1022,16 +1300,13 @@ export async function handleInitiateBattle(
       return res.status(403).json({ error: 'forbidden_challenger_mismatch' })
     }
 
-    const opponent = await prisma.user.findFirst({
-      where: {
-        id: opponentId,
-        expertId: user.expertId,
-        deletedAt: null,
-      },
-      select: { id: true, firstName: true },
-    })
-    if (!opponent) {
-      return res.status(404).json({ error: 'opponent_not_found' })
+    const { getEligibleBattleOpponents } = await import('../battle/battle.service.js');
+    const eligibleOpponents = await getEligibleBattleOpponents({
+      userId,
+      expertId: user.expertId,
+    });
+    if (!eligibleOpponents.some((opponent) => opponent.id === opponentId)) {
+      return res.status(403).json({ error: 'opponent_not_eligible' })
     }
 
     const challengerIsSubscriber = await isActiveFocusSubscriber(userId)
@@ -1053,12 +1328,12 @@ export async function handleInitiateBattle(
       const session = await createFullSession({
         expertId: user.expertId,
         scheduledAt,
-        topic: `Battle: ${userId} vs ${opponent.id}`,
+        topic: `Battle: ${userId} vs ${opponentId}`,
         requests: {
           type: 'battle_review',
           battleStatus: 'pending',
           challengerId: userId,
-          opponentId: opponent.id,
+          opponentId,
           goalA: goalA ?? null,
           goalB: goalB ?? null,
           entryFee: 99,
@@ -1197,6 +1472,32 @@ export async function handleGetAvailability(
     return res.status(200).json(slots);
   } catch (err) {
     next(err);
+  }
+}
+
+/** The Coach panel identity is the authenticated account's linked Expert, never a calendar attendee. */
+export async function handleGetCoachProfile(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const user = req.user;
+    if (!user?.id) return res.status(401).json({ error: 'Unauthorized' });
+    if (!['EXPERT', 'ADMIN', 'SUPERADMIN'].includes(user.activeRole)) {
+      return res.status(403).json({ error: 'Coach only' });
+    }
+    if (!user.expertId) return res.status(404).json({ profile: null });
+
+    const expert = await prisma.expert.findUnique({
+      where: { id: user.expertId },
+      select: { displayName: true },
+    });
+    return res.status(200).json({
+      profile: expert ? { displayName: expert.displayName } : null,
+    });
+  } catch (error) {
+    next(error);
   }
 }
 
@@ -1435,9 +1736,15 @@ export async function handleApproveCommerceRequest(
 ) {
   try {
     const userId = req.user?.id
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' })
+    if (!userId) {
+      logDevelopmentCommerceApprovalFailure(401, 'UNAUTHORIZED')
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { expertId: true } })
-    if (!user?.expertId) return res.status(403).json({ error: 'Expert only' })
+    if (!user?.expertId) {
+      logDevelopmentCommerceApprovalFailure(403, 'EXPERT_ONLY')
+      return res.status(403).json({ error: 'Expert only' })
+    }
     const approval = await approveZoomCommerceRequest(req.params.id, user.expertId)
     if (
       approval.request.kind === 'INDIVIDUAL'
@@ -1460,7 +1767,11 @@ export async function handleApproveCommerceRequest(
     }
     return res.status(200).json(approval)
   } catch (err) {
-    if (err instanceof Error) return res.status(409).json({ error: err.message })
+    if (err instanceof Error) {
+      logDevelopmentCommerceApprovalFailure(409, err.message)
+      return res.status(409).json({ error: err.message })
+    }
+    logDevelopmentCommerceApprovalFailure(500, 'UNCLASSIFIED_ERROR')
     next(err)
   }
 }

@@ -1,9 +1,14 @@
 // backend/src/modules/zoom/zoom.availability.service.ts
 // Recurring availability slots + session generation for Expert
 
-import { Prisma } from '@starway/db/prisma-client';
+import { Prisma, ZoomSessionType as PrismaZoomSessionType, ZoomStatus } from '@starway/db/prisma-client';
 import { prisma } from '../../../db/client.js';
-import { createFullSession } from '../index.js';
+import {
+  createFullSession,
+  findCanonicalMondayGroupPractice,
+} from '../core/zoom.session.service.js';
+import { rescheduleGroupPracticeNotifications } from '../notifications/zoom.reminders.service.js';
+import { getKyivDateKey, isKyivMonday, resolveRequestedSessionType } from '../shared/zoom.session-selection.js';
 
 export type ZoomSessionType = 'group_practice' | 'individual' | 'intensive' | 'battle_review';
 const DEFAULT_ZOOM_TIMEZONE = 'Europe/Kyiv';
@@ -195,8 +200,8 @@ function weekdayInTimeZone(date: Date, timeZone: string): number {
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
 }
 
-function individualWindowForDate(slot: AvailabilitySlot, date: string, ignoreWeekday = false): { start: Date; end: Date } | null {
-  if (!slot.active || slot.sessionType !== 'individual') return null;
+function individualWindowForDate(slot: AvailabilitySlot, date: string, ignoreWeekday = false, includeAllTypes = false): { start: Date; end: Date } | null {
+  if (!slot.active || (!includeAllTypes && slot.sessionType !== 'individual')) return null;
   const dateParts = datePartsFromKey(date);
   if (!dateParts) return null;
   const timeZone = slot.timezone || DEFAULT_ZOOM_TIMEZONE;
@@ -218,9 +223,9 @@ async function loadAvailability(db: AvailabilityDb, expertId: string): Promise<A
     : [];
 }
 
-function windowsForDate(slots: AvailabilitySlot[], date: string, source: 'recurring' | 'override') {
+function windowsForDate(slots: AvailabilitySlot[], date: string, source: 'recurring' | 'override', includeAllTypes = false) {
   return slots
-    .map((slot) => individualWindowForDate(slot, date, source === 'override'))
+    .map((slot) => individualWindowForDate(slot, date, source === 'override', includeAllTypes))
     .filter((window): window is { start: Date; end: Date } => Boolean(window));
 }
 
@@ -316,6 +321,7 @@ async function getBlockingCalendarEntries(db: AvailabilityDb, expertId: string, 
     db.zoomSession.findMany({
       where: { expertId, status: { not: 'CANCELLED' }, scheduledAt: { lt: candidateEnd } },
       select: {
+        id: true,
         scheduledAt: true,
         requests: true,
         type: true,
@@ -382,6 +388,7 @@ export async function getIndividualAvailabilityForDate(input: {
   date: string;
   db?: AvailabilityDb;
   excludeCommerceRequestId?: string;
+  excludeSessionId?: string;
 }): Promise<IndividualAvailabilityCandidate[]> {
   const db = input.db ?? prisma;
   const effective = await loadEffectiveAvailabilityForDate(db, input.expertId, input.date);
@@ -389,7 +396,12 @@ export async function getIndividualAvailabilityForDate(input: {
   if (candidateStarts.length === 0) return [];
   const latestCandidateEnd = new Date(candidateStarts[candidateStarts.length - 1] + INDIVIDUAL_DURATION_MINUTES * 60_000);
   const blocking = await getBlockingCalendarEntries(db, input.expertId, latestCandidateEnd);
-  return evaluateIndividualCandidates(candidateStarts, blocking, input.excludeCommerceRequestId);
+  return evaluateIndividualCandidates(
+    candidateStarts,
+    blocking,
+    input.excludeCommerceRequestId,
+    input.excludeSessionId,
+  );
 }
 
 function individualWindowsForDate(slots: AvailabilitySlot[], date: string, source: 'recurring' | 'override' = 'recurring') {
@@ -411,12 +423,14 @@ function evaluateIndividualCandidates(
   candidateStarts: number[],
   blocking: Awaited<ReturnType<typeof getBlockingCalendarEntries>>,
   excludeCommerceRequestId?: string,
+  excludeSessionId?: string,
 ): IndividualAvailabilityCandidate[] {
   const now = new Date();
   return candidateStarts.map((time) => {
     const start = new Date(time);
     const end = new Date(time + INDIVIDUAL_DURATION_MINUTES * 60_000);
-    const session = blocking.sessions.find((entry) => sessionBlocksIndividualInventory(entry, now, excludeCommerceRequestId)
+    const session = blocking.sessions.find((entry) => (excludeSessionId === undefined || entry.id !== excludeSessionId)
+      && sessionBlocksIndividualInventory(entry, now, excludeCommerceRequestId)
       && intervalOverlaps(
         start,
         end,
@@ -509,6 +523,7 @@ export async function getIndividualAvailabilityForScheduledAt(input: {
   scheduledAt: Date;
   db?: AvailabilityDb;
   excludeCommerceRequestId?: string;
+  excludeSessionId?: string;
 }) {
   const db = input.db ?? prisma;
   const slots = await loadAvailability(db, input.expertId);
@@ -519,6 +534,7 @@ export async function getIndividualAvailabilityForScheduledAt(input: {
     date,
     db,
     excludeCommerceRequestId: input.excludeCommerceRequestId,
+    excludeSessionId: input.excludeSessionId,
   });
   const candidate = candidates.find((item) => item.scheduledAt === input.scheduledAt.toISOString());
   return {
@@ -551,6 +567,254 @@ export async function hasCoachCalendarConflict(input: {
     session.scheduledAt,
     new Date(session.scheduledAt.getTime() + sessionDurationMinutes(session.requests) * 60_000),
   ));
+}
+
+export type CoachRescheduleResult = {
+  session: {
+    id: string;
+    expertId: string | null;
+    scheduledAt: Date;
+    topic: string;
+    status: ZoomStatus;
+    type: PrismaZoomSessionType;
+    capacity: number;
+    requests: Prisma.JsonValue;
+    postSessionReport: Prisma.JsonValue | null;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  idempotent: boolean;
+};
+
+function isIndividualSession(session: {
+  type: PrismaZoomSessionType;
+  requests: Prisma.JsonValue;
+}): boolean {
+  return session.type === PrismaZoomSessionType.INDIVIDUAL
+    || session.type === PrismaZoomSessionType.PRIVATE
+    || resolveRequestedSessionType(session.requests) === 'individual';
+}
+
+function isGroupPracticeSession(session: {
+  type: PrismaZoomSessionType;
+  requests: Prisma.JsonValue;
+}): boolean {
+  return session.type === PrismaZoomSessionType.GROUP
+    && resolveRequestedSessionType(session.requests) === 'group_practice';
+}
+
+function withRescheduleHistory(
+  requests: Prisma.JsonValue,
+  oldScheduledAt: Date,
+  newScheduledAt: Date,
+  actorUserId: string | null,
+): Prisma.InputJsonValue {
+  const current = requests && !Array.isArray(requests) && typeof requests === 'object'
+    ? requests as Prisma.JsonObject
+    : {}
+  const history = Array.isArray(current.rescheduleHistory)
+    ? current.rescheduleHistory
+    : []
+
+  return {
+    ...current,
+    previousScheduledAt: oldScheduledAt.toISOString(),
+    rescheduleHistory: [
+      ...history,
+      {
+        oldScheduledAt: oldScheduledAt.toISOString(),
+        newScheduledAt: newScheduledAt.toISOString(),
+        actorUserId,
+        occurredAt: new Date().toISOString(),
+      },
+    ],
+  } as Prisma.InputJsonValue
+}
+
+function rescheduleLockKeys(expertId: string, dates: Date[]): string[] {
+  return [...new Set(dates.map((date) => (
+    // Existing individual-request creation serializes by this exact identity.
+    `zoom-calendar:INDIVIDUAL:${expertId}:${date.toISOString().slice(0, 10)}`
+  )))].sort();
+}
+
+function rescheduleError(code: string): Error {
+  return new Error(code);
+}
+
+/**
+ * Canonical coach command for moving disposable individual inventory and a
+ * future Group Practice in place. Commerce, reports and swaps remain
+ * immutable; Group Practice keeps its existing attendee records atomically.
+ */
+export async function rescheduleCoachManagedSession(input: {
+  sessionId: string;
+  expertId: string;
+  scheduledAt: Date;
+  actorUserId?: string | null;
+}): Promise<CoachRescheduleResult> {
+  if (!Number.isFinite(input.scheduledAt.getTime()) || input.scheduledAt <= new Date()) {
+    throw rescheduleError('RESCHEDULE_INVALID_TIME');
+  }
+
+  try {
+    let groupPracticeNotification: {
+      session: { id: string; scheduledAt: Date; topic: string; requests: unknown }
+      attendeeUserIds: string[]
+      oldScheduledAt: Date
+    } | null = null
+    const result = await prisma.$transaction(async (tx) => {
+      const original = await tx.zoomSession.findUnique({
+        where: { id: input.sessionId },
+        select: { scheduledAt: true },
+      });
+      if (!original) throw rescheduleError('RESCHEDULE_SESSION_NOT_FOUND');
+
+      for (const key of rescheduleLockKeys(input.expertId, [original.scheduledAt, input.scheduledAt])) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      }
+      // The availability definition and the moving row are protected in the
+      // same order used by commerce approval: coach first, then session.
+      await tx.$queryRaw`SELECT id FROM "Expert" WHERE id = ${input.expertId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "ZoomSession" WHERE id = ${input.sessionId} FOR UPDATE`;
+
+      const session = await tx.zoomSession.findUnique({
+        where: { id: input.sessionId },
+        include: {
+          attendees: { select: { id: true, userId: true, attended: true } },
+          commerceRequests: { select: { id: true, status: true } },
+          swapRequestsFrom: { select: { id: true } },
+        },
+      });
+      if (!session) throw rescheduleError('RESCHEDULE_SESSION_NOT_FOUND');
+      if (session.expertId !== input.expertId) throw rescheduleError('RESCHEDULE_FORBIDDEN');
+
+      if (session.scheduledAt.getTime() === input.scheduledAt.getTime()) {
+        return { session, idempotent: true };
+      }
+      if (session.status !== ZoomStatus.SCHEDULED
+        || session.postSessionReport !== null) {
+        throw rescheduleError('RESCHEDULE_SESSION_IMMUTABLE');
+      }
+      if (isIndividualSession(session)) {
+        if (session.attendees.length > 0 || session.attendees.some((attendee) => attendee.attended)) {
+          throw rescheduleError('RESCHEDULE_ATTENDEES_LOCKED');
+        }
+        if (session.commerceRequests.length > 0) {
+          throw rescheduleError('RESCHEDULE_COMMERCE_LOCKED');
+        }
+        if (session.swapRequestsFrom.length > 0) {
+          throw rescheduleError('RESCHEDULE_SWAP_LOCKED');
+        }
+        if (sessionDurationMinutes(session.requests) !== INDIVIDUAL_DURATION_MINUTES) {
+          throw rescheduleError('RESCHEDULE_DURATION_UNSUPPORTED');
+        }
+
+        const availability = await getIndividualAvailabilityForScheduledAt({
+          expertId: input.expertId,
+          scheduledAt: input.scheduledAt,
+          db: tx,
+          excludeSessionId: session.id,
+        });
+        if (!availability.candidate.available) {
+          throw rescheduleError('RESCHEDULE_TARGET_UNAVAILABLE');
+        }
+
+        const updated = await tx.zoomSession.update({
+          where: { id: session.id },
+          data: { scheduledAt: input.scheduledAt },
+        });
+        return { session: updated, idempotent: false };
+      }
+
+      if (!isGroupPracticeSession(session)) {
+        throw rescheduleError('RESCHEDULE_SESSION_IMMUTABLE');
+      }
+      if (session.scheduledAt <= new Date()) {
+        throw rescheduleError('RESCHEDULE_SESSION_IMMUTABLE');
+      }
+      if (session.attendees.some((attendee) => attendee.attended)) {
+        throw rescheduleError('RESCHEDULE_ATTENDEES_LOCKED');
+      }
+      if (session.commerceRequests.length > 0) {
+        throw rescheduleError('RESCHEDULE_COMMERCE_LOCKED');
+      }
+      if (session.swapRequestsFrom.length > 0) {
+        throw rescheduleError('RESCHEDULE_SWAP_LOCKED');
+      }
+
+      const targetEnd = new Date(input.scheduledAt.getTime() + sessionDurationMinutes(session.requests) * 60_000);
+      const date = getKyivDateKey(input.scheduledAt);
+      const effectiveAvailability = await loadEffectiveAvailabilityForDate(tx, input.expertId, date);
+      const workingWindows = windowsForDate(effectiveAvailability.slots, date, effectiveAvailability.source, true);
+      if (!workingWindows.some((window) => input.scheduledAt >= window.start && targetEnd <= window.end)) {
+        throw rescheduleError('RESCHEDULE_TARGET_UNAVAILABLE');
+      }
+      const conflicts = await tx.zoomSession.findMany({
+        where: {
+          expertId: input.expertId,
+          id: { not: session.id },
+          status: { not: ZoomStatus.CANCELLED },
+          scheduledAt: { lt: targetEnd },
+        },
+        select: { scheduledAt: true, requests: true },
+      });
+      if (conflicts.some((candidate) => intervalOverlaps(
+        input.scheduledAt,
+        targetEnd,
+        candidate.scheduledAt,
+        new Date(candidate.scheduledAt.getTime() + sessionDurationMinutes(candidate.requests) * 60_000),
+      ))) {
+        throw rescheduleError('RESCHEDULE_TARGET_UNAVAILABLE');
+      }
+
+      const updated = await tx.zoomSession.update({
+        where: { id: session.id },
+        data: {
+          scheduledAt: input.scheduledAt,
+          requests: withRescheduleHistory(
+            session.requests,
+            session.scheduledAt,
+            input.scheduledAt,
+            input.actorUserId ?? null,
+          ),
+        },
+      });
+      await tx.event.create({
+        data: {
+          id: `zoom-group-practice-rescheduled:${session.id}:${session.scheduledAt.getTime()}:${input.scheduledAt.getTime()}`,
+          userId: input.actorUserId ?? null,
+          type: 'ZOOM_GROUP_PRACTICE_RESCHEDULED',
+          source: 'zoom',
+          state: 'COMPLETED',
+          payload: {
+            actorUserId: input.actorUserId ?? null,
+            sessionId: session.id,
+            oldScheduledAt: session.scheduledAt.toISOString(),
+            newScheduledAt: input.scheduledAt.toISOString(),
+            attendeesCount: session.attendees.length,
+          },
+        },
+      });
+      groupPracticeNotification = {
+        session: updated,
+        attendeeUserIds: session.attendees.map((attendee) => attendee.userId),
+        oldScheduledAt: session.scheduledAt,
+      }
+      return { session: updated, idempotent: false };
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+    if (groupPracticeNotification) {
+      await rescheduleGroupPracticeNotifications(groupPracticeNotification)
+    }
+    return result
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      throw rescheduleError('RESCHEDULE_CONCURRENT_MODIFICATION');
+    }
+    throw error;
+  }
 }
 
 // Compute next `weeksAhead` dates for a recurring slot in the slot timezone.
@@ -646,6 +910,7 @@ export async function generateSessionsFromAvailability(
   const slots = await getAvailability(expertId);
   let created = 0;
   let skipped = 0;
+  const materializedMondayGroupPracticeDates = new Set<string>();
 
   for (const slot of slots) {
     if (!slot.active) continue;
@@ -661,6 +926,26 @@ export async function generateSessionsFromAvailability(
     );
 
     for (const date of dates) {
+      const mondayGroupPracticeDate = slot.sessionType === 'group_practice' && isKyivMonday(date)
+        ? getKyivDateKey(date)
+        : null;
+      if (mondayGroupPracticeDate) {
+        if (materializedMondayGroupPracticeDates.has(mondayGroupPracticeDate)) {
+          skipped++;
+          continue;
+        }
+
+        const existingCanonicalPractice = await findCanonicalMondayGroupPractice({
+          expertId,
+          scheduledAt: date,
+        });
+        if (existingCanonicalPractice) {
+          materializedMondayGroupPracticeDates.add(mondayGroupPracticeDate);
+          skipped++;
+          continue;
+        }
+      }
+
       const windowStart = new Date(date.getTime() - 5 * 60 * 1000);
       const windowEnd   = new Date(date.getTime() + 5 * 60 * 1000);
 
@@ -697,12 +982,15 @@ export async function generateSessionsFromAvailability(
         notifiedAt24h: null,
         notifiedAt2h: null,
       } as unknown as Prisma.InputJsonValue,
-    }, {
+      }, {
       // Materialization creates future calendar inventory only. The existing
       // reminder/notification policy delivers messages when they are due.
       suppressAutomation: true,
       suppressSessionNotification: true,
-    });
+      });
+      if (mondayGroupPracticeDate) {
+        materializedMondayGroupPracticeDates.add(mondayGroupPracticeDate);
+      }
       created++;
     }
   }

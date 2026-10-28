@@ -1,6 +1,22 @@
 import { prisma } from '../../../../db/client.js'
 import { bot } from '../../../../lib/telegram.js'
 import { sendTelegramMessage } from '../../../../lib/telegram/messageFormatter.js'
+import { NotificationType } from '@starway/db/prisma-client'
+import { notificationJobService } from '../../../../services/notifications/services/NotificationJobService.js'
+
+export const FOCUS_PAYMENT_ONBOARDING_EVENT = 'FOCUS_PAYMENT_ONBOARDING'
+export const FOCUS_PAYMENT_ONBOARDING_JOB_KIND = 'FOCUS_PAYMENT_ONBOARDING'
+
+type FocusPaymentOnboardingJobPayload = {
+  kind: typeof FOCUS_PAYMENT_ONBOARDING_JOB_KIND
+  subscriptionId: string
+  chatId: string
+  firstName: string | null
+  planLabel: string
+  accessUntil: string | null
+  upcomingLines: string
+  idempotencyKey: string
+}
 
 export function getSafeName(firstName?: string | null): string {
   if (!firstName) return ''
@@ -163,6 +179,65 @@ type FocusPaymentOnboardingInput = {
   upcomingLines: string
 }
 
+export function isFocusPaymentOnboardingJobPayload(
+  payload: Record<string, unknown>,
+): payload is FocusPaymentOnboardingJobPayload {
+  return payload.kind === FOCUS_PAYMENT_ONBOARDING_JOB_KIND
+    && typeof payload.subscriptionId === 'string'
+    && typeof payload.chatId === 'string'
+    && (typeof payload.firstName === 'string' || payload.firstName === null)
+    && typeof payload.planLabel === 'string'
+    && (typeof payload.accessUntil === 'string' || payload.accessUntil === null)
+    && typeof payload.upcomingLines === 'string'
+    && typeof payload.idempotencyKey === 'string'
+}
+
+/**
+ * Runs only from NotificationJob after its durable lease has been claimed.
+ * focusWelcomedAt is the application acknowledgment: a reclaimed job after
+ * that update exits without another application-side Telegram dispatch.
+ */
+export async function deliverFocusPaymentOnboardingJob(
+  payload: FocusPaymentOnboardingJobPayload,
+): Promise<void> {
+  const subscription = await prisma.productSubscription.findUnique({
+    where: { id: payload.subscriptionId },
+    select: { focusWelcomedAt: true },
+  })
+  if (!subscription || subscription.focusWelcomedAt) {
+    return
+  }
+
+  const zoomUrl = resolveZoomCalendarUrl()
+  const accessUntilDate = payload.accessUntil ? new Date(payload.accessUntil) : null
+  const accessUntilLine = accessUntilDate && !Number.isNaN(accessUntilDate.getTime())
+    ? `Доступ активний до ${accessUntilDate.toLocaleDateString('uk-UA')}`
+    : 'Доступ уже активний'
+  const confirmationSent = await sendFocusAccessConfirmation({
+    chatId: payload.chatId,
+    firstName: payload.firstName,
+    planLabel: payload.planLabel,
+    accessUntilLine,
+    zoomUrl,
+  })
+  if (!confirmationSent) {
+    throw new Error('focus_payment_onboarding_delivery_failed')
+  }
+
+  if (payload.upcomingLines.trim()) {
+    await sendUpcomingScheduleSummary({
+      chatId: payload.chatId,
+      lines: payload.upcomingLines,
+      zoomUrl,
+    })
+  }
+
+  await prisma.productSubscription.updateMany({
+    where: { id: payload.subscriptionId, focusWelcomedAt: null },
+    data: { focusWelcomedAt: new Date() },
+  })
+}
+
 export function resolvePaidTelegramChatId(input: {
   userId: string
   paidUser: FocusPaymentOnboardingInput['paidUser']
@@ -209,46 +284,40 @@ export async function sendFocusPaymentOnboardingIfNeeded(
     return true
   }
 
-  const zoomUrl = resolveZoomCalendarUrl()
+  if (!input.focusSubscription?.id) {
+    console.warn('[PAYMENT_LIFECYCLE] focus onboarding skipped', {
+      userId: input.userId,
+      reason: 'missing_focus_subscription',
+    })
+    return false
+  }
+
   const accessUntilDate =
     input.canonicalSubscription?.currentPeriodEnd ??
     input.focusSubscription?.expiresAt ??
     null
-  const accessUntilLine = accessUntilDate
-    ? `Доступ активний до ${accessUntilDate.toLocaleDateString('uk-UA')}`
-    : 'Доступ уже активний'
-
-  const confirmationSent = await sendFocusAccessConfirmation({
-    chatId: paidChatId,
-    firstName: input.paidUser.firstName,
-    planLabel: input.planLabel,
-    accessUntilLine,
-    zoomUrl,
-  })
-
-  if (input.upcomingLines.trim()) {
-    await sendUpcomingScheduleSummary({
-      chatId: paidChatId,
-      lines: input.upcomingLines,
-      zoomUrl,
-    })
-  }
-
-  if (confirmationSent && input.focusSubscription?.id && !input.focusSubscription.focusWelcomedAt) {
-    await prisma.productSubscription.update({
-      where: { id: input.focusSubscription.id },
-      data: {
-        focusWelcomedAt: new Date(),
+  const idempotencyKey = `focus-payment-onboarding:${input.focusSubscription.id}`
+  await notificationJobService.enqueueOnce(
+    NotificationType.SUBSCRIPTION,
+    {
+      event: FOCUS_PAYMENT_ONBOARDING_EVENT,
+      userId: input.userId,
+      payload: {
+        kind: FOCUS_PAYMENT_ONBOARDING_JOB_KIND,
+        subscriptionId: input.focusSubscription.id,
+        chatId: paidChatId,
+        firstName: input.paidUser.firstName,
+        planLabel: input.planLabel,
+        accessUntil: accessUntilDate?.toISOString() ?? null,
+        upcomingLines: input.upcomingLines,
+        idempotencyKey,
       },
-    }).catch((err) =>
-      console.error(
-        '[Focus] Failed to update subscription after onboarding send',
-        err,
-      ),
-    )
-  }
+    },
+    new Date(),
+    idempotencyKey,
+  )
 
-  return confirmationSent
+  return true
 }
 
 export function extractUserIdFromOrderRef(orderReference: string): string | null {

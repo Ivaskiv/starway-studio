@@ -33,6 +33,9 @@ export interface ZoomSessionDTO {
   postSessionReport: PostSessionReport | null;
   createdAt:         string;
   updatedAt:         string;
+  type?:             ZoomSessionType;
+  commerceRequestId?: string | null;
+  commerceStatus?:    'REQUESTED' | 'APPROVED_PENDING_PAYMENT' | 'PAID' | 'REJECTED' | 'EXPIRED' | 'CANCELLED' | null;
 
   attendeesCount?: number;
   isMyBooking?: boolean;

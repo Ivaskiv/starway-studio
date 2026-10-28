@@ -77,6 +77,18 @@ describe('syncAuthSession miniapp ownership', () => {
     })
   }
 
+  function mockAuthResponse(response: Response) {
+    vi.mocked(fetch).mockImplementation((input) =>
+      String(input) === '/api/debug/client-trace'
+        ? Promise.resolve(new Response(null, { status: 204 }))
+        : Promise.resolve(response),
+    )
+  }
+
+  function authRequests() {
+    return vi.mocked(fetch).mock.calls.filter(([input]) => String(input) !== '/api/debug/client-trace')
+  }
+
   it('restores a NO_ACCESS Telegram user before stale web token restore', async () => {
     const telegramAuthResponse = jsonResponse({
           user: {
@@ -193,7 +205,7 @@ describe('syncAuthSession miniapp ownership', () => {
       clearTimeout,
     })
 
-    vi.mocked(fetch).mockResolvedValueOnce(
+    mockAuthResponse(
       jsonResponse({
         user: {
           id: 'focus-user-delayed',
@@ -227,7 +239,7 @@ describe('syncAuthSession miniapp ownership', () => {
     const restored = await restorePromise
 
     expect(restored).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(authRequests()).toHaveLength(1)
     expect(fetch).toHaveBeenCalledWith(
       'https://api.example.com/auth/telegram',
       expect.objectContaining({
@@ -267,7 +279,7 @@ describe('syncAuthSession miniapp ownership', () => {
       clearTimeout,
     })
 
-    vi.mocked(fetch).mockResolvedValueOnce(
+    mockAuthResponse(
       jsonResponse({
         user: {
           id: 'coach-admin-user',
@@ -303,7 +315,7 @@ describe('syncAuthSession miniapp ownership', () => {
     const restored = await restorePromise
 
     expect(restored).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(authRequests()).toHaveLength(1)
     expect(fetch).toHaveBeenCalledWith(
       'https://api.example.com/auth/telegram',
       expect.objectContaining({
@@ -324,8 +336,7 @@ describe('syncAuthSession miniapp ownership', () => {
       clearTimeout,
     })
 
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
+    mockAuthResponse(
         jsonResponse({
           user: {
             id: 'web-user',
@@ -342,12 +353,12 @@ describe('syncAuthSession miniapp ownership', () => {
           },
           accessToken: 'stale-access-token',
         }),
-      )
+    )
 
     const restored = await syncAuthSession({ dispatch, theme })
 
     expect(restored).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(authRequests()).toHaveLength(1)
     expect(fetch).toHaveBeenCalledWith(
       'https://api.example.com/auth/me',
       expect.objectContaining({
@@ -376,7 +387,7 @@ describe('syncAuthSession miniapp ownership', () => {
       clearTimeout,
     })
 
-    vi.mocked(fetch).mockResolvedValueOnce(
+    mockAuthResponse(
       jsonResponse({
         user: {
           id: 'admin-user',
@@ -403,7 +414,7 @@ describe('syncAuthSession miniapp ownership', () => {
     })
 
     expect(restored).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(authRequests()).toHaveLength(1)
     expect(fetch).toHaveBeenCalledWith(
       '/api/auth/refresh',
       expect.objectContaining({

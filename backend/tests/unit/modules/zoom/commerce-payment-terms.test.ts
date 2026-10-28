@@ -3,6 +3,9 @@ import {
   approveRequest,
   getCalendarRequests,
   getCommerceCheckoutUrl,
+  getExistingIndividualCheckoutUrl,
+  expireDueIndividualPaymentWindows,
+  resolveIndividualPaymentReminderSchedule,
   resolveIndividualPaymentDeadline,
   resolveZoomIndividualPaymentTerms,
 } from '../../../../src/modules/zoom/commerce/zoom.commerce-request.service.ts'
@@ -40,17 +43,90 @@ afterEach(() => {
 })
 
 describe('Zoom Individual payment terms', () => {
-  it('uses 1 UAH only for development and test runtimes', () => {
-    process.env.NODE_ENV = 'development'
-    expect(resolveZoomIndividualPaymentTerms()).toEqual({ amount: 1, currency: 'UAH' })
+  it('expires an overdue checkout even after its scheduled session is historical', async () => {
+    const now = new Date('2026-10-21T20:00:00.000Z')
+    const request = {
+      id: 'past-pending-request', kind: 'INDIVIDUAL', status: 'APPROVED_PENDING_PAYMENT',
+      approvedAt: new Date('2026-10-20T08:00:00.000Z'),
+      scheduledAt: new Date('2026-10-20T10:00:00.000Z'),
+      expertId: 'expert-1', checkoutOrderReference: 'zoom_commerce_individual_past',
+    }
+    const checkout = {
+      id: 'checkout-past', orderReference: request.checkoutOrderReference,
+      expiresAt: new Date('2026-10-20T09:00:00.000Z'), status: 'OPENED', invalidatedAt: null,
+    }
+    const tx = {
+      $queryRaw: vi.fn(),
+      zoomCommerceRequest: {
+        findUniqueOrThrow: vi.fn(async () => request),
+        update: vi.fn(async ({ data }: { data: Partial<typeof request> }) => ({ ...request, ...data })),
+      },
+      checkoutSession: {
+        findMany: vi.fn(async () => [checkout]),
+        update: vi.fn(async ({ data }: { data: Partial<typeof checkout> }) => ({ ...checkout, ...data })),
+      },
+    }
+    const db = {
+      zoomCommerceRequest: { findMany: vi.fn(async () => [request]) },
+      $transaction: async (operation: (transaction: typeof tx) => Promise<unknown>) => operation(tx),
+    }
 
-    process.env.NODE_ENV = 'test'
-    expect(resolveZoomIndividualPaymentTerms()).toEqual({ amount: 1, currency: 'UAH' })
+    await expect(expireDueIndividualPaymentWindows(now, db as never)).resolves.toMatchObject([
+      { id: request.id, status: 'EXPIRED' },
+    ])
+    expect(db.zoomCommerceRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.not.objectContaining({ scheduledAt: expect.anything() }),
+    }))
+    expect(tx.checkoutSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'EXPIRED', invalidatedAt: now }),
+    }))
+  })
+
+  it('schedules one payment reminder exactly ten minutes before the persisted UTC deadline', () => {
+    const schedule = resolveIndividualPaymentReminderSchedule({
+      requestId: 'request-1',
+      userId: 'user-1',
+      deadline: new Date('2026-09-26T20:40:00.000Z'),
+      now: new Date('2026-09-26T20:00:00.000Z'),
+    })
+
+    expect(schedule).toMatchObject({
+      runAt: new Date('2026-09-26T20:30:00.000Z'),
+      idempotencyKey: 'zoom-commerce:request-1:2026-09-26T20:40:00.000Z:PAYMENT_REMINDER_10M',
+      payload: {
+        zoomCommerceEvent: 'PAYMENT_REMINDER_10M',
+        zoomCommerceRequestId: 'request-1',
+        paymentDeadline: '2026-09-26T20:40:00.000Z',
+      },
+    })
+  })
+
+  it('does not create an immediate duplicate reminder when ten minutes or less remain', () => {
+    expect(resolveIndividualPaymentReminderSchedule({
+      requestId: 'request-1', userId: 'user-1',
+      deadline: new Date('2026-09-26T20:40:00.000Z'),
+      now: new Date('2026-09-26T20:30:00.000Z'),
+    })).toBeNull()
+  })
+
+  it('uses the canonical explicitly marked 1 UAH tariff in development runtime', () => {
+    process.env.NODE_ENV = 'development'
+    expect(resolveZoomIndividualPaymentTerms()).toEqual({
+      amount: 1,
+      currency: 'UAH',
+      environment: 'development',
+      testMode: true,
+    })
   })
 
   it('preserves the production 60 EUR contract', () => {
     process.env.NODE_ENV = 'production'
-    expect(resolveZoomIndividualPaymentTerms()).toEqual({ amount: 60, currency: 'EUR' })
+    expect(resolveZoomIndividualPaymentTerms()).toEqual({
+      amount: 60,
+      currency: 'EUR',
+      environment: 'production',
+      testMode: false,
+    })
   })
 
   it('uses the shorter of one hour after approval and thirty minutes before the session', () => {
@@ -130,6 +206,8 @@ describe('Zoom Individual payment terms', () => {
       payload: {
         ...oldPayment,
         paymentKind: 'zoom_individual',
+        paymentEnvironment: 'development',
+        testMode: true,
         zoomCommerceRequestId: request.id,
         zoomSessionId: request.zoomSessionId,
         userId: request.requesterUserId,
@@ -221,6 +299,8 @@ describe('Zoom Individual payment terms', () => {
         payload: expect.objectContaining({
           merchantDomainName: 'merchant.starway.test',
           orderReference,
+          paymentEnvironment: 'development',
+          testMode: true,
           zoomCommerceRequestId: request.id,
           zoomSessionId: request.zoomSessionId,
           userId: request.requesterUserId,
@@ -244,6 +324,13 @@ describe('Zoom Individual payment terms', () => {
       request.requesterUserId,
       db as never,
       createInvoice,
+    )).resolves.toBe('https://secure.wayforpay.com/pay/invoice?token=invoice-token')
+    expect(createInvoice).toHaveBeenCalledTimes(2)
+
+    await expect(getExistingIndividualCheckoutUrl(
+      request.id,
+      request.requesterUserId,
+      db as never,
     )).resolves.toBe('https://secure.wayforpay.com/pay/invoice?token=invoice-token')
     expect(createInvoice).toHaveBeenCalledTimes(2)
   })

@@ -37,6 +37,7 @@ export interface ZoomSessionAttendeeSummary {
   userId: string;
   name: string | null;
   attended: boolean;
+  question?: string | null;
 }
 
 export interface ZoomCompletionPayload {
@@ -67,6 +68,9 @@ export interface ZoomCalendarSession {
   id: string;
   coach?: { id: string; name: string } | null;
   scheduledAt: string;
+  /** Immediate prior time of this USER's future rescheduled Group Practice. */
+  previousScheduledAt?: string;
+  rescheduledAt?: string | null;
   topic: string;
   status: ZoomStatus;
   type: ZoomSessionType;
@@ -84,6 +88,11 @@ export interface ZoomCalendarSession {
   goalB?: string | null;
   participantNames?: string[];
   attendees?: ZoomSessionAttendeeSummary[];
+  isMyAttendanceConfirmed?: boolean;
+  /** Participant-owned checkpoint; deliberately distinct from verified attendance. */
+  canSelfReportAttendance?: boolean;
+  selfReportedAttended?: boolean | null;
+  selfReportedAt?: string | null;
   actualAttendeeCount?: number;
   completedAt?: string | null;
   completionSource?: 'manual' | 'zoom' | null;
@@ -114,6 +123,8 @@ export interface ZoomCalendarSession {
   commerceRequestId?: string | null;
   commerceStatus?: ZoomCommerceStatus | null;
   commerceLabel?: string | null;
+  /** Server-derived: safe empty individual inventory, with no business commitment history. */
+  isDisposableIndividualSlot?: boolean;
   priceCents?: number;
   currency?: string;
   paymentModel?: ZoomPaymentModel;

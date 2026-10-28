@@ -73,10 +73,12 @@ import {
   handleAbTestEmailCaptureText,
   resolveFocusShortcutCallback,
   handleFocusPaymentAction,
+  handleTrialZoomPaymentAction,
   handleResendFocusBlock12,
   handleFocusPaymentIssue,
 } from './flow.js'
 import { canSendAdvertising } from '@/modules/telegram-mentor/core/advertisingGuard.js'
+import { isProductionRuntime } from '@/modules/telegram-mentor/runtime/botConfig.js'
 import { splitTelegramContentBlocks, sendTelegramContentChunk } from './views.js'
 import { BLOCK9_POST_RESULT } from '../content/abTest.results.js'
 
@@ -257,7 +259,8 @@ export async function handleAbTestCallback(
     action === 'skip_email_before_result' ||
     action.startsWith('show_inside_') ||
     action === 'open_focus_payment' ||
-    action.startsWith('open_focus_payment:')
+    action.startsWith('open_focus_payment:') ||
+    (action === 'trial_zoom' && !isProductionRuntime())
   )) {
     userId = await resolveContextUserId(ctx)
     if (userId) {
@@ -269,7 +272,8 @@ export async function handleAbTestCallback(
       action === 'ab_test:show_result' ||
       action.startsWith('show_inside_') ||
       action === 'open_focus_payment' ||
-      action.startsWith('open_focus_payment:')
+      action.startsWith('open_focus_payment:') ||
+      (action === 'trial_zoom' && !isProductionRuntime())
     ) {
       const errorText =
       action === 'ab_test:show_result'
@@ -278,7 +282,9 @@ export async function handleAbTestCallback(
             ? 'Не вдалося відкрити практику. Спробуй ще раз.'
           : action === 'ab_test:test_drive'
             ? 'Не вдалося відкрити практику. Спробуй ще раз.'
-          : 'Не вдалося відкрити ФОКУС. Спробуй ще раз.'
+          : action === 'trial_zoom'
+            ? 'Не вдалося відкрити пробний Zoom. Спробуй ще раз.'
+            : 'Не вдалося відкрити ФОКУС. Спробуй ще раз.'
       await ctx.answerCbQuery(errorText).catch(() => null)
       console.error('[AB_TEST_CALLBACK_MISSING_USER_ID]', {
         action,
@@ -293,7 +299,8 @@ export async function handleAbTestCallback(
         action.startsWith('show_inside_') ||
         action === 'ab_test:test_drive' ||
         action === 'open_focus_payment' ||
-        action.startsWith('open_focus_payment:'),
+        action.startsWith('open_focus_payment:') ||
+        (action === 'trial_zoom' && !isProductionRuntime()),
       reason: 'missing_user_id',
     })
     logAbTestStartDebug('callback:missing_user_id', { action })
@@ -333,6 +340,10 @@ export async function handleAbTestCallback(
   // ========== START WHEEL ==========
   if (action === 'ab_test:start_wheel' || action === 'start_wheel') {
     return handleStartWheel(ctx)
+  }
+
+  if (action === 'trial_zoom' && !isProductionRuntime()) {
+    return handleTrialZoomPaymentAction(ctx, userId)
   }
 
   // ========== FOCUS PAYMENT ==========

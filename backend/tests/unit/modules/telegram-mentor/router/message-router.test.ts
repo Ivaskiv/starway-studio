@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   renderCurrentView: vi.fn(),
 }))
 
-vi.mock('../../../../db/client.ts', () => ({
+vi.mock('@/db/client.js', () => ({
   prisma: {
     user: {
       update: vi.fn(),
@@ -39,64 +39,64 @@ vi.mock('@/products/ab-system/telegram/service.js', () => ({
   handleAbTestEmailCaptureText: mocks.handleAbTestEmailCaptureText,
 }))
 
-vi.mock('../../handlers/intelligence.handler.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/intelligence.handler.js', () => ({
   detectTelegramIntelligenceMessageType: mocks.detectTelegramIntelligenceMessageType,
 }))
 
-vi.mock('../../handlers/status.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/status.js', () => ({
   handleStatus: mocks.handleStatus,
 }))
 
-vi.mock('../../handlers/morning.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/morning.js', () => ({
   handleMorningAnswer: mocks.handleMorningAnswer,
 }))
 
-vi.mock('../../handlers/evening.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/evening.js', () => ({
   handleEveningAnswer: mocks.handleEveningAnswer,
 }))
 
-vi.mock('../../handlers/start.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/start.js', () => ({
   handlePendingTelegramIdentityText: mocks.handlePendingTelegramIdentityText,
   sendEntryOffer: mocks.sendEntryOffer,
 }))
 
-vi.mock('../../handlers/start.menu.ts', () => ({
+vi.mock('@/modules/telegram-mentor/handlers/start.menu.js', () => ({
   sendStateMenu: mocks.sendStateMenu,
 }))
 
-vi.mock('../../services/identity/pending.ts', () => ({
+vi.mock('@/modules/telegram-mentor/services/identity/pending.js', () => ({
   hasPendingName: mocks.hasPendingName,
   clearPendingName: mocks.clearPendingName,
 }))
 
-vi.mock('../../session.ts', () => ({
+vi.mock('@/modules/telegram-mentor/session.js', () => ({
   getSession: mocks.getSession,
   parseQuestionState: mocks.parseQuestionState,
 }))
 
-vi.mock('../../conversation/delivery/planDelivery.ts', () => ({
+vi.mock('@/modules/telegram-mentor/conversation/delivery/planDelivery.js', () => ({
   planMessage: mocks.planMessage,
 }))
 
-vi.mock('../../../ai/gateway/index.ts', () => ({
+vi.mock('@/modules/ai/gateway/index.js', () => ({
   getTelegramAgentGateway: () => ({
     execute: mocks.gatewayExecute,
   }),
 }))
 
-vi.mock('../../../../services/claude-intelligence.service.ts', () => ({
+vi.mock('@/services/claude-intelligence.service.js', () => ({
   claudeIntelligenceService: {
     getConversationHistory: mocks.getConversationHistory,
   },
 }))
 
-vi.mock('../../services/context/intelligence.ts', () => ({
+vi.mock('@/modules/telegram-mentor/services/context/intelligence.js', () => ({
   resolveTelegramIntelligence: mocks.resolveTelegramIntelligence,
   appendTelegramConversationTurn: mocks.appendTelegramConversationTurn,
   resolveTelegramSupportUrl: vi.fn(() => 'https://support.example/demo'),
 }))
 
-vi.mock('../../services/context/request.ts', () => ({
+vi.mock('@/modules/telegram-mentor/services/context/request.js', () => ({
   getTelegramAiRequestContext: mocks.getTelegramAiRequestContext,
 }))
 
@@ -104,12 +104,12 @@ vi.mock('@/products/ab-system/telegram/progress.js', () => ({
   loadAbTestProgress: mocks.loadAbTestProgress,
 }))
 
-vi.mock('@/products/ab-system/telegram/views/index.js', () => ({
+vi.mock('@/products/ab-system/telegram/views.js', () => ({
   renderCurrentView: mocks.renderCurrentView,
 }))
 
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
-import { resolveTelegramTextRoute, routeTelegramTextMessage } from '../messageRouter.ts'
+import { resolveTelegramTextRoute, routeTelegramTextMessage } from '@/modules/telegram-mentor/router/messageRouter.ts'
 
 function createContext(text: string, userId: string | null = 'user-1'): Context {
   return {
@@ -375,8 +375,10 @@ describe('routeTelegramTextMessage', () => {
     const handled = await routeTelegramTextMessage(ctx, '#Start')
 
     expect(handled).toBe(true)
-    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
-      '12345',
+    expect(mocks.planMessage).toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'telegram_mistyped_start_hint',
       'Можливо, ти мала на увазі команду /start? Натисни її внизу, щоб продовжити.',
     )
     expect(mocks.gatewayExecute).not.toHaveBeenCalled()

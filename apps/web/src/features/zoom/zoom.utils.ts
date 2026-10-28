@@ -4,6 +4,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { uk } from 'date-fns/locale';
 
 import type { ZoomCalendarSession, ZoomPaymentModel, ZoomSessionType, ZoomCommerceStatus } from './zoom.types';
+import { formatKyivTime, KYIV_TIME_LABEL, KYIV_TIMEZONE } from './utils/zoomDateTime.utils';
 
 type SessionLike = {
   type?: string | null
@@ -16,9 +17,17 @@ type SessionLike = {
   maxParticipants?: number | null
   remainingSlots?: number | null
   isMyBooking?: boolean
+  isMyPendingPayment?: boolean
+  isDisposableIndividualSlot?: boolean
+  commerceRequestId?: string | null
   slotStatus?: string | null
   commerceStatus?: ZoomCommerceStatus | null
   commerceLabel?: string | null
+  participantNames?: Array<string | null> | null
+  attendees?: Array<{ userId?: string | null }> | null
+  scheduledAt?: string | Date | null
+  durationMinutes?: number | null
+  actualEndedAt?: string | null
 }
 
 
@@ -99,19 +108,66 @@ export type UserZoomCommercePresentation = {
   state: UserZoomCommercePresentationState
   label: string
   paymentVisible: boolean
+  detail?: string
+  badgeClass: string
+}
+
+/**
+ * Calendar status is a presentation projection. It intentionally never
+ * changes the persisted Zoom lifecycle: only a persisted COMPLETED status is
+ * completed, and attendance remains a separate confirmed attendee fact.
+ */
+export type ZoomSessionPresentationState =
+  | 'UPCOMING'
+  | 'PAST'
+  | 'COMPLETED'
+  | 'CANCELLED'
+
+const DEFAULT_ZOOM_SESSION_DURATION_MINUTES = 60
+
+export function getZoomSessionEndAt(session: SessionLike): Date | null {
+  const actualEndedAt = session.actualEndedAt ? new Date(session.actualEndedAt) : null
+  if (actualEndedAt && Number.isFinite(actualEndedAt.getTime())) return actualEndedAt
+
+  const scheduledAt = session.scheduledAt ? new Date(session.scheduledAt) : null
+  if (!scheduledAt || !Number.isFinite(scheduledAt.getTime())) return null
+
+  const durationMinutes = typeof session.durationMinutes === 'number' && session.durationMinutes > 0
+    ? session.durationMinutes
+    : DEFAULT_ZOOM_SESSION_DURATION_MINUTES
+
+  // ISO instants retain the server's Europe/Kyiv schedule across DST changes.
+  return new Date(scheduledAt.getTime() + durationMinutes * 60_000)
+}
+
+export function getZoomSessionPresentationState(
+  session: SessionLike,
+  now = new Date(),
+): ZoomSessionPresentationState {
+  const status = String(session.status ?? '').toUpperCase()
+  if (status === 'CANCELLED') return 'CANCELLED'
+  if (status === 'COMPLETED') return 'COMPLETED'
+
+  const endsAt = getZoomSessionEndAt(session)
+  return endsAt && endsAt.getTime() <= now.getTime() ? 'PAST' : 'UPCOMING'
 }
 
 const USER_ZOOM_COMMERCE_PRESENTATION: Record<
   UserZoomCommercePresentationState,
   Omit<UserZoomCommercePresentation, 'state'>
 > = {
-  AVAILABLE: { label: 'ДОСТУПНО', paymentVisible: false },
-  REQUESTED: { label: 'ЗАПИТ СТВОРЕНО', paymentVisible: false },
-  APPROVED_PENDING_PAYMENT: { label: 'ОЧІКУЄ ОПЛАТИ', paymentVisible: true },
-  PAID: { label: 'ОПЛАЧЕНО', paymentVisible: false },
-  EXPIRED: { label: 'ЧАС ОПЛАТИ ВИЧЕРПАНО', paymentVisible: false },
-  CANCELLED: { label: 'СКАСОВАНО', paymentVisible: false },
-  REJECTED: { label: 'ВІДХИЛЕНО', paymentVisible: false },
+  AVAILABLE: { label: 'ДОСТУПНО', paymentVisible: false, badgeClass: 'border border-emerald-300/20 bg-emerald-500/15 text-emerald-200' },
+  REQUESTED: {
+    label: 'ОЧІКУЄ ДІЇ КОУЧА',
+    paymentVisible: false,
+    detail: 'Коуч має схвалити або відхилити запит. Оплата стане доступною лише після схвалення.',
+    badgeClass: 'border border-sky-300/20 bg-sky-500/15 text-sky-100',
+  },
+  APPROVED_PENDING_PAYMENT: { label: 'ОЧІКУЄ ОПЛАТИ', paymentVisible: true, badgeClass: 'border border-amber-300/25 bg-amber-500/15 text-amber-100' },
+  PAID: { label: 'ОПЛАЧЕНО', paymentVisible: false, badgeClass: 'border border-emerald-300/25 bg-emerald-500/15 text-emerald-100' },
+  EXPIRED: { label: 'ЧАС ОПЛАТИ ВИЧЕРПАНО', paymentVisible: false, badgeClass: 'border border-white/10 bg-white/[0.05] text-white/55' },
+  CANCELLED: { label: 'СКАСОВАНО', paymentVisible: false, badgeClass: 'border border-red-300/20 bg-red-500/10 text-red-200' },
+  REJECTED: { label: 'ВІДХИЛЕНО', paymentVisible: false, badgeClass: 'border border-red-300/20 bg-red-500/10 text-red-200' },
 }
 
 export function getUserZoomCommercePresentation(
@@ -121,6 +177,15 @@ export function getUserZoomCommercePresentation(
     session.commerceStatus ?? 'AVAILABLE'
 
   const normalizedType = getNormalizedSessionType(session)
+  if (normalizedType === 'group_practice' || normalizedType === 'group') {
+    const lifecycle = getZoomSessionPresentationState(session)
+    const label = lifecycle === 'CANCELLED' ? 'СКАСОВАНО'
+      : lifecycle === 'COMPLETED' ? 'ЗАВЕРШЕНО'
+      : lifecycle === 'PAST' ? 'МИНУЛА'
+      : session.isMyBooking ? 'ВИ ЗАПИСАНІ'
+      : 'НАБІР ВІДКРИТО'
+    return { state, ...USER_ZOOM_COMMERCE_PRESENTATION[state], label, paymentVisible: false }
+  }
   const isFreeIndividual =
     state === 'AVAILABLE'
     && (normalizedType === 'individual' || normalizedType === 'private')
@@ -129,7 +194,7 @@ export function getUserZoomCommercePresentation(
     && (session.remainingSlots ?? 1) > 0
 
   if (isFreeIndividual) {
-    return { state, label: 'ВІЛЬНИЙ СЛОТ', paymentVisible: false }
+    return { state, ...USER_ZOOM_COMMERCE_PRESENTATION[state], label: 'ВІЛЬНИЙ СЛОТ', paymentVisible: false }
   }
 
   return {
@@ -260,6 +325,23 @@ export function getNormalizedSessionType(input: SessionLike | string | null | un
   return String(rawType ?? '').trim().toLowerCase()
 }
 
+/** Calendar DTO commerce requests are scoped to the requesting USER by the API. */
+export function hasUserZoomCommitment(session: SessionLike): boolean {
+  return Boolean(session.isMyBooking || session.isMyPendingPayment || session.commerceRequestId)
+}
+
+export function isUserCalendarSession(session: SessionLike): boolean {
+  const type = getNormalizedSessionType(session)
+  return type !== 'individual' && type !== 'private' || hasUserZoomCommitment(session)
+}
+
+/** The operational calendar never renders terminal/cancelled noise. */
+export function isUserOperationalCalendarSession(session: SessionLike): boolean {
+  return isUserCalendarSession(session)
+    && session.status !== 'CANCELLED'
+    && session.commerceStatus !== 'CANCELLED'
+}
+
 function getSessionParticipantCount(session: SessionLike): number | null {
   if (typeof session.participantsCount === 'number') return session.participantsCount
   if (typeof session.attendeesCount === 'number') return session.attendeesCount
@@ -275,6 +357,8 @@ export function getParticipantsLabel(count: number): string {
 export function getSessionMeta(session: SessionLike): string {
   const normalizedType = getNormalizedSessionType(session)
   const label = SESSION_TYPE_LABELS[normalizedType] ?? 'Сесія'
+  if ((normalizedType === 'group_practice' || normalizedType === 'group')
+    && (session.status === 'COMPLETED' || session.status === 'CANCELLED')) return label
 
   const supportsCapacityVocabulary =
     normalizedType === 'group_practice'
@@ -343,6 +427,97 @@ export function isPrivateSession(session: SessionLike): boolean {
   return getNormalizedSessionType(session) === 'private'
 }
 
+export type IndividualPresentation = {
+  state:
+    | 'INDIVIDUAL_SLOT_AVAILABLE'
+    | 'INDIVIDUAL_SLOT_EXPIRED'
+    | 'INDIVIDUAL_SLOT_CANCELLED'
+    | 'INDIVIDUAL_SESSION_SCHEDULED'
+    | 'INDIVIDUAL_SESSION_PASSED'
+    | 'INDIVIDUAL_SESSION_CANCELLED'
+  kind: 'INDIVIDUAL_SLOT' | 'INDIVIDUAL_SESSION'
+  title: 'Індивідуальний слот' | 'Індивідуальна сесія'
+  statusLabel: 'ДОСТУПНИЙ' | 'МИНУВ' | 'ПІДТВЕРДЖЕНО' | 'ПРОЙШЛА' | 'СКАСОВАНО' | null
+}
+
+/**
+ * An uncommitted individual inventory item is a slot, not a session. This is
+ * intentionally derived from the canonical calendar DTO: attendee relation,
+ * persisted commerce identity, or the current user's confirmed booking.
+ */
+export function getIndividualPresentation(
+  session: SessionLike,
+  now = Date.now(),
+): IndividualPresentation | null {
+  const normalizedType = getNormalizedSessionType(session)
+  if (normalizedType !== 'individual' && normalizedType !== 'private') return null
+
+  const hasAttendee = Boolean(session.attendees?.some((attendee) => attendee.userId))
+    || (typeof session.attendeesCount === 'number' && session.attendeesCount > 0)
+  // A persisted commerce identity remains a commitment even after it is
+  // cancelled or expired. It must never become disposable slot inventory.
+  const hasCommerceCommitment = Boolean(session.commerceRequestId)
+  // Older coach DTOs may not have the commerce ID but include a participant.
+  const hasLegacyParticipantName = !session.commerceStatus
+    && Boolean(session.participantNames?.some((name) => Boolean(name?.trim())))
+  const hasParticipant = hasAttendee || hasCommerceCommitment || Boolean(session.isMyBooking) || hasLegacyParticipantName
+  const scheduledAt = session.scheduledAt ? new Date(session.scheduledAt).getTime() : Number.NaN
+  const durationMinutes = typeof session.durationMinutes === 'number' && session.durationMinutes > 0
+    ? session.durationMinutes
+    : 60
+  const hasEnded = Number.isFinite(scheduledAt) && scheduledAt + durationMinutes * 60_000 <= now
+  const status = String(session.status ?? '').toUpperCase()
+  const canProjectTemporalStatus = status === 'SCHEDULED' || status === 'ACTIVE'
+
+  if (status === 'CANCELLED') {
+    if (!hasParticipant && session.isDisposableIndividualSlot === true) {
+      return {
+        state: 'INDIVIDUAL_SLOT_CANCELLED',
+        kind: 'INDIVIDUAL_SLOT',
+        title: 'Індивідуальний слот',
+        statusLabel: 'СКАСОВАНО',
+      }
+    }
+    return {
+      state: 'INDIVIDUAL_SESSION_CANCELLED',
+      kind: 'INDIVIDUAL_SESSION',
+      title: 'Індивідуальна сесія',
+      statusLabel: 'СКАСОВАНО',
+    }
+  }
+
+  // Completion is a persisted lifecycle fact. A past scheduled time alone
+  // must not turn a commitment into an attended/completed session.
+  if (status === 'COMPLETED') {
+    return {
+      state: 'INDIVIDUAL_SESSION_PASSED',
+      kind: 'INDIVIDUAL_SESSION',
+      title: 'Індивідуальна сесія',
+      statusLabel: 'ПРОЙШЛА',
+    }
+  }
+
+  if (!hasParticipant) {
+    const isExpiredSlot = canProjectTemporalStatus && hasEnded
+    return {
+      state: isExpiredSlot ? 'INDIVIDUAL_SLOT_EXPIRED' : 'INDIVIDUAL_SLOT_AVAILABLE',
+      kind: 'INDIVIDUAL_SLOT',
+      title: 'Індивідуальний слот',
+      statusLabel: canProjectTemporalStatus ? (isExpiredSlot ? 'МИНУВ' : 'ДОСТУПНИЙ') : null,
+    }
+  }
+
+  const awaitsPayment = session.commerceStatus === 'REQUESTED'
+    || session.commerceStatus === 'APPROVED_PENDING_PAYMENT'
+
+  return {
+    state: 'INDIVIDUAL_SESSION_SCHEDULED',
+    kind: 'INDIVIDUAL_SESSION',
+    title: 'Індивідуальна сесія',
+    statusLabel: canProjectTemporalStatus && !hasEnded && !awaitsPayment ? 'ПІДТВЕРДЖЕНО' : null,
+  }
+}
+
 export function isIntensiveSession(session: SessionLike): boolean {
   return getNormalizedSessionType(session) === 'intensive'
 }
@@ -354,21 +529,21 @@ function capitalize(str: string): string {
 export function getSessionDateLabel(date: Date | string): string {
   const d = new Date(date);
 
-  const day = d.toLocaleDateString('uk-UA', { weekday: 'long' });
-  const dayNumber = d.getDate();
-  const month = d.toLocaleDateString('uk-UA', { month: 'long' });
-  const time = d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+  const day = d.toLocaleDateString('uk-UA', { weekday: 'long', timeZone: KYIV_TIMEZONE });
+  const dayNumber = new Intl.DateTimeFormat('uk-UA', { day: 'numeric', timeZone: KYIV_TIMEZONE }).format(d);
+  const month = d.toLocaleDateString('uk-UA', { month: 'long', timeZone: KYIV_TIMEZONE });
+  const time = formatKyivTime(d);
 
-  return `${capitalize(day)}, ${dayNumber} ${month} · ${time}`;
+  return `${capitalize(day)}, ${dayNumber} ${month} · ${time} (${KYIV_TIME_LABEL})`;
 }
 
 export function getSessionCountdownLabel(startAt: Date): string {
   const sessionDate = new Date(startAt);
-  const time = sessionDate.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+  const time = formatKyivTime(sessionDate);
   const relativeDayLabel = getRelativeDayLabel(sessionDate);
 
-  if (relativeDayLabel === 'сьогодні') return `Сьогодні о ${time}`;
-  if (relativeDayLabel === 'завтра') return `Завтра о ${time}`;
+  if (relativeDayLabel === 'сьогодні') return `Сьогодні о ${time} (${KYIV_TIME_LABEL})`;
+  if (relativeDayLabel === 'завтра') return `Завтра о ${time} (${KYIV_TIME_LABEL})`;
 
   return getSessionDateLabel(sessionDate);
 }
@@ -427,12 +602,18 @@ const UK_MONTHS = [
 
 export function formatUkrDate(iso: string): string {
   const d = new Date(iso);
-  const day = d.getDate();
-  const month = UK_MONTHS[d.getMonth()];
-  const year = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${day} ${month} ${year}, ${hours}:${minutes}`;
+  const parts = new Intl.DateTimeFormat('uk-UA', {
+    timeZone: KYIV_TIMEZONE,
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+  const month = UK_MONTHS[Number(pick('month')) - 1];
+  return `${Number(pick('day'))} ${month} ${pick('year')}, ${pick('hour')}:${pick('minute')} (${KYIV_TIME_LABEL})`;
 }
 
 export function isSameDay(a: Date, b: Date): boolean {

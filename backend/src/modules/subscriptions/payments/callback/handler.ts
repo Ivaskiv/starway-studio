@@ -188,10 +188,7 @@ export async function wayForPayCallback(req: Request, res: Response) {
     })
 
     const isValidSignature = verifySignature(data)
-    const isDev = process.env.NODE_ENV === 'development'
-    // Для локального тестування webhook без бойового підпису:
-    // if (!isValidSignature && !isDev) { return res.status(400) }
-    if (!isValidSignature && !isDev) {
+    if (!isValidSignature) {
       console.warn('⚠️ Invalid WayForPay signature')
       console.error(`[WayForPay] Callback failed: Invalid Signature`, {
         orderReference: data.order_reference,
@@ -219,7 +216,6 @@ export async function wayForPayCallback(req: Request, res: Response) {
 
     console.log(`[WayForPay] Signature verified`, {
       orderReference: data.order_reference,
-      isDevBypass: !isValidSignature && isDev,
     })
 
     const isZoomSwapPayment = typeof data.order_reference === 'string'

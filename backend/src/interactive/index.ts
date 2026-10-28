@@ -1,5 +1,6 @@
 import type { Express } from 'express'
 import type { Server } from 'node:http'
+import { getRuntimePrismaDatasourceTarget } from '@starway/db'
 
 import { createApp } from '../app.js'
 import {
@@ -28,7 +29,6 @@ import { registerStankeyBot } from '../products/stankey/index.js'
 import {
   connectDatabaseWithRetry,
   createConnectionTracker,
-  describeDatabaseTarget,
   loadRuntimeEnv,
   registerRuntimeProcessHandlers,
   runShutdownStep,
@@ -217,7 +217,7 @@ async function bootstrap() {
 
   void (async () => {
     try {
-      const databaseTarget = describeDatabaseTarget(process.env.DATABASE_URL?.trim())
+      const databaseTarget = getRuntimePrismaDatasourceTarget()
       await connectDatabaseWithRetry()
       console.log('✅ Interactive runtime ready', {
         ...describeInteractiveRuntime(),
@@ -226,7 +226,7 @@ async function bootstrap() {
       })
     } catch (err: unknown) {
       console.warn('⚠️ [BOOT] Interactive DB unavailable, API continues in degraded mode', {
-        target: describeDatabaseTarget(process.env.DATABASE_URL?.trim()),
+        target: getRuntimePrismaDatasourceTarget(),
         error: err instanceof Error ? err.message : err,
       })
     }

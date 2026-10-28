@@ -537,6 +537,7 @@ export async function buildNotificationMessage(event: NotificationEvent, user: D
       {
         const flowTimerId = (asString(payload?.flow_timer_id ?? payload?.flowTimerId) ?? 'RESULT_FOLLOWUP_24H') as AbTestFollowupTimerId
         const contentVersion = (asString(payload?.content_version ?? payload?.contentVersion) ?? 'legacy') as TestDriveContentVersion
+        const customTitle = asString(payload?.message_title ?? payload?.messageTitle)
         const customBody = asString(payload?.message_body ?? payload?.messageBody)
         const customCtaText = asString(payload?.cta_text ?? payload?.ctaText)
         const followupName = firstName === 'Привіт' ? null : firstName
@@ -552,6 +553,7 @@ export async function buildNotificationMessage(event: NotificationEvent, user: D
           contentVersion,
         })
         const resolvedCtaText = customCtaText ?? content.ctaText ?? 'Відкрити'
+        const resolvedTitle = customTitle ?? content.title
         const isPlainBridge = flowTimerId === 'ZOOM_REMINDER_24H'
           || flowTimerId === 'ZOOM_REMINDER_2H'
           || flowTimerId === 'ZOOM_REMINDER_5M'
@@ -581,10 +583,10 @@ export async function buildNotificationMessage(event: NotificationEvent, user: D
               ]
             : undefined
         return {
-          title: content.title,
+          title: resolvedTitle,
           body: customBody ?? content.body,
           telegramHtml: buildTelegramCard({
-            title: content.title,
+            title: resolvedTitle,
             intro: isPlainBridge || customBody
               ? (customBody ?? content.body)
               : FOCUS_DOJIM_TIMER_IDS.includes(flowTimerId as (typeof FOCUS_DOJIM_TIMER_IDS)[number])

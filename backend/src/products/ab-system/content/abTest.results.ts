@@ -11,6 +11,7 @@ import {
   AB_TEST_FOCUS_CTA_RESULT_VALUE,
   AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
   AB_TEST_FOCUS_INCLUDED_TEXT,
+  AB_TEST_FOCUS_INCLUDED_STATE_TEXT,
   AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT,
   AB_TEST_FOCUS_PRACTICE_TEXT,
   AB_TEST_FOCUS_PRICING_TEXT,
@@ -140,8 +141,7 @@ const AB_TEST_RESULTS_BASE = defineAbTestResultBase({
       '**ЯК ЦЕ ВИГЛЯДАЄ ІЗ СЕРЕДИНИ?**\n\n**ФОКУС** — це Zoom-зустріч раз на тиждень.\n\nТи приходиш **зі своєю ситуацією**. Такою, яка є зараз.\n\nЯкщо немає сил, якщо все заплуталося, якщо не знаєш, що робити далі — **цього достатньо**.\n\nМи беремо **одну твою ситуацію** і разом розбираємося, чому вона ніяк не вирішується.',
     msg2_benefits:
       '**На кожному Zoom ми:**\n• розбираємо одну твою ситуацію;\n• знаходимо, чому вона повторюється;\n• дивимося, що зараз заважає її вирішити;\n• визначаємо твій наступний крок.',
-    msg2_included:
-      '**У ФОКУС ти отримуєш:**\n**• 4 живі Zoom-розбори  щомісяця;**\n**• закритий Telegram-чат;**\n**• мою підтримку і підтримку учасниць;**\n**• записи всіх Zoom-розборів.**\nТобі не потрібно чекати наступної зустрічі, якщо з\'явилося запитання або складна ситуація. Ти завжди можеш написати в чат.',
+    msg2_included: AB_TEST_FOCUS_INCLUDED_STATE_TEXT,
     msg2_howItWorks: AB_TEST_FOCUS_HOW_IT_WORKS_TEXT,
     msg2_review: buildResultReviewText(
       AB_TEST_REVIEW_HEADERS.state,

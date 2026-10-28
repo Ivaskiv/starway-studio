@@ -11,7 +11,6 @@ import {
 import { useGetAttendeesQuery } from '../services/zoom.api'
 import {
   useRegisterAttendeeMutation,
-  useSubmitBookingPreparationMutation,
   useSubmitBookingQuestionMutation,
 } from '../services/zoom.api'
 import { useGetUsersQuery } from '@/features/admin/services/ownership.api'
@@ -27,13 +26,15 @@ import {
   isIndividualSession,
   isPrivateSession,
   isSameDay,
+  isUserOperationalCalendarSession,
 } from '../zoom.utils'
 import {
   endOf,
   filterSessionsInRange,
   startOf,
 } from '../utils/calendar-range'
-import { buildCalendarEvent } from '../utils/calendar-event'
+import { buildGoogleCalendarTemplateUrl } from '../utils/calendar-event'
+import { openExternalPaymentUrl } from '@/features/subscription/utils/openExternalPaymentUrl'
 
 const UK_MONTH_NAMES = [
   'Січень',
@@ -67,15 +68,9 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
   const [bookingQuestionSession, setBookingQuestionSession] = useState<ZoomCalendarSession | null>(null);
   const [bookingQuestionText, setBookingQuestionText] = useState('');
   const [bookingQuestionError, setBookingQuestionError] = useState<string | null>(null);
-  const [bookingConfirmation, setBookingConfirmation] = useState<{ sessionId: string; text: string } | null>(null);
-  const [bookingPreparationSessionId, setBookingPreparationSessionId] = useState<string | null>(null);
-  const [bookingPreparationAnswer, setBookingPreparationAnswer] = useState('');
-  const [bookingPreparationError, setBookingPreparationError] = useState<string | null>(null);
-  const [bookingPreparationSuccess, setBookingPreparationSuccess] = useState<string | null>(null);
   const [createDate, setCreateDate] = useState<Date | null>(null);
   const [editingSession, setEditingSession] = useState<string | null>(null);
   const [registerAttendee, { isLoading: isRegisteringAttendee }] = useRegisterAttendeeMutation();
-  const [submitBookingPreparation, { isLoading: isSavingBookingPreparation }] = useSubmitBookingPreparationMutation();
   const [submitBookingQuestion, { isLoading: isSavingBookingQuestion }] = useSubmitBookingQuestionMutation();
   const [bookPrivateSlot, { isLoading: isBookingPrivateSlot }] = useBookPrivateSlotMutation();
 
@@ -91,7 +86,8 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
     { from, to, role: mode, userId, expertId },
     { skip: usesSessionSource },
   );
-  const sessions = usesSessionSource && sessionSource ? sessionSource.sessions : fetchedSessions;
+  const sourceSessions = usesSessionSource && sessionSource ? sessionSource.sessions : fetchedSessions;
+  const sessions = mode === 'user' ? sourceSessions.filter(isUserOperationalCalendarSession) : sourceSessions;
   const periodSessions = filterSessionsInRange(sessions, from, to)
   const visibleSessions = periodSessions.filter(
     (session) => new Date(session.scheduledAt) >= new Date(),
@@ -111,7 +107,6 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
     refetchOnMountOrArgChange: true,
   })
   const isSubmittingBookingQuestion = isRegisteringAttendee || isSavingBookingQuestion || isBookingPrivateSlot;
-  const isSubmittingBookingPreparation = isSavingBookingPreparation;
 
   const monthGrid = getMonthGrid(currentDate);
   const weekDays  = getWeekDays(currentDate);
@@ -179,21 +174,11 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
   };
 
   const handleAddToCalendar = (session: ZoomCalendarSession) => {
-    const icsContent = buildCalendarEvent(session);
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'focus-zoom-practice.ics';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const templateUrl = buildGoogleCalendarTemplateUrl(session)
+    if (templateUrl) openExternalPaymentUrl(templateUrl)
   };
 
   const openBookingQuestion = (session: ZoomCalendarSession) => {
-    setBookingConfirmation(null);
-    setBookingPreparationSuccess(null);
     setBookingQuestionError(null);
     setBookingQuestionText('');
     setBookingQuestionSession(session);
@@ -222,16 +207,13 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
 
     console.info('[ZOOM_USER_BOOK_ATTEMPT]', { sessionId: bookingQuestionSession.id, type: bookingQuestionSession.type });
     try {
-      let confirmationText = 'Ти записана на Zoom.\n\n👉 Я передам твоє питання коучу\n👉 і підготую для тебе розбір';
       if (isPrivateSession(bookingQuestionSession) || isIndividualSession(bookingQuestionSession)) {
         await bookPrivateSlot({ sessionId: bookingQuestionSession.id, questionText: normalizedQuestionText }).unwrap();
-        confirmationText = 'Запит на індивідуальну сесію надіслано коучу.';
       } else if (bookingQuestionSession.isMyBooking) {
         await submitBookingQuestion({
           sessionId: bookingQuestionSession.id,
           questionText: normalizedQuestionText,
         }).unwrap();
-        confirmationText = 'Питання збережено. Повернемось до нього на Zoom.';
       } else {
         await registerAttendee({
           sessionId: bookingQuestionSession.id,
@@ -240,10 +222,6 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
       }
 
       console.info('[ZOOM_USER_BOOK_RESULT]', { sessionId: bookingQuestionSession.id, success: true });
-      setBookingConfirmation({
-        sessionId: bookingQuestionSession.id,
-        text: confirmationText,
-      });
       setBookingQuestionSession(null);
       setBookingQuestionText('');
       setBookingQuestionError(null);
@@ -269,53 +247,6 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
     }
   };
 
-  const openBookingPreparation = (sessionId: string) => {
-    setBookingPreparationSessionId(sessionId);
-    setBookingPreparationAnswer('');
-    setBookingPreparationError(null);
-    setBookingPreparationSuccess(null);
-  };
-
-  const closeBookingPreparation = () => {
-    if (isSubmittingBookingPreparation) {
-      return;
-    }
-
-    setBookingPreparationSessionId(null);
-    setBookingPreparationAnswer('');
-    setBookingPreparationError(null);
-  };
-
-  const handleBookingPreparationConfirm = async () => {
-    if (!bookingPreparationSessionId) {
-      return;
-    }
-
-    const normalizedPreparationAnswer = bookingPreparationAnswer.trim();
-    if (!normalizedPreparationAnswer) {
-      setBookingPreparationError('Напиши коротко, що ти вже пробувала.');
-      return;
-    }
-
-    try {
-      await submitBookingPreparation({
-        sessionId: bookingPreparationSessionId,
-        preparationAnswer: normalizedPreparationAnswer,
-      }).unwrap();
-      setBookingPreparationSuccess('Добре. Я врахую це перед Zoom.');
-      setBookingPreparationSessionId(null);
-      setBookingPreparationAnswer('');
-      setBookingPreparationError(null);
-    } catch (error) {
-      console.error('[ZoomCalendar] booking preparation failed', {
-        sessionId: bookingPreparationSessionId,
-        error,
-      });
-      setBookingPreparationError('Не вдалося зберегти відповідь. Спробуй ще раз.');
-    }
-  };
-
-
   return {
     mode,
     userId,
@@ -323,6 +254,7 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
     view,
     setView,
     currentDate,
+    setCurrentDate,
 
     sessions: periodSessions,
     visibleSessions,
@@ -347,13 +279,6 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
     bookingQuestionText,
     setBookingQuestionText,
     bookingQuestionError,
-    bookingConfirmation,
-
-    bookingPreparationSessionId,
-    bookingPreparationAnswer,
-    setBookingPreparationAnswer,
-    bookingPreparationError,
-    bookingPreparationSuccess,
 
     createDate,
     setCreateDate,
@@ -366,7 +291,6 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
     creating,
 
     isSubmittingBookingQuestion,
-    isSubmittingBookingPreparation,
 
     updateSession,
 
@@ -383,8 +307,5 @@ export function useCalendar({ mode, userId, expertId, sessionSource }: CalendarP
     closeBookingQuestion,
     handleBookingConfirm,
 
-    openBookingPreparation,
-    closeBookingPreparation,
-    handleBookingPreparationConfirm,
   }
 }

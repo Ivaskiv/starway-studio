@@ -19,6 +19,7 @@ import {
   type CoachWeeklyDiary,
   type CoachWeeklyDiarySession,
 } from '../../../modules/zoom/calendar/zoom.calendar.service.js'
+import { getIndividualAvailabilityForScheduledAt } from '../../../modules/zoom/booking/zoom.availability.service.js'
 import { getCalendarRequests } from '../../../modules/zoom/commerce/zoom.commerce-request.service.js'
 import { startOfKyivWeek } from '../../../modules/zoom/shared/zoom.time.utils.js'
 import { coachBotContent } from '../../content/coachBot.content.js'
@@ -53,6 +54,31 @@ export const MENU_AGENTS_PATTERN =
 export const MENU_SETTINGS_PATTERN =
   /^(?:⚙️\s*)?(?:Система|Налаштування|Ще)$/iu
 const COACH_SETTINGS_BACK_ACTION = 'coach:settings:back'
+
+function logCoachCalendarButtonDebug(input: {
+  source: string
+  chatId: string | null
+  finalUrl: string
+}): void {
+  let route = 'invalid_url'
+  try {
+    route = new URL(input.finalUrl).pathname
+  } catch {
+    // The final URL remains visible in the structured diagnostic.
+  }
+
+  console.info('[ZOOM_CALENDAR_BUTTON_DEBUG]', {
+    source: input.source,
+    chatId: input.chatId,
+    finalUrl: input.finalUrl,
+    mode: 'web_app',
+    envBase: {
+      TELEGRAM_WEBAPP_BASE_URL: process.env.TELEGRAM_WEBAPP_BASE_URL?.trim() ?? null,
+      PUBLIC_FRONTEND_URL: process.env.PUBLIC_FRONTEND_URL?.trim() ?? null,
+    },
+    route,
+  })
+}
 
 export const MENU_NOTIFICATIONS_PATTERN =
   /^(?:🔔\s*)?Нагадування$/iu
@@ -101,7 +127,13 @@ export async function resolveCoachCalendarUrl(ctx: Context): Promise<string> {
     throw new Error('COACH_USER_NOT_RESOLVED_FOR_ZOOM_LINK')
   }
 
-  return resolveCoachCalendarUrlForUser(coachUserId)
+  const finalUrl = await resolveCoachCalendarUrlForUser(coachUserId)
+  logCoachCalendarButtonDebug({
+    source: 'coachMenu.resolveCoachCalendarUrl',
+    chatId: ctx.chat?.id === undefined ? null : String(ctx.chat.id),
+    finalUrl,
+  })
+  return finalUrl
 }
 
 type CoachCommercePresentation = {
@@ -250,6 +282,7 @@ export function formatCoachWeeklyDiaryMessage(
   coachName: string,
   now = new Date(),
   commerceBySessionId: ReadonlyMap<string, CoachCommercePresentation> = new Map(),
+  bookableSlotSessionIds: ReadonlySet<string> = new Set(),
 ): string {
   const from = new Date(diary.week.from)
   const visibleDates = Array.from({ length: 7 }, (_, index) => {
@@ -268,13 +301,17 @@ export function formatCoachWeeklyDiaryMessage(
     }))
     .sort((left, right) => new Date(left.session.scheduledAt).getTime() - new Date(right.session.scheduledAt).getTime())
   const summary = sessions.reduce(
-    (counts, { presentation }) => {
-      if (presentation.kind === 'confirmed') counts.confirmed += 1
-      if (presentation.kind === 'awaiting_payment') counts.awaitingPayment += 1
-      if (presentation.kind === 'free') counts.free += 1
+    (counts, { session, presentation }) => {
+      // A scheduled group practice or battle is a confirmed calendar event,
+      // not evidence of an individual payment. Commerce is the only source
+      // of truth for the payment counters in this digest.
+      const commerceStatus = commerceBySessionId.get(session.id)?.status
+      if (commerceStatus === 'PAID') counts.paid += 1
+      if (commerceStatus === 'APPROVED_PENDING_PAYMENT') counts.awaitingPayment += 1
+      if (presentation.kind === 'free' && bookableSlotSessionIds.has(session.id)) counts.free += 1
       return counts
     },
-    { confirmed: 0, awaitingPayment: 0, free: 0 },
+    { paid: 0, awaitingPayment: 0, free: 0 },
   )
   const todaySessions = sessions
     .filter(({ session }) => formatKyivDayKey(new Date(session.scheduledAt)) === formatKyivDayKey(now))
@@ -317,10 +354,40 @@ export function formatCoachWeeklyDiaryMessage(
       bold('ТВІЙ РОЗКЛАД НА ЦЕЙ ТИЖДЕНЬ'),
     ].join('\n'),
     formatWeekRange(diary.week),
-    `${visibleSessions.length} ${pluralizeSessionCount(visibleSessions.length)} · ${summary.confirmed} оплачені · ${summary.awaitingPayment} очікують оплати · ${summary.free} вільні`,
+    `${visibleSessions.length} ${pluralizeSessionCount(visibleSessions.length)} · ${summary.paid} оплачені · ${summary.awaitingPayment} очікують оплати · ${summary.free} вільні для запису`,
     [bold('СЬОГОДНІ'), todayBlock].join('\n'),
     attentionBlock,
   ])
+}
+
+async function resolveBookableIndividualSlotIds(input: {
+  diary: CoachWeeklyDiary
+  expertId: string | null | undefined
+  commerceBySessionId: ReadonlyMap<string, CoachCommercePresentation>
+  now: Date
+}): Promise<Set<string>> {
+  if (!input.expertId) return new Set()
+
+  const candidates = input.diary.sessions.filter((session) => (
+    (session.type === 'individual' || session.type === 'PRIVATE')
+    && session.status === 'SCHEDULED'
+    && session.participantNames.length === 0
+    && !input.commerceBySessionId.has(session.id)
+    && new Date(session.scheduledAt).getTime() > input.now.getTime()
+  ))
+
+  const available = await Promise.all(candidates.map(async (session) => {
+    const result = await getIndividualAvailabilityForScheduledAt({
+      expertId: input.expertId as string,
+      scheduledAt: new Date(session.scheduledAt),
+      // The persisted inventory row is the candidate being evaluated; it must
+      // not block itself. Other sessions and active commerce still do.
+      excludeSessionId: session.id,
+    })
+    return result.candidate.available ? session.id : null
+  }))
+
+  return new Set(available.filter((id): id is string => id !== null))
 }
 
 export async function showCoachMenu(
@@ -394,8 +461,20 @@ export async function showCoachMenu(
     }
   }
   const firstName = String(ctx.from?.first_name ?? '').trim() || 'коуч'
+  const bookableSlotSessionIds = await resolveBookableIndividualSlotIds({
+    diary,
+    expertId: 'expertId' in coachScope ? coachScope.expertId : null,
+    commerceBySessionId,
+    now,
+  })
 
-  const text = formatCoachWeeklyDiaryMessage(diary, firstName, new Date(), commerceBySessionId)
+  const text = formatCoachWeeklyDiaryMessage(
+    diary,
+    firstName,
+    now,
+    commerceBySessionId,
+    bookableSlotSessionIds,
+  )
 
   await replyWithTelegramMessage(ctx, text, buildCoachMainMenuInlineMarkup(calendarUrl))
   if (options.suppressRepeatedWeeklyDigest) {
@@ -404,6 +483,11 @@ export async function showCoachMenu(
 }
 
 export function buildCoachMainMenuInlineMarkup(calendarUrl: string) {
+  logCoachCalendarButtonDebug({
+    source: 'coachMenu.buildCoachMainMenuInlineMarkup',
+    chatId: null,
+    finalUrl: calendarUrl.split('#')[0],
+  })
   const coachPanelUrl = (panel: (typeof COACH_NAVIGATION_CONTRACT.sections)[number]['panel']) =>
     `${calendarUrl.split('#')[0]}#${panel}`
   const [participants, battle, analytics, more] = COACH_NAVIGATION_CONTRACT.sections

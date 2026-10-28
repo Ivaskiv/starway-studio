@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockProductSubscriptionFindFirst = vi.fn()
 const mockPaymentLogFindFirst = vi.fn()
+const mockCheckoutSessionFindFirst = vi.fn()
 const mockBuildShortWayForPayCheckoutUrl = vi.fn()
 const mockBuildPaymentRequest = vi.fn()
 
@@ -15,7 +16,17 @@ vi.mock('@/db/client.js', () => ({
     },
     checkoutSession: {
       upsert: vi.fn(async () => undefined),
+      findFirst: (...args: unknown[]) => mockCheckoutSessionFindFirst(...args),
     },
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        $queryRaw: vi.fn(async () => undefined),
+        checkoutSession: {
+          findFirst: (...args: unknown[]) => mockCheckoutSessionFindFirst(...args),
+          upsert: vi.fn(async () => undefined),
+        },
+      }),
+    ),
   },
 }))
 
@@ -42,6 +53,7 @@ describe('buildEcosystemPaymentCheckoutSession', () => {
     vi.clearAllMocks()
     mockProductSubscriptionFindFirst.mockResolvedValue(null)
     mockPaymentLogFindFirst.mockResolvedValue(null)
+    mockCheckoutSessionFindFirst.mockResolvedValue(null)
     mockBuildShortWayForPayCheckoutUrl.mockResolvedValue('https://checkout.example/trial')
     mockBuildPaymentRequest.mockImplementation((input: Record<string, unknown>) => ({
       ...input,
@@ -93,10 +105,46 @@ describe('buildEcosystemPaymentCheckoutSession', () => {
         plan: 'single',
         product: 'trial_zoom',
       }),
+      expect.anything(),
     )
   })
 
-  it('builds a yearly focus checkout session through the canonical checkout owner', async () => {
+  it.each([
+    ['1month', 780],
+    ['3month', 1990],
+  ] as const)('keeps the FOCUS %s checkout at the canonical %d UAH tariff', async (planId, amount) => {
+    const result = await buildEcosystemPaymentCheckoutSession('focus', planId, userId, 'telegram')
+
+    expect(result.orderReference).toMatch(new RegExp(`^focus_${planId}_${userId}_\\d+$`))
+    expect(mockBuildPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId,
+        productId: 'focus',
+        amount,
+        currency: 'UAH',
+        product_price: [amount],
+      }),
+    )
+  })
+
+  it('reuses the active FOCUS checkout for the same tariff instead of creating another owner', async () => {
+    const existingOrderReference = `focus_1month_${userId}_123`
+    mockCheckoutSessionFindFirst.mockResolvedValueOnce({
+      token: 'existing-checkout-token',
+      orderReference: existingOrderReference,
+    })
+
+    await expect(
+      buildEcosystemPaymentCheckoutSession('focus', '1month', userId, 'telegram'),
+    ).resolves.toEqual({
+      checkoutUrl: 'https://api.starway.test/api/payments/wayforpay/checkout/existing-checkout-token',
+      orderReference: existingOrderReference,
+    })
+
+    expect(mockBuildShortWayForPayCheckoutUrl).not.toHaveBeenCalled()
+  })
+
+  it('keeps the yearly FOCUS checkout at its catalog tariff in development', async () => {
     const result = await buildEcosystemPaymentCheckoutSession('focus', '1year', userId, 'telegram')
 
     expect(result.checkoutUrl).toBe('https://checkout.example/trial')
@@ -105,17 +153,17 @@ describe('buildEcosystemPaymentCheckoutSession', () => {
       expect.objectContaining({
         userId,
         productId: 'focus',
-        amount: 1,
+        amount: 229,
         currency: 'UAH',
         product_name: ['FOCUS'],
         product_count: [1],
-        product_price: [1],
+        product_price: [229],
       }),
     )
     expect(mockBuildShortWayForPayCheckoutUrl).toHaveBeenCalledWith(
       'https://api.starway.test',
       expect.objectContaining({
-        amount: 1,
+        amount: 229,
         currency: 'UAH',
         payRef: expect.stringMatching(
           /^focus_1year_11111111-1111-4111-8111-111111111111_\d+$/,
@@ -130,6 +178,7 @@ describe('buildEcosystemPaymentCheckoutSession', () => {
         product: 'focus',
         plan: '1year',
       }),
+      expect.anything(),
     )
   })
 

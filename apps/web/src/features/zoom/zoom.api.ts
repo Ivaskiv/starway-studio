@@ -57,6 +57,10 @@ export const zoomCalendarApi = api.injectEndpoints({
       providesTags: ['ZoomSession'],
     }),
 
+    getCoachProfile: build.query<{ profile: { displayName: string } | null }, void>({
+      query: () => '/zoom/coach/profile',
+    }),
+
     createZoomSession: build.mutation<ZoomCalendarSession, CreateSessionPayload>({
       query: body => ({ url: '/zoom/sessions', method: 'POST', body }),
       invalidatesTags: ['ZoomSession'],
@@ -98,6 +102,18 @@ export const zoomCalendarApi = api.injectEndpoints({
       invalidatesTags: ['ZoomSession'],
     }),
 
+    rescheduleCoachSession: build.mutation<
+      { session: ZoomCalendarSession; idempotent: boolean },
+      { id: string; scheduledAt: string }
+    >({
+      query: ({ id, scheduledAt }) => ({
+        url: `/zoom/sessions/${id}/reschedule`,
+        method: 'POST',
+        body: { scheduledAt },
+      }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
 
     getZoomCompletionDraft: build.query<ZoomCompletionDraft, string>({
       query: sessionId => `/zoom/sessions/${encodeURIComponent(sessionId)}/completion-draft`,
@@ -113,6 +129,23 @@ export const zoomCalendarApi = api.injectEndpoints({
 
     cancelZoomSession: build.mutation<ZoomCalendarSession, string>({
       query: id => ({ url: `/zoom/sessions/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    deleteFreeIndividualSlot: build.mutation<{ id: string }, string>({
+      query: id => ({ url: `/zoom/sessions/${id}/free-slot`, method: 'DELETE' }),
+      invalidatesTags: ['ZoomSession'],
+    }),
+
+    saveSelfReportedAttendance: build.mutation<
+      { selfReportedAttended: boolean | null; selfReportedAt: string | null; idempotent: boolean },
+      { sessionId: string; attended: boolean }
+    >({
+      query: ({ sessionId, attended }) => ({
+        url: `/zoom/sessions/${sessionId}/attendance-checkpoint`,
+        method: 'PUT',
+        body: { attended },
+      }),
       invalidatesTags: ['ZoomSession'],
     }),
 
@@ -185,7 +218,7 @@ export const zoomCalendarApi = api.injectEndpoints({
     }),
 
     getEligibleOpponents: build.query<
-      { id: string; name: string | null; email: string }[],
+      { id: string; firstName: string | null; lastName: string | null; email: string }[],
       string
     >({
       query: userId => `/zoom/battle/eligible?userId=${userId}`,
@@ -319,14 +352,18 @@ export const zoomCalendarApi = api.injectEndpoints({
 
 export const {
   useGetCalendarSessionsQuery,
+  useGetCoachProfileQuery,
   useCreateZoomSessionMutation,
   useCreateUserIndividualRequestMutation,
   useGetIndividualAvailabilityQuery,
   useGetIndividualAvailabilitySummaryQuery,
   useUpdateZoomSessionMutation,
+  useRescheduleCoachSessionMutation,
   useCompleteZoomSessionMutation,
   useLazyGetZoomCompletionDraftQuery,
   useCancelZoomSessionMutation,
+  useDeleteFreeIndividualSlotMutation,
+  useSaveSelfReportedAttendanceMutation,
   useApproveZoomCommerceRequestMutation,
   useRejectZoomCommerceRequestMutation,
   useCancelZoomCommerceRequestMutation,

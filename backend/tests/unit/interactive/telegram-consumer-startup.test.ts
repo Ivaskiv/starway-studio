@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { findMany, buildZoomCalendarUrl } = vi.hoisted(() => ({
   findMany: vi.fn(),
@@ -30,6 +30,10 @@ import {
 } from '../../../src/interactive/telegramConsumerStartup.ts'
 
 describe('persistent Zoom Calendar bot menu', () => {
+  beforeEach(() => {
+    findMany.mockResolvedValue([])
+  })
+
   it('rewrites a stale default menu to the current host before accepting its readback', async () => {
     const expectedMenu = {
       type: 'web_app' as const,
@@ -207,8 +211,8 @@ describe('persistent Zoom Calendar bot menu', () => {
     })
   })
 
-  it('sets the canonical default WebApp menu for both bots on every initialization', async () => {
-    findMany.mockResolvedValue([{ telegramChatId: '123456' }])
+  it('refreshes persisted USER menu scopes to the current tunnel on local restart', async () => {
+    findMany.mockResolvedValue([{ telegramChatId: '123456', telegramLinks: [] }])
     const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const mainSetChatMenuButton = vi.fn(async () => undefined)
     const coachSetChatMenuButton = vi.fn(async () => undefined)
@@ -267,33 +271,48 @@ describe('persistent Zoom Calendar bot menu', () => {
       logger,
     }
 
-    await startInteractiveTelegramConsumers(input)
-    await startInteractiveTelegramConsumers(input)
+    vi.stubEnv('NODE_ENV', 'development')
+    try {
+      await startInteractiveTelegramConsumers(input)
+      await startInteractiveTelegramConsumers(input)
 
-    expect(mainSetChatMenuButton).toHaveBeenCalledTimes(2)
-    expect(coachSetChatMenuButton).toHaveBeenCalledTimes(2)
-    expect(mainSetChatMenuButton).toHaveBeenCalledWith({
-      menuButton: {
-        type: 'web_app',
-        text: 'ZOOM КАЛЕНДАР',
-        web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?zoomRole=user' },
-      },
-    })
-    expect(coachSetChatMenuButton).toHaveBeenCalledWith({
-      menuButton: {
-        type: 'web_app',
-        text: 'ZOOM КАЛЕНДАР',
-        web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?zoomRole=coach' },
-      },
-    })
-    expect(mainSetChatMenuButton.mock.calls).toEqual(expect.arrayContaining([
-      [{ menuButton: expect.objectContaining({ type: 'web_app', web_app: expect.any(Object) }) }],
-    ]))
-    expect(coachSetChatMenuButton.mock.calls).toEqual(expect.arrayContaining([
-      [{ menuButton: expect.objectContaining({ type: 'web_app', web_app: expect.any(Object) }) }],
-    ]))
-    expect(mainGetChatMenuButton).toHaveBeenCalledTimes(2)
-    expect(coachGetChatMenuButton).toHaveBeenCalledTimes(2)
+      expect(mainSetChatMenuButton).toHaveBeenCalledTimes(4)
+      expect(coachSetChatMenuButton).toHaveBeenCalledTimes(2)
+      expect(mainSetChatMenuButton).toHaveBeenCalledWith({
+        menuButton: {
+          type: 'web_app',
+          text: 'ZOOM КАЛЕНДАР',
+          web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?zoomRole=user' },
+        },
+      })
+      expect(coachSetChatMenuButton).toHaveBeenCalledWith({
+        menuButton: {
+          type: 'web_app',
+          text: 'ZOOM КАЛЕНДАР',
+          web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?zoomRole=coach' },
+        },
+      })
+      expect(mainSetChatMenuButton.mock.calls).toEqual(expect.arrayContaining([
+        [{ menuButton: expect.objectContaining({ type: 'web_app', web_app: expect.any(Object) }) }],
+        [{
+          chatId: 123456,
+          menuButton: {
+            type: 'web_app',
+            text: 'ZOOM КАЛЕНДАР',
+            web_app: { url: 'https://miniapp.example/miniapp/zoom-calendar?zoomRole=user' },
+          },
+        }],
+      ]))
+      expect(coachSetChatMenuButton.mock.calls).toEqual(expect.arrayContaining([
+        [{ menuButton: expect.objectContaining({ type: 'web_app', web_app: expect.any(Object) }) }],
+      ]))
+      expect(mainGetChatMenuButton).toHaveBeenCalledTimes(4)
+      expect(mainGetChatMenuButton).toHaveBeenCalledWith({ chatId: 123456 })
+      expect(coachGetChatMenuButton).toHaveBeenCalledTimes(2)
+      expect(findMany).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('surfaces a rejected default menu configuration', async () => {
@@ -510,6 +529,6 @@ describe('persistent Zoom Calendar bot menu', () => {
     )
 
     expect(source).toContain("import { buildZoomCalendarUrl } from '../modules/zoom/urls.js'")
-    expect(source).not.toMatch(/trycloudflare|ngrok|PUBLIC_FRONTEND_URL/)
+    expect(source).not.toMatch(/https?:\/\/[^'"`\s]*(?:trycloudflare|ngrok)/)
   })
 })

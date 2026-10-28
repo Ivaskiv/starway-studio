@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
@@ -55,6 +55,8 @@ import { notificationService } from '../../../../../src/services/notifications/N
 
 describe('activateProductSubscription late Zoom invite', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-05T12:00:00.000Z'))
     vi.clearAllMocks()
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) =>
@@ -76,6 +78,10 @@ describe('activateProductSubscription late Zoom invite', () => {
     mockPrisma.notificationJob.updateMany.mockResolvedValue({ count: 0 })
     mockPrisma.runtimeOutbox.updateMany.mockResolvedValue({ count: 0 })
     mockPrisma.checkoutSession.updateMany.mockResolvedValue({ count: 0 })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('sends the existing booking-open notification once for still-open upcoming Zoom sessions after Focus activation', async () => {

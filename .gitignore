@@ -37,8 +37,13 @@ frontend/.cache/
 .env
 .env.local
 .env.*.local
+.env.*
 
+# Versioned environment templates are intentionally non-secret.
+# The web production file is restricted by scripts/tracked-secrets-guard.test.mjs
+# to public VITE_* configuration only.
 !.env.example
+!apps/web/.env.production
 
 # ============================================
 # LOGS
@@ -87,6 +92,7 @@ backend/src/db/generated/
 cloudflared.log
 
 *.pem
+!packages/db/prisma/supabase-server-ca.pem
 *.json
 !vercel.json
 !tsconfig.json

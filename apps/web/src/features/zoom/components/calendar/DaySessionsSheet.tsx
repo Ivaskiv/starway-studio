@@ -12,6 +12,7 @@ import {
   useCancelPrivateBookingMutation,
   useUnbookSlotMutation,
 } from '../../zoom.api'
+import { formatKyivTime, KYIV_TIME_LABEL, KYIV_TIMEZONE } from '../../utils/zoomDateTime.utils'
 
 import { BookingStatus } from './BookingStatus'
 import { PRIMARY_BOOKING_BUTTON_CLASS } from './booking-ui'
@@ -33,6 +34,7 @@ export function DaySessionsSheet({
   const [cancelPrivateBooking, { isLoading: cancelingPrivate }] = useCancelPrivateBookingMutation()
   const [actionError, setActionError] = useState<string | null>(null)
   const dateLabel = selectedDate.toLocaleDateString('uk-UA', {
+    timeZone: KYIV_TIMEZONE,
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -76,6 +78,7 @@ export function DaySessionsSheet({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/35">Сесії дня</p>
             <h3 className="mt-1 text-base font-semibold text-white">{dateLabel}</h3>
+            <p className="mt-0.5 text-[10px] font-medium text-white/40">{KYIV_TIME_LABEL}</p>
           </div>
           <button
             type="button"
@@ -101,10 +104,7 @@ export function DaySessionsSheet({
                   </p>
                   {(() => {
                     const session = nearestSession;
-                    const sessionTime = new Date(session.scheduledAt).toLocaleTimeString('uk-UA', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    });
+                    const sessionTime = formatKyivTime(new Date(session.scheduledAt));
                     const isPast = isPastDate(session.scheduledAt);
                     const normalizedSessionType = getNormalizedSessionType(session);
                     const isBookedOut = session.slotStatus === 'booked' || (session.remainingSlots ?? 1) <= 0;
@@ -150,10 +150,7 @@ export function DaySessionsSheet({
               ) : null}
 
               {remainingSessions.map((session) => {
-                const sessionTime = new Date(session.scheduledAt).toLocaleTimeString('uk-UA', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                });
+                const sessionTime = formatKyivTime(new Date(session.scheduledAt));
                 const isPast = isPastDate(session.scheduledAt);
                 const normalizedSessionType = getNormalizedSessionType(session);
                 const isBookedOut = session.slotStatus === 'booked' || (session.remainingSlots ?? 1) <= 0;

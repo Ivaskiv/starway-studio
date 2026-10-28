@@ -58,8 +58,18 @@ describe('Calendar sessionSource rendering', () => {
 
     expect(groupMarkup).toContain('GROUP_RENDER')
     expect(groupMarkup).not.toContain('INDIVIDUAL_RENDER')
-    expect(individualMarkup).toContain('INDIVIDUAL_RENDER')
+    expect(individualMarkup).not.toContain('INDIVIDUAL_RENDER')
     expect(individualMarkup).not.toContain('GROUP_RENDER')
+    const committedMarkup = renderToStaticMarkup(createElement(Calendar, {
+      mode: 'user', userId: 'user-1', sessionSource: { ...sourceRange, sessions: [
+        { ...individual, id: 'booked', topic: 'OWN_BOOKING_RENDER', isMyBooking: true },
+        { ...individual, id: 'past-free', topic: 'PAST_INVENTORY_RENDER', scheduledAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
+        individual,
+      ] },
+    }))
+    expect(committedMarkup).toContain('OWN_BOOKING_RENDER')
+    expect(committedMarkup).not.toContain('PAST_INVENTORY_RENDER')
+    expect(committedMarkup).not.toContain('INDIVIDUAL_RENDER')
     expect(calendarQuery).toHaveBeenLastCalledWith(
       expect.any(Object),
       { skip: true },

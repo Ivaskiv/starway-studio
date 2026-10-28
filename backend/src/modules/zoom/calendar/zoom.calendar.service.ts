@@ -6,7 +6,11 @@ import type { ZoomSession } from '../types.js'
 import { getQuestionSummariesBySessionId } from '../reports/zoom.reports.service.js'
 import { parseZoomPostReport } from '../reports/zoomPostReport.types.js'
 import { KYIV_TIME_ZONE, endOfKyivWeek, endOfRollingKyivWindow, startOfKyivDay, startOfKyivWeek } from '../shared/zoom.time.utils.js'
-import { extractZoomLinkFromRequests, selectTrialZoomEligibleSession } from '../shared/zoom.session-selection.js'
+import {
+  extractZoomLinkFromRequests,
+  selectCanonicalMondayGroupPracticeSessions,
+  selectTrialZoomEligibleSession,
+} from '../shared/zoom.session-selection.js'
 
 export type CoachWeeklyDiarySession = {
   id: string
@@ -49,6 +53,8 @@ export async function getCalendarSessions(args: {
       goalText: string | null
       progress: unknown
       attended: boolean
+      selfReportedAttended: boolean | null
+      selfReportedAt: Date | null
       user: {
         id: string
         firstName: string | null
@@ -64,14 +70,20 @@ export async function getCalendarSessions(args: {
   const userVisibility = {
     OR: [
       { requests: { path: ['type'], equals: 'group_practice' } },
-      { type: ZoomSessionType.GROUP },
+      // Older Individual inventory rows retain GROUP in the enum column while
+      // their canonical type is in requests.type. Do not turn that inventory
+      // into a USER calendar event merely because it has the legacy enum.
+      {
+        type: ZoomSessionType.GROUP,
+        NOT: { requests: { path: ['type'], equals: 'individual' } },
+      },
       { attendees: { some: { userId } } },
       { commerceRequests: { some: { requesterUserId: userId } } },
     ],
   }
 
   if (role === 'coach') {
-    return prisma.zoomSession.findMany({
+    const sessions = await prisma.zoomSession.findMany({
       where: { expertId, scheduledAt: { gte: from, lte: to } },
       include: {
         expert: { select: { id: true, displayName: true } },
@@ -82,19 +94,21 @@ export async function getCalendarSessions(args: {
             goalText: true,
             progress: true,
             attended: true,
+            selfReportedAttended: true,
+            selfReportedAt: true,
             user: { select: { id: true, firstName: true, lastName: true, email: true } },
           },
         },
       },
       orderBy: { scheduledAt: 'asc' },
     })
+    return selectCanonicalMondayGroupPracticeSessions(sessions)
   }
 
   if (!expertId) {
-    const sessions = await prisma.zoomSession.findMany({
+    const sessions = selectCanonicalMondayGroupPracticeSessions(await prisma.zoomSession.findMany({
       where: {
         scheduledAt: { gte: from, lte: to },
-        status: { not: ZoomStatus.CANCELLED },
         ...userVisibility,
       },
       include: {
@@ -106,12 +120,14 @@ export async function getCalendarSessions(args: {
             goalText: true,
             progress: true,
             attended: true,
+            selfReportedAttended: true,
+            selfReportedAt: true,
             user: { select: { id: true, firstName: true, lastName: true, email: true } },
           },
         },
       },
       orderBy: { scheduledAt: 'asc' },
-    })
+    }))
 
     const bookedIds = new Set(
       (
@@ -135,11 +151,10 @@ export async function getCalendarSessions(args: {
   const userIsSubscriber = zoomAccess.state === 'FOCUS_ACTIVE'
 
   if (zoomAccess.state === 'PREMIUM') {
-    const sessions = await prisma.zoomSession.findMany({
+    const sessions = selectCanonicalMondayGroupPracticeSessions(await prisma.zoomSession.findMany({
       where: {
         expertId,
         scheduledAt: { gte: from, lte: to },
-        status: { not: ZoomStatus.CANCELLED },
         ...userVisibility,
       },
       include: {
@@ -151,12 +166,14 @@ export async function getCalendarSessions(args: {
             goalText: true,
             progress: true,
             attended: true,
+            selfReportedAttended: true,
+            selfReportedAt: true,
             user: { select: { id: true, firstName: true, lastName: true, email: true } },
           },
         },
       },
       orderBy: { scheduledAt: 'asc' },
-    })
+    }))
 
     const eligibleSession = selectTrialZoomEligibleSession(
       sessions,
@@ -182,11 +199,10 @@ export async function getCalendarSessions(args: {
   }
 
   if (!userIsSubscriber) {
-    const sessions = await prisma.zoomSession.findMany({
+    const sessions = selectCanonicalMondayGroupPracticeSessions(await prisma.zoomSession.findMany({
       where: {
         expertId,
         scheduledAt: { gte: from, lte: to },
-        status: { not: ZoomStatus.CANCELLED },
         ...userVisibility,
       },
       include: {
@@ -198,12 +214,14 @@ export async function getCalendarSessions(args: {
             goalText: true,
             progress: true,
             attended: true,
+            selfReportedAttended: true,
+            selfReportedAt: true,
             user: { select: { id: true, firstName: true, lastName: true, email: true } },
           },
         },
       },
       orderBy: { scheduledAt: 'asc' },
-    })
+    }))
 
     const bookedIds = new Set(
       (
@@ -224,11 +242,10 @@ export async function getCalendarSessions(args: {
   }
 
   // Show all expert sessions, flagging which ones the user booked
-  const sessions = await prisma.zoomSession.findMany({
+  const sessions = selectCanonicalMondayGroupPracticeSessions(await prisma.zoomSession.findMany({
     where: {
       expertId,
       scheduledAt: { gte: from, lte: to },
-      status: { not: ZoomStatus.CANCELLED },
       ...userVisibility,
     },
     include: {
@@ -238,14 +255,16 @@ export async function getCalendarSessions(args: {
         select: {
           userId: true,
           goalText: true,
-          progress: true,
-          attended: true,
+            progress: true,
+            attended: true,
+            selfReportedAttended: true,
+            selfReportedAt: true,
           user: { select: { id: true, firstName: true, lastName: true, email: true } },
         },
       },
     },
     orderBy: { scheduledAt: 'asc' },
-  })
+  }))
 
   const bookedIds = new Set(
     (
@@ -486,7 +505,7 @@ export async function getPublicCurrentWeekZoomOverview(
 }> {
   const from = startOfKyivDay(now)
   const to = endOfRollingKyivWindow(now)
-  const sessions = await prisma.zoomSession.findMany({
+  const sessions = selectCanonicalMondayGroupPracticeSessions(await prisma.zoomSession.findMany({
     where: {
       scheduledAt: { gte: from, lt: to },
       status: { not: ZoomStatus.CANCELLED },
@@ -497,7 +516,7 @@ export async function getPublicCurrentWeekZoomOverview(
     },
     include: { _count: { select: { attendees: true } } },
     orderBy: { scheduledAt: 'asc' },
-  })
+  }))
 
   const normalized = sessions.map((session) => {
     const meta =

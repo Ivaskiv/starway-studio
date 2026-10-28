@@ -26,6 +26,9 @@ export interface ZoomSessionWithAttendance {
   postSessionReport: unknown | null;
   createdAt:         string;
   updatedAt:         string;
+  type:              string;
   isRegistered:      boolean;
   attendeeId?:       string;
+  commerceRequestId?: string | null;
+  commerceStatus?:    string | null;
 }

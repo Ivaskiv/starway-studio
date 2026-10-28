@@ -21,6 +21,8 @@ import {
   resolveCanonicalResultActionPolicy,
 } from '@/products/ab-system/telegram/keyboard-policy.js'
 import { bold, escapeTelegramHtml, joinBlocks } from '../../../lib/telegram/messageFormatter.js'
+import { telegramContentRegistry } from '../content/contentRegistry.js'
+import { isProductionRuntime } from '../runtime/botConfig.js'
 import {
   type StartMessagePayload,
   expiredMessage,
@@ -523,7 +525,15 @@ async function resolveCompletedUserHome(
         'Тут ти можеш переглядати розклад групових та індивідуальних Zoom-сесій.',
         'Щоб записатися на Zoom-сесію, активуй доступ.',
       ]),
-      buttons: previewZoomCalendarButtons,
+      buttons: [
+        ...previewZoomCalendarButtons,
+        ...(!isProductionRuntime()
+          ? [[{
+              text: telegramContentRegistry.buttons.trialZoom,
+              callback_data: 'trial_zoom',
+            }]]
+          : []),
+      ],
     }
   }
   const resultSummary = diagnosticText

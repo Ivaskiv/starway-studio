@@ -237,6 +237,7 @@ import { clearSession, getSession, updateSession } from '@/modules/telegram-ment
 import {
  handleAbTestEmailCaptureText,
  handleFocusPaymentAction,
+ handleTrialZoomPaymentAction,
  handleFocusPaymentIssue,
  handlePendingFocusPaymentEvidenceAttachment,
  handlePendingFocusPaymentEvidenceText,
@@ -380,6 +381,34 @@ describe('legacy focus callbacks for active users', () => {
     expect(vi.mocked(prisma.productSubscription.updateMany)).not.toHaveBeenCalled()
     expect(resendFocusAccessTelegramMessageMock).not.toHaveBeenCalled()
     expect(sendStateMenuMock).not.toHaveBeenCalled()
+  })
+
+  it('opens the canonical one-UAH trial Zoom checkout without creating Focus access', async () => {
+    const ctx = createCtx()
+    buildCheckoutSessionMock.mockResolvedValue({ checkoutUrl: 'https://checkout.example/trial' })
+
+    const handled = await handleTrialZoomPaymentAction(ctx as never, 'user-1')
+
+    expect(handled).toBe(true)
+    expect(buildCheckoutSessionMock).toHaveBeenCalledWith(
+      'trial_zoom',
+      'single',
+      'user-1',
+      'telegram',
+    )
+    expect(planMessageMock).toHaveBeenCalledWith(
+      ctx,
+      'ctx.reply',
+      'trial_zoom_checkout_opened',
+      expect.stringContaining('Пробний Zoom'),
+      {
+        inline_keyboard: [[{
+          text: 'ОПЛАТИТИ 1 ГРН',
+          url: 'https://checkout.example/trial',
+        }]],
+      },
+    )
+    expect(vi.mocked(prisma.productSubscription.updateMany)).not.toHaveBeenCalled()
   })
 
   it('renders the 1 UAH test payment button under the paid CTAs when enabled', async () => {

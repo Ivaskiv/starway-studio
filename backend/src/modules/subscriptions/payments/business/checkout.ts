@@ -33,7 +33,6 @@ function resolveDevelopmentPaymentAmount(
   }
 
   const shouldOverride =
-    (productId === 'focus' && (planId === '1month' || planId === '3month' || planId === '1year')) ||
     (productId === 'trial_zoom' && planId === 'single') ||
     (productId === 'absystem_ai' &&
       (planId === '1month' || planId === '6month' || planId === '1year'))
@@ -196,31 +195,8 @@ export async function buildEcosystemPaymentCheckoutSession(
     throw new Error('WAYFORPAY_CREDENTIALS_MISSING')
   }
 
-  const payRef = `${productId}_${planId}_${userId}_${Date.now()}`
-  const checkoutAmount = resolveDevelopmentPaymentAmount(
-    productId,
-    planId,
-    plan.amount
-  )
-  const payment = buildPaymentRequest({
-    userId,
-    productId,
-    amount: checkoutAmount,
-    currency: 'UAH',
-    payRef,
-    product_name: [resolveProductLabel(productId)],
-    product_count: [1],
-    product_price: [checkoutAmount],
-  })
-
   const backendBase = getBackendBaseUrl()
   const frontendBaseUrl = getFrontendBaseUrl()
-  payment.returnUrl = buildWayForPayReturnUrl(
-    backendBase,
-    frontendBaseUrl,
-    source,
-    normalizedOptions.targetPath,
-  )
   const isProduction = process.env.NODE_ENV === 'production'
   if (
     isProduction &&
@@ -233,33 +209,83 @@ export async function buildEcosystemPaymentCheckoutSession(
     throw new Error('WAYFORPAY_INVALID_BACKEND_URL')
   }
 
-  const checkoutUrl = await buildShortWayForPayCheckoutUrl(backendBase, payment, {
-    product: productId,
-    plan: planId,
-  })
+  return prisma.$transaction(async (tx) => {
+    // CheckoutSession has no business-key uniqueness constraint. Locking the
+    // payer serializes duplicate taps/retries until the canonical open checkout
+    // is found or created.
+    await tx.$queryRaw`SELECT 1 FROM "User" WHERE "id" = ${userId} FOR UPDATE`
 
-  console.log('[WAYFORPAY_CHECKOUT] ✅ Checkout URL built', {
-    productId,
-    planId,
-    payRef,
-    amount: checkoutAmount,
-    currency: 'UAH',
-    hasReturnUrl: Boolean(frontendBaseUrl),
-    hasServiceUrl: Boolean(process.env.WAYFORPAY_CALLBACK_URL?.trim()),
-    checkoutUrlPrefix: checkoutUrl.slice(0, 80),
-  })
+    const existing = await tx.checkoutSession.findFirst({
+      where: {
+        userId,
+        productCode: productId,
+        orderReference: { startsWith: `${productId}_${planId}_${userId}_` },
+        status: { in: ['CREATED', 'OPENED', 'PROCESSING'] },
+        expiresAt: { gt: new Date() },
+        invalidatedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { token: true, orderReference: true },
+    })
 
-  console.log('[DYNAMIC CHECKOUT]', {
-    userId,
-    planId,
-    generatedOrderReference: payRef,
-    generatedCheckoutUrl: checkoutUrl,
-  })
+    if (existing) {
+      return {
+        checkoutUrl: `${backendBase}/api/payments/wayforpay/checkout/${existing.token}`,
+        orderReference: existing.orderReference,
+      }
+    }
 
-  return {
-    checkoutUrl,
-    orderReference: payRef,
-  }
+    const payRef = `${productId}_${planId}_${userId}_${Date.now()}`
+    const checkoutAmount = resolveDevelopmentPaymentAmount(
+      productId,
+      planId,
+      plan.amount
+    )
+    const payment = buildPaymentRequest({
+      userId,
+      productId,
+      amount: checkoutAmount,
+      currency: 'UAH',
+      payRef,
+      product_name: [resolveProductLabel(productId)],
+      product_count: [1],
+      product_price: [checkoutAmount],
+    })
+    payment.returnUrl = buildWayForPayReturnUrl(
+      backendBase,
+      frontendBaseUrl,
+      source,
+      normalizedOptions.targetPath,
+    )
+
+    const checkoutUrl = await buildShortWayForPayCheckoutUrl(backendBase, payment, {
+      product: productId,
+      plan: planId,
+    }, tx)
+
+    console.log('[WAYFORPAY_CHECKOUT] ✅ Checkout URL built', {
+      productId,
+      planId,
+      payRef,
+      amount: checkoutAmount,
+      currency: 'UAH',
+      hasReturnUrl: Boolean(frontendBaseUrl),
+      hasServiceUrl: Boolean(process.env.WAYFORPAY_CALLBACK_URL?.trim()),
+      checkoutUrlPrefix: checkoutUrl.slice(0, 80),
+    })
+
+    console.log('[DYNAMIC CHECKOUT]', {
+      userId,
+      planId,
+      generatedOrderReference: payRef,
+      generatedCheckoutUrl: checkoutUrl,
+    })
+
+    return {
+      checkoutUrl,
+      orderReference: payRef,
+    }
+  })
 }
 
 export function buildAbsystemAiUpgradeCheckoutUrl(userId: string) {

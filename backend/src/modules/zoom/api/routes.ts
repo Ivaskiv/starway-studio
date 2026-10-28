@@ -12,6 +12,7 @@ import {
   saveBookingPreparation,
   saveBookingQuestion,
   markAttendedHandler,
+  saveSelfReportedAttendanceHandler,
   postSessionReport,
   getAttendees,
   getMySessions,
@@ -20,9 +21,11 @@ import {
 import {
   handleCreateSession,
   handleUpdateSession,
+  handleRescheduleCoachSession,
   handleCompleteSession,
   handleGetCompletionDraft,
   handleCancelSession,
+  handleDeleteFreeIndividualSlot,
   handleGetCalendarSessions,
   handleGetLeaderboard,
   handleInitiateBattle,
@@ -33,6 +36,7 @@ import {
   handleGetEligibleOpponents,
   finalizeBattleResult,
   handleGetAvailability,
+  handleGetCoachProfile,
   handleGetCoachParticipants,
   handleGetAvailabilityWeek,
   handleGetIndividualAvailability,
@@ -70,6 +74,7 @@ router.post('/register',                       authRequired, register);
 router.post('/booking-question',               authRequired, saveBookingQuestion);
 router.post('/booking-preparation',            authRequired, saveBookingPreparation);
 router.patch('/attendee/attended',             authRequired, markAttendedHandler);
+router.put('/sessions/:sessionId/attendance-checkpoint', authRequired, saveSelfReportedAttendanceHandler);
 router.patch('/session/:sessionId/report',     authRequired, postSessionReport);
 router.get('/session/:sessionId/attendees',    authRequired, getAttendees);
 router.get('/my',                              authRequired, getMySessions);
@@ -80,10 +85,12 @@ router.get('/calendar',                        getPublicCalendarSessionsCompat);
 // ── Calendar sessions ─────────────────────────────────────────────────────────
 router.get('/sessions/calendar',               authRequired, handleGetCalendarSessions);
 router.post('/sessions',                       authRequired, handleCreateSession);
+router.post('/sessions/:id/reschedule',        authRequired, handleRescheduleCoachSession);
 router.put('/sessions/:id',                    authRequired, handleUpdateSession);
 router.get('/sessions/:id/completion-draft',   authRequired, handleGetCompletionDraft);
 router.patch('/sessions/:id/complete',         authRequired, handleCompleteSession);
 router.delete('/sessions/:id',                 authRequired, handleCancelSession);
+router.delete('/sessions/:id/free-slot',       authRequired, handleDeleteFreeIndividualSlot);
 
 // ── Battle ────────────────────────────────────────────────────────────────────
 router.get('/battle/leaderboard',              authRequired, handleGetLeaderboard);
@@ -97,6 +104,7 @@ router.patch('/battle/:sessionId/result',      authRequired, finalizeBattleResul
 
 // ── Availability ──────────────────────────────────────────────────────────────
 router.get('/availability',                    authRequired, handleGetAvailability);
+router.get('/coach/profile',                   authRequired, handleGetCoachProfile);
 router.get('/coach/participants',               authRequired, handleGetCoachParticipants);
 router.get('/availability/week',               authRequired, handleGetAvailabilityWeek);
 router.get('/individual-availability/summary', telegramWebAppAuth(), handleGetIndividualAvailabilitySummary);

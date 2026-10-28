@@ -8,6 +8,8 @@ import type { ZoomCalendarSession } from '../zoom.types'
 import { getNormalizedSessionType } from '../zoom.utils'
 import {
   DEFAULT_ZOOM_SESSION_DURATION_MINUTES,
+  formatKyivTime,
+  KYIV_TIME_LABEL,
   KYIV_TIMEZONE,
 } from './zoomDateTime.utils'
 
@@ -61,13 +63,9 @@ export function resolveBookingSessionDateLabel(
     timeZone: KYIV_TIMEZONE,
   })
 
-  const time = date.toLocaleTimeString('uk-UA', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: KYIV_TIMEZONE,
-  })
+  const time = formatKyivTime(date)
 
-  return `${dayLabel.charAt(0).toUpperCase()}${dayLabel.slice(1)} · ${time}`
+  return `${dayLabel.charAt(0).toUpperCase()}${dayLabel.slice(1)} · ${time} (${KYIV_TIME_LABEL})`
 }
 
 // ACCESS + DIRECT BOOKING PURE LOGIC
@@ -297,7 +295,9 @@ export function normalizeZoomHubSession(
       'postSessionReport' in session ? session.postSessionReport : null,
     createdAt: 'createdAt' in session ? session.createdAt : session.scheduledAt,
     updatedAt: 'updatedAt' in session ? session.updatedAt : session.scheduledAt,
-    type: 'GROUP',
+    type: 'type' in session && session.type
+      ? session.type as ZoomWeekOverview['sessions'][number]['type']
+      : 'GROUP',
     attendeesCount:
       'attendeesCount' in session ? (session.attendeesCount ?? 0) : 0,
     questionPreviews:
@@ -315,6 +315,10 @@ export function normalizeZoomHubSession(
     audioFileId: null,
     hasAudio: false,
     zoomLink: '',
+    commerceRequestId:
+      'commerceRequestId' in session ? (session.commerceRequestId ?? null) : null,
+    commerceStatus:
+      'commerceStatus' in session ? (session.commerceStatus ?? null) : null,
     ...patch,
   }
 }

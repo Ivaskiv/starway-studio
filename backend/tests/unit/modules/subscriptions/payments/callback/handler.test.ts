@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockProductSubscriptionUpdate = vi.fn()
+const mockProductSubscriptionUpdateMany = vi.fn()
+const mockProductSubscriptionFindUnique = vi.fn()
 const mockSendTelegramMessage = vi.fn()
+const mockEnqueueOnce = vi.fn()
 
 vi.mock('../../../../db/client.ts', () => ({
   prisma: {
     productSubscription: {
       update: (...args: unknown[]) => mockProductSubscriptionUpdate(...args),
+      updateMany: (...args: unknown[]) => mockProductSubscriptionUpdateMany(...args),
+      findUnique: (...args: unknown[]) => mockProductSubscriptionFindUnique(...args),
     },
   },
 }))
@@ -15,6 +20,8 @@ vi.mock('/Users/viravira/Documents/starway-studio/backend/src/db/client.js', () 
   prisma: {
     productSubscription: {
       update: (...args: unknown[]) => mockProductSubscriptionUpdate(...args),
+      updateMany: (...args: unknown[]) => mockProductSubscriptionUpdateMany(...args),
+      findUnique: (...args: unknown[]) => mockProductSubscriptionFindUnique(...args),
     },
   },
 }))
@@ -31,6 +38,12 @@ vi.mock('../../../../lib/telegram.js', () => ({
 
 vi.mock('/Users/viravira/Documents/starway-studio/backend/src/lib/telegram/messageFormatter.js', () => ({
   sendTelegramMessage: (...args: unknown[]) => mockSendTelegramMessage(...args),
+}))
+
+vi.mock('/Users/viravira/Documents/starway-studio/backend/src/services/notifications/services/NotificationJobService.js', () => ({
+  notificationJobService: {
+    enqueueOnce: (...args: unknown[]) => mockEnqueueOnce(...args),
+  },
 }))
 
 vi.mock('../../../../services/notifications/NotificationService.ts', () => ({
@@ -129,6 +142,11 @@ vi.mock('../../../../services/notifications/NotificationEvent.ts', () => ({
 }))
 
 import { sendFocusPaymentOnboardingIfNeeded } from '@/modules/subscriptions/payments/callback/handler.ts'
+import {
+  deliverFocusPaymentOnboardingJob,
+  FOCUS_PAYMENT_ONBOARDING_JOB_KIND,
+  isFocusPaymentOnboardingJobPayload,
+} from '@/modules/subscriptions/payments/callback/focus-onboarding.ts'
 
 describe('callback.handler — Focus onboarding idempotency', () => {
   const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -136,11 +154,14 @@ describe('callback.handler — Focus onboarding idempotency', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockProductSubscriptionUpdate.mockResolvedValue(undefined)
+    mockProductSubscriptionUpdateMany.mockResolvedValue({ count: 1 })
+    mockProductSubscriptionFindUnique.mockResolvedValue({ focusWelcomedAt: null })
     mockSendTelegramMessage.mockResolvedValue(true)
+    mockEnqueueOnce.mockResolvedValue({ id: 'focus-welcome-job' })
     process.env.PUBLIC_FRONTEND_URL = 'https://app.starway.test'
   })
 
-  it('sends the access onboarding once and marks focusWelcomedAt on first activation', async () => {
+  it('creates one durable onboarding delivery instead of dispatching Telegram in the callback', async () => {
     const first = await sendFocusPaymentOnboardingIfNeeded({
       userId: 'user-1',
       orderReference: 'focus_order_1',
@@ -163,17 +184,35 @@ describe('callback.handler — Focus onboarding idempotency', () => {
     })
 
     expect(first).toBe(true)
-    expect(mockSendTelegramMessage).toHaveBeenCalledTimes(2)
-    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Доступ до ФОКУС активовано ✅')
-    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Тариф: 1 місяць')
-    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Доступ активний до')
-    expect(String(mockSendTelegramMessage.mock.calls[0][2])).toContain('Що тобі вже доступно')
-    expect(mockProductSubscriptionUpdate).toHaveBeenCalledWith({
-      where: { id: 'sub-1' },
-      data: expect.objectContaining({
-        focusWelcomedAt: expect.any(Date),
+    expect(mockSendTelegramMessage).not.toHaveBeenCalled()
+    expect(mockProductSubscriptionUpdateMany).not.toHaveBeenCalled()
+    expect(mockEnqueueOnce).toHaveBeenCalledWith(
+      'SUBSCRIPTION',
+      expect.objectContaining({
+        event: 'FOCUS_PAYMENT_ONBOARDING',
+        userId: 'user-1',
+        payload: expect.objectContaining({
+          kind: FOCUS_PAYMENT_ONBOARDING_JOB_KIND,
+          subscriptionId: 'sub-1',
+          idempotencyKey: 'focus-payment-onboarding:sub-1',
+        }),
       }),
-    })
+      expect.any(Date),
+      'focus-payment-onboarding:sub-1',
+    )
+  })
+
+  it('keeps a nameless payer on the Focus onboarding worker path', () => {
+    expect(isFocusPaymentOnboardingJobPayload({
+      kind: FOCUS_PAYMENT_ONBOARDING_JOB_KIND,
+      subscriptionId: 'sub-1',
+      chatId: 'chat-1',
+      firstName: null,
+      planLabel: '1 місяць',
+      accessUntil: null,
+      upcomingLines: '',
+      idempotencyKey: 'focus-payment-onboarding:sub-1',
+    })).toBe(true)
   })
 
   it('distinct focus payment orderReferences do not repeat onboarding after focusWelcomedAt is set', async () => {
@@ -200,7 +239,7 @@ describe('callback.handler — Focus onboarding idempotency', () => {
 
     expect(second).toBe(true)
     expect(mockSendTelegramMessage).not.toHaveBeenCalled()
-    expect(mockProductSubscriptionUpdate).not.toHaveBeenCalled()
+    expect(mockEnqueueOnce).not.toHaveBeenCalled()
   })
 
   it('skips Telegram onboarding and logs a warning when paid user has no chatId', async () => {
@@ -227,7 +266,7 @@ describe('callback.handler — Focus onboarding idempotency', () => {
 
     expect(sent).toBe(false)
     expect(mockSendTelegramMessage).not.toHaveBeenCalled()
-    expect(mockProductSubscriptionUpdate).not.toHaveBeenCalled()
+    expect(mockEnqueueOnce).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
       '[PAYMENT_LIFECYCLE] telegram_notification_skipped',
       expect.objectContaining({
@@ -239,4 +278,88 @@ describe('callback.handler — Focus onboarding idempotency', () => {
       }),
     )
   })
+
+  it('uses the subscription business identity for concurrent callback delivery intents', async () => {
+    const input = {
+      userId: 'user-1',
+      paidUser: {
+        id: 'user-1',
+        firstName: 'Віра',
+        telegramChatId: 'chat-1',
+        telegramLinks: [],
+      },
+      focusSubscription: {
+        id: 'sub-1',
+        focusWelcomedAt: null,
+        expiresAt: new Date('2026-08-27T08:00:00.000Z'),
+      },
+      canonicalSubscription: {
+        currentPeriodEnd: new Date('2026-08-27T08:00:00.000Z'),
+      },
+      planLabel: '1 місяць',
+      upcomingLines: 'пн, 27.08 19:00 — Zoom',
+    }
+
+    await Promise.all([
+      sendFocusPaymentOnboardingIfNeeded({ ...input, orderReference: 'focus_order_1' }),
+      sendFocusPaymentOnboardingIfNeeded({ ...input, orderReference: 'focus_order_2' }),
+    ])
+
+    expect(mockSendTelegramMessage).not.toHaveBeenCalled()
+    expect(mockEnqueueOnce).toHaveBeenCalledTimes(2)
+    expect(mockEnqueueOnce.mock.calls.map((call) => call[3])).toEqual([
+      'focus-payment-onboarding:sub-1',
+      'focus-payment-onboarding:sub-1',
+    ])
+  })
+
+  it('acknowledges only a successful Telegram delivery and lets the worker retry a failed send', async () => {
+    const payload = {
+      kind: FOCUS_PAYMENT_ONBOARDING_JOB_KIND,
+      subscriptionId: 'sub-1',
+      chatId: 'chat-1',
+      firstName: 'Віра',
+      planLabel: '1 місяць',
+      accessUntil: '2026-08-27T08:00:00.000Z',
+      upcomingLines: 'пн, 27.08 19:00 — Zoom',
+      idempotencyKey: 'focus-payment-onboarding:sub-1',
+    }
+    mockSendTelegramMessage
+      .mockRejectedValueOnce(new Error('telegram unavailable'))
+      .mockRejectedValueOnce(new Error('telegram unavailable'))
+      .mockResolvedValue(true)
+
+    await expect(deliverFocusPaymentOnboardingJob(payload)).rejects
+      .toThrow('focus_payment_onboarding_delivery_failed')
+    expect(mockProductSubscriptionUpdateMany).not.toHaveBeenCalled()
+
+    await expect(deliverFocusPaymentOnboardingJob(payload)).resolves.toBeUndefined()
+    expect(mockSendTelegramMessage).toHaveBeenCalledTimes(4)
+    expect(String(mockSendTelegramMessage.mock.calls[2][2])).toContain('Доступ до ФОКУС активовано ✅')
+    expect(mockProductSubscriptionUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'sub-1', focusWelcomedAt: null },
+      data: { focusWelcomedAt: expect.any(Date) },
+    })
+  })
+
+  it('does not dispatch again when a crashed worker is reclaimed after the durable acknowledgment', async () => {
+    mockProductSubscriptionFindUnique.mockResolvedValue({
+      focusWelcomedAt: new Date('2026-08-01T08:00:00.000Z'),
+    })
+
+    await expect(deliverFocusPaymentOnboardingJob({
+      kind: FOCUS_PAYMENT_ONBOARDING_JOB_KIND,
+      subscriptionId: 'sub-1',
+      chatId: 'chat-1',
+      firstName: 'Віра',
+      planLabel: '1 місяць',
+      accessUntil: null,
+      upcomingLines: '',
+      idempotencyKey: 'focus-payment-onboarding:sub-1',
+    })).resolves.toBeUndefined()
+
+    expect(mockSendTelegramMessage).not.toHaveBeenCalled()
+    expect(mockProductSubscriptionUpdateMany).not.toHaveBeenCalled()
+  })
+
 })

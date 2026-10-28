@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { getZoomPaymentBadgeLabel, sessionStatusVariant } from '@/features/zoom/zoom.utils'
+import { formatUkrDate, getZoomPaymentBadgeLabel, sessionStatusVariant } from '@/features/zoom/zoom.utils'
+
+describe('Kyiv Zoom date presentation', () => {
+  it('formats session details in Kyiv time with the shared timezone clarification', () => {
+    expect(formatUkrDate('2026-10-24T12:15:00.000Z')).toBe('24 жовтня 2026, 15:15 (час за Києвом)')
+  })
+})
 
 describe('sessionStatusVariant', () => {
   it('maps session statuses to existing design tokens', () => {

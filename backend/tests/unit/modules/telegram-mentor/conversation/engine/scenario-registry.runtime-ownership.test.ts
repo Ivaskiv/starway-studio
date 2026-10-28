@@ -20,11 +20,14 @@ describe('scenarioRegistry AB System runtime ownership', () => {
       .join('\n')
 
     const scenarioRegistrySource = readFileSync(
-      new URL('../scenarioRegistry.ts', import.meta.url),
+      new URL('../../../../../../src/modules/telegram-mentor/conversation/engine/scenarioRegistry.ts', import.meta.url),
       'utf8',
     )
 
-    expect(scenarioRegistrySource).toContain('resolveCanonicalFocusPaymentView')
+    expect(scenarioRegistrySource).toContain("type: 'ab_test_callback', action: AB_TEST_ACTIONS.START")
+    expect(scenarioRegistrySource).toContain("type: 'ab_test_callback', action: AB_TEST_ACTIONS.FOCUS_PAY")
+    expect(scenarioRegistrySource).not.toContain('saveAbTestProgress(')
+    expect(scenarioRegistrySource).not.toContain('buildEcosystemPaymentCheckoutSession(')
     expect(source).not.toContain('Твій результат уже готовий')
     expect(source).not.toContain('Можеш переглянути його ще раз або пройти тест заново')
     expect(source).not.toContain('Супер. Якщо відгукується — нижче можеш одразу вибрати формат участі.')

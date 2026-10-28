@@ -1,8 +1,15 @@
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+// @vitest-environment jsdom
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ZoomMySessionsResponse, ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
+import type { ZoomCalendarSession } from '@/features/zoom/zoom.types'
+
+let clientRoot: Root | null = null
+let clientContainer: HTMLDivElement | null = null
+let calendarFixture: ZoomCalendarSession[] = []
+const mockOpenPayment = vi.fn()
 
 const mockDispatch = vi.fn()
 const mockAuthState = {
@@ -117,7 +124,15 @@ vi.mock('@/features/auth/context/SessionOrchestratorContext', () => ({
 }))
 
 vi.mock('@/features/auth/hooks/useSystemState', () => ({
-  useSystemState: () => mockSystemState,
+  useSystemState: () => ({ ...mockSystemState, state: { products: { owned: [], subscribed: [] } }, getModuleAccess: () => ({ isLocked: true }) }),
+}))
+
+vi.mock('@/features/zoom/hooks/useAccessActions', () => ({
+  useAccessActions: () => ({ openPayment: mockOpenPayment }),
+}))
+
+vi.mock('@/layout/DashboardSideRails', () => ({
+  default: () => createElement('aside', undefined, 'SIDE_RAILS'),
 }))
 
 vi.mock('@/features/auth/services/auth.api', () => ({
@@ -216,9 +231,12 @@ vi.mock('@/features/zoom/services/zoom.api', () => ({
     mockSubmitBookingQuestion,
     { isLoading: false },
   ],
+  useGetAttendeesQuery: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useSaveSelfReportedAttendanceMutation: () => [vi.fn(), { isLoading: false }],
 }))
 
-vi.mock('@/features/zoom/zoom.utils', () => ({
+vi.mock('@/features/zoom/zoom.utils', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/features/zoom/zoom.utils')>(),
   getSessionDateLabel: vi.fn((scheduledAt: string) => scheduledAt),
   getSessionMeta: vi.fn(() => 'Meta'),
   getNormalizedSessionType: vi.fn((session: { type?: string | null }) =>
@@ -227,18 +245,60 @@ vi.mock('@/features/zoom/zoom.utils', () => ({
 }))
 
 vi.mock('@/features/zoom/zoom.api', () => ({
-  useGetCalendarSessionsQuery: vi.fn(),
+  useGetCalendarSessionsQuery: () => ({ data: calendarFixture, isLoading: false, isError: false, isSuccess: true, refetch: vi.fn() }),
+  useGetLeaderboardQuery: () => ({ data: [] }),
+  useAcceptBattleMutation: () => [vi.fn()],
+  useDeclineBattleMutation: () => [vi.fn()],
+  useLogBattleProgressMutation: () => [vi.fn()],
+  useGetPendingSwapsQuery: () => ({ data: [] }),
+  useAcceptSwapMutation: () => [vi.fn()],
+  useDeclineSwapMutation: () => [vi.fn()],
+  useCreateUserIndividualRequestMutation: () => [vi.fn(), { isLoading: false }],
+  useGetIndividualAvailabilityQuery: () => ({ data: [], isFetching: false, isError: false, refetch: vi.fn() }),
+  useGetIndividualAvailabilitySummaryQuery: () => ({ data: [] }),
+  useCancelZoomCommerceRequestMutation: () => [vi.fn(), { isLoading: false }],
+  useBookSlotMutation: () => [vi.fn(), { isLoading: false }],
+  useUnbookSlotMutation: () => [vi.fn(), { isLoading: false }],
+  useBookPrivateSlotMutation: () => [vi.fn(), { isLoading: false }],
+  useCancelPrivateBookingMutation: () => [vi.fn(), { isLoading: false }],
+  useCreateSwapRequestMutation: () => [vi.fn(), { isLoading: false }],
+  useCompleteZoomSessionMutation: () => [vi.fn(), { isLoading: false }],
+  useLazyGetZoomCompletionDraftQuery: () => [vi.fn(), { isFetching: false }],
+  useInitiateBattleMutation: () => [vi.fn(), { isLoading: false }],
+  useGetEligibleOpponentsQuery: () => ({ data: [] }),
+  useGetAvailablePrivateSlotsQuery: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useCreateZoomSessionMutation: () => [vi.fn(), { isLoading: false }],
+  useUpdateZoomSessionMutation: () => [vi.fn(), { isLoading: false }],
+  useCancelZoomSessionMutation: () => [vi.fn(), { isLoading: false }],
+  useSaveSelfReportedAttendanceMutation: () => [vi.fn(), { isLoading: false }],
 }))
 
-vi.mock('@/services/api', () => ({
-  api: {
-    util: {
-      invalidateTags: vi.fn(() => ({ type: 'api/invalidate' })),
-    },
-  },
+vi.mock('@/features/admin/services/ownership.api', () => ({
+  useGetUsersQuery: () => ({ data: [], isLoading: false, isError: false }),
 }))
+
+vi.mock('@/services/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api')>()
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      util: {
+        ...actual.api.util,
+        invalidateTags: vi.fn(() => ({ type: 'api/invalidate' })),
+      },
+    },
+  }
+})
 
 afterEach(() => {
+  if (clientRoot) act(() => clientRoot?.unmount())
+  clientRoot = null
+  clientContainer?.remove()
+  clientContainer = null
+  calendarFixture = []
+  vi.useRealTimers()
+  mockSystemState.zoomAccess = { state: 'FOCUS_ACTIVE', isActive: true, hasFocus: true }
   vi.clearAllMocks()
   vi.unstubAllEnvs()
   mockAuthState.auth.status = 'authenticated'
@@ -253,37 +313,73 @@ afterEach(() => {
   }
 })
 
-let resolveZoomAccessState: typeof import('./CleanMiniAppZoomCalendar').resolveZoomAccessState
-let hasConfirmedFocusAccess: typeof import('./CleanMiniAppZoomCalendar').hasConfirmedFocusAccess
-let readDirectZoomBookingParams: typeof import('./CleanMiniAppZoomCalendar').readDirectZoomBookingParams
-let isDirectZoomBookingRequest: typeof import('./CleanMiniAppZoomCalendar').isDirectZoomBookingRequest
-let shouldPrimeDirectBooking: typeof import('./CleanMiniAppZoomCalendar').shouldPrimeDirectBooking
-let pickNextZoomSession: typeof import('./CleanMiniAppZoomCalendar').pickNextZoomSession
-let resolveZoomHubPrimaryAction: typeof import('./CleanMiniAppZoomCalendar').resolveZoomHubPrimaryAction
-let resolveZoomHubPrimaryActionClassName: typeof import('./CleanMiniAppZoomCalendar').resolveZoomHubPrimaryActionClassName
-let getKyivWeekRange: typeof import('./CleanMiniAppZoomCalendar').getKyivWeekRange
-let resolveNearestZoomSession: typeof import('./CleanMiniAppZoomCalendar').resolveNearestZoomSession
-let resolveNearestSessionDateLabel: typeof import('./CleanMiniAppZoomCalendar').resolveNearestSessionDateLabel
-let shouldRenderPaymentGate: typeof import('./CleanMiniAppZoomCalendar').shouldRenderPaymentGate
-let getVisibleWeekSessions: typeof import('./CleanMiniAppZoomCalendar').getVisibleWeekSessions
-let resolveZoomHubEmptyState: typeof import('./CleanMiniAppZoomCalendar').resolveZoomHubEmptyState
-let resolveZoomSessionTitle: typeof import('./CleanMiniAppZoomCalendar').resolveZoomSessionTitle
-let MINIAPP_ACCENT_BUTTON_CLASSNAME: typeof import('./CleanMiniAppZoomCalendar').MINIAPP_ACCENT_BUTTON_CLASSNAME
-let resolveUpcomingZoomSessions: typeof import('./CleanMiniAppZoomCalendar').resolveUpcomingZoomSessions
-let resolveNextZoomBoundaryAt: typeof import('./CleanMiniAppZoomCalendar').resolveNextZoomBoundaryAt
-let resolvePreviousZoomRecapTitle: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapTitle
-let resolvePreviousZoomRecapDateLabel: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapDateLabel
-let resolvePreviousZoomRecapPreview: typeof import('./CleanMiniAppZoomCalendar').resolvePreviousZoomRecapPreview
-let resolveZoomCalendarEntryMode: typeof import('./CleanMiniAppZoomCalendar').resolveZoomCalendarEntryMode
-let resolveNextSessionQuestionSummary: typeof import('./CleanMiniAppZoomCalendar').resolveNextSessionQuestionSummary
-let performBookingScreenRegistration: typeof import('./CleanMiniAppZoomCalendar').performBookingScreenRegistration
-let resolveTelegramMiniAppAuthInitData: typeof import('./CleanMiniAppZoomCalendar').resolveTelegramMiniAppAuthInitData
-let CleanMiniAppZoomCalendar: typeof import('./CleanMiniAppZoomCalendar').default
+let resolveZoomAccessState: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveZoomAccessState
+let hasConfirmedFocusAccess: typeof import('@/features/zoom/utils/zoomCalendar.utils').hasConfirmedFocusAccess
+let readDirectZoomBookingParams: typeof import('@/features/zoom/utils/zoomCalendar.utils').readDirectZoomBookingParams
+let isDirectZoomBookingRequest: typeof import('@/features/zoom/utils/zoomCalendar.utils').isDirectZoomBookingRequest
+let shouldPrimeDirectBooking: typeof import('@/features/zoom/utils/zoomCalendar.utils').shouldPrimeDirectBooking
+let pickNextZoomSession: typeof import('@/features/zoom/utils/zoomCalendar.utils').pickNextZoomSession
+let resolveZoomHubPrimaryAction: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveZoomHubPrimaryAction
+let resolveZoomHubPrimaryActionClassName: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveZoomHubPrimaryActionClassName
+let getKyivWeekRange: typeof import('@/features/zoom/utils/zoomDateTime.utils').getKyivWeekRange
+let resolveNearestZoomSession: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveNearestZoomSession
+let resolveNearestSessionDateLabel: typeof import('@/features/zoom/utils/zoomCalendarRoute.utils').resolveNearestSessionDateLabel
+let shouldRenderPaymentGate: typeof import('@/features/zoom/utils/zoomCalendar.utils').shouldRenderPaymentGate
+let getVisibleWeekSessions: typeof import('@/features/zoom/utils/zoomCalendar.utils').getVisibleWeekSessions
+let resolveZoomHubEmptyState: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveZoomHubEmptyState
+let resolveZoomSessionTitle: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveZoomSessionTitle
+let MINIAPP_ACCENT_BUTTON_CLASSNAME: typeof import('@/features/zoom/utils/zoomCalendarRoute.utils').MINIAPP_ACCENT_BUTTON_CLASSNAME
+let resolveUpcomingZoomSessions: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveUpcomingZoomSessions
+let resolveNextZoomBoundaryAt: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveNextZoomBoundaryAt
+let resolvePreviousZoomRecapTitle: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolvePreviousZoomRecapTitle
+let resolvePreviousZoomRecapDateLabel: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolvePreviousZoomRecapDateLabel
+let resolvePreviousZoomRecapPreview: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolvePreviousZoomRecapPreview
+let resolveZoomCalendarEntryMode: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveZoomCalendarEntryMode
+let resolveNextSessionQuestionSummary: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveNextSessionQuestionSummary
+let performBookingScreenRegistration: typeof import('@/features/zoom/utils/zoomCalendarRoute.utils').performBookingScreenRegistration
+let resolveTelegramMiniAppAuthInitData: typeof import('@/features/zoom/utils/zoomCalendar.utils').resolveTelegramMiniAppAuthInitData
 
 const LEGACY_PREPARE_LABELS = [
   ['П', 'і', 'д', 'г', 'о', 'т', 'у', 'в', 'а', 'т', 'и', 'с', 'я'].join(''),
   ['П', 'і', 'д', 'г', 'о', 'т', 'у', 'в', 'а', 'т', 'и', 'с', 'ь'].join(''),
 ]
+
+function calendarSession(overrides: Partial<ZoomCalendarSession> = {}): ZoomCalendarSession {
+  return {
+    id: 'group-next', scheduledAt: '2030-09-23T14:00:00.000Z', topic: 'Майбутня практика',
+    status: 'SCHEDULED', type: 'group_practice', isMyBooking: true,
+    attendeesCount: 1, remainingSlots: 49, zoomLink: '', canEdit: false,
+    ...overrides,
+  }
+}
+
+async function mountCalendar(entry = '/miniapp/zoom-calendar?intent=booking') {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2030-09-23T12:00:00.000Z'))
+  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const { default: RouteComponent } = await import('@/features/zoom/routes/MiniAppCalendarRoute')
+  clientContainer = document.createElement('div')
+  document.body.appendChild(clientContainer)
+  clientRoot = createRoot(clientContainer)
+  await act(async () => {
+    clientRoot?.render(createElement(MemoryRouter, { initialEntries: [entry] }, createElement(RouteComponent)))
+  })
+  return clientContainer
+}
+
+async function clickButton(container: HTMLElement, label: string) {
+  const button = [...container.querySelectorAll('button')].find((item) => item.textContent?.trim() === label)
+  expect(button, `button ${label}`).toBeDefined()
+  await act(async () => { button!.click() })
+}
+
+async function openHistoryRow(container: HTMLElement, topic: string) {
+  const row = [...container.querySelectorAll<HTMLButtonElement>('[data-user-my-session-row]')]
+    .find((item) => item.textContent?.includes(topic))
+  expect(row, `history row ${topic}`).toBeDefined()
+  await act(async () => { row!.click() })
+  expect(container.querySelector('[aria-label="Закрити деталі сесії"]')).not.toBeNull()
+}
 
 beforeAll(async () => {
   vi.stubGlobal('localStorage', {
@@ -301,14 +397,11 @@ beforeAll(async () => {
     pickNextZoomSession,
     resolveZoomHubPrimaryAction,
     resolveZoomHubPrimaryActionClassName,
-    getKyivWeekRange,
     resolveNearestZoomSession,
-    resolveNearestSessionDateLabel,
     shouldRenderPaymentGate,
     getVisibleWeekSessions,
     resolveZoomHubEmptyState,
     resolveZoomSessionTitle,
-    MINIAPP_ACCENT_BUTTON_CLASSNAME,
     resolveUpcomingZoomSessions,
     resolveNextZoomBoundaryAt,
     resolvePreviousZoomRecapTitle,
@@ -316,10 +409,10 @@ beforeAll(async () => {
     resolvePreviousZoomRecapPreview,
     resolveZoomCalendarEntryMode,
     resolveNextSessionQuestionSummary,
-    performBookingScreenRegistration,
     resolveTelegramMiniAppAuthInitData,
-    default: CleanMiniAppZoomCalendar,
-  } = await import('./CleanMiniAppZoomCalendar'))
+  } = await import('@/features/zoom/utils/zoomCalendar.utils'))
+  ;({ getKyivWeekRange } = await import('@/features/zoom/utils/zoomDateTime.utils'))
+  ;({ resolveNearestSessionDateLabel, MINIAPP_ACCENT_BUTTON_CLASSNAME, performBookingScreenRegistration } = await import('@/features/zoom/utils/zoomCalendarRoute.utils'))
 })
 
 describe('resolveZoomAccessState', () => {
@@ -632,37 +725,13 @@ describe('zoom hub next session', () => {
     expect(resolveZoomCalendarEntryMode('')).toBe('default')
   })
 
-  it('renders the canonical booking screen from real Zoom data', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const bookingMarkup = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ['/miniapp/zoom-calendar?intent=booking'] },
-        createElement(
-          Routes,
-          undefined,
-          createElement(Route, {
-            path: '/miniapp/zoom-calendar',
-            element: createElement(CleanMiniAppZoomCalendar),
-          }),
-        ),
-      ),
-    )
-
-    consoleErrorSpy.mockRestore()
-
-    expect(bookingMarkup).toContain('Минула зустріч, 28 липня')
-    expect(bookingMarkup).toContain('Розбирали, чому важко тримати фокус увечері')
-    expect(bookingMarkup).toContain('Основний інсайт: втома тіла плутається з втомою мотивації.')
-    expect(bookingMarkup).toContain('14')
-    expect(bookingMarkup).toContain('Відстежити енергію ввечері')
-    expect(bookingMarkup).toContain('ЗАПИСАТИСЬ')
-    expect(bookingMarkup).toContain('Понеділок, 17 серпня · 19:00')
-    expect(bookingMarkup).toContain('Записано учасників: 9')
-    expect(bookingMarkup).not.toContain('Наступний Zoom уже готується')
-    expect(bookingMarkup).not.toContain('Твій підсумок тижня')
-    expect(bookingMarkup).not.toContain('ПЕРЕГЛЯНУТИ ПОВНИЙ ЗВІТ')
+  it('renders real booking DTO in My sessions and calendar', async () => {
+    calendarFixture = [calendarSession()]
+    const dom = await mountCalendar()
+    expect(dom.textContent).toContain('Мої сесії')
+    expect(dom.querySelector('[data-user-my-session-row]')?.textContent).toContain('Майбутня практика')
+    expect(dom.querySelector('[data-zoom-week-day]')?.textContent).toContain('Майбутня практика')
+    expect(dom.textContent).toContain('час за Києвом')
   })
 
   it('reuses existing verified initData bootstrap only for unauthenticated direct miniapp entry', () => {
@@ -672,153 +741,54 @@ describe('zoom hub next session', () => {
     expect(resolveTelegramMiniAppAuthInitData('unauthenticated', '   ')).toBeNull()
   })
 
-  it('renders the approved development fixture on the real booking url without preview=booking', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const previousMySessionsResponse = mockMySessionsResponse
-    const previousCurrentWeekSessions = [...mockCurrentWeekSessions]
-
-    mockMySessionsResponse = {
-      ...mockMySessionsResponse,
-      sessions: [],
-      previousSessionRecap: null,
-    }
-    mockCurrentWeekSessions.length = 0
-
-    const bookingMarkup = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ['/miniapp/zoom-calendar?intent=booking'] },
-        createElement(
-          Routes,
-          undefined,
-          createElement(Route, {
-            path: '/miniapp/zoom-calendar',
-            element: createElement(CleanMiniAppZoomCalendar),
-          }),
-        ),
-      ),
-    )
-
-    mockMySessionsResponse = previousMySessionsResponse
-    mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousCurrentWeekSessions)
-    consoleErrorSpy.mockRestore()
-
-    expect(bookingMarkup).toContain('Наступний Zoom уже готується')
-    expect(bookingMarkup).toContain('Розклад оновлюється автоматично.')
-    expect(bookingMarkup).not.toContain('ЗАПИСАТИСЬ')
+  it('shows an honest empty state for empty development data', async () => {
+    vi.stubEnv('DEV', true)
+    calendarFixture = []
+    const dom = await mountCalendar()
+    expect(dom.textContent).toContain('Немає майбутніх сесій.')
+    expect(dom.querySelectorAll('[data-user-my-session-row]')).toHaveLength(0)
+    expect(dom.textContent).not.toContain('Майбутня практика')
     expect(mockRegisterAttendee).not.toHaveBeenCalled()
   })
 
-  it('merges real recap with fallback next-session preview instead of dropping the booking card', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const previousCurrentWeekSessions = [...mockCurrentWeekSessions]
-
-    mockCurrentWeekSessions.length = 0
-
-    const bookingMarkup = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ['/miniapp/zoom-calendar?intent=booking'] },
-        createElement(
-          Routes,
-          undefined,
-          createElement(Route, {
-            path: '/miniapp/zoom-calendar',
-            element: createElement(CleanMiniAppZoomCalendar),
-          }),
-        ),
-      ),
-    )
-
-    mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousCurrentWeekSessions)
-    consoleErrorSpy.mockRestore()
-
-    expect(bookingMarkup).toContain('Розбирали, чому важко тримати фокус увечері')
-    expect(bookingMarkup).not.toContain('Понеділок, 10 серпня · 19:00')
-    expect(bookingMarkup).not.toContain('Твій підсумок тижня')
+  it('keeps future and past bookings in their history tabs and opens their own details', async () => {
+    calendarFixture = [
+      calendarSession(),
+      calendarSession({ id: 'group-past', scheduledAt: '2030-09-16T14:00:00.000Z', topic: 'Минула практика', status: 'COMPLETED' }),
+    ]
+    const dom = await mountCalendar()
+    expect(dom.querySelector('[data-user-my-session-row]')?.textContent).toContain('Майбутня практика')
+    await openHistoryRow(dom, 'Майбутня практика')
+    expect(dom.querySelector('[aria-label="Закрити деталі сесії"]')?.parentElement?.textContent).toContain('Майбутня практика')
+    expect(dom.querySelector('[aria-label="Закрити деталі сесії"]')?.parentElement?.textContent).toContain('17:00')
+    await act(async () => { (dom.querySelector('[aria-label="Закрити деталі сесії"]') as HTMLButtonElement).click() })
+    await clickButton(dom, 'Минулі1')
+    expect(dom.querySelector('[data-user-my-session-row]')?.textContent).toContain('Минула практика')
+    await openHistoryRow(dom, 'Минула практика')
+    expect(dom.querySelector('[aria-label="Закрити деталі сесії"]')?.parentElement?.textContent).toContain('Минула практика')
+    expect(dom.querySelector('[aria-label="Закрити деталі сесії"]')?.parentElement?.textContent).toContain('17:00')
   })
 
-  it('keeps the production empty state on the same booking url when real data is absent', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const previousMySessionsResponse = mockMySessionsResponse
-    const previousCurrentWeekSessions = [...mockCurrentWeekSessions]
-
-    vi.stubEnv('DEV', false)
+  it('shows the current empty state for empty production data', async () => {
     vi.stubEnv('PROD', true)
-    vi.stubEnv('MODE', 'production')
+    calendarFixture = []
+    const dom = await mountCalendar()
+    expect(dom.textContent).toContain('Немає майбутніх сесій.')
+    expect(dom.querySelectorAll('[data-user-my-session-row]')).toHaveLength(0)
+    expect(dom.textContent).not.toContain('Майбутня практика')
+    expect(mockRegisterAttendee).not.toHaveBeenCalled()
+  })
 
-    mockMySessionsResponse = {
-      ...mockMySessionsResponse,
-      sessions: [],
-      previousSessionRecap: null,
-    }
-    mockCurrentWeekSessions.length = 0
-
-    const emptyMarkup = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ['/miniapp/zoom-calendar?intent=booking'] },
-        createElement(
-          Routes,
-          undefined,
-          createElement(Route, {
-            path: '/miniapp/zoom-calendar',
-            element: createElement(CleanMiniAppZoomCalendar),
-          }),
-        ),
-      ),
-    )
-
-    mockMySessionsResponse = previousMySessionsResponse
-    mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousCurrentWeekSessions)
-    consoleErrorSpy.mockRestore()
-
-    expect(emptyMarkup).toContain('Наступний Zoom уже готується')
-    expect(emptyMarkup).toContain(
-      'Розклад оновлюється автоматично. Щойно наступний Zoom-розбір буде доступний, ми повідомимо тебе в боті.',
-    )
-expect(emptyMarkup).not.toContain('Твій підсумок тижня')
-expect(emptyMarkup).not.toContain('ПЕРЕГЛЯНУТИ ПОВНИЙ ЗВІТ')
-expect(mockRegisterAttendee).not.toHaveBeenCalled()
-
-})
-
-  it('bypasses the inactive-access payment gate on the booking entry path', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const previousSystemState = {
-      ...mockSystemState,
-      zoomAccess: { ...mockSystemState.zoomAccess },
-    }
-
-    mockSystemState.zoomAccess = {
-      state: 'NO_ACCESS',
-      isActive: false,
-      hasFocus: false,
-    }
-
-    const bookingMarkup = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ['/miniapp/zoom-calendar?intent=booking'] },
-        createElement(
-          Routes,
-          undefined,
-          createElement(Route, {
-            path: '/miniapp/zoom-calendar',
-            element: createElement(CleanMiniAppZoomCalendar),
-          }),
-        ),
-      ),
-    )
-
-    mockSystemState.zoomAccess = previousSystemState.zoomAccess
-    consoleErrorSpy.mockRestore()
-
-    expect(bookingMarkup).toContain('ЗАПИСАТИСЬ')
-    expect(bookingMarkup).toContain('Понеділок, 17 серпня · 19:00')
-    expect(bookingMarkup).not.toContain('Доступ до Zoom ще не підтверджено.')
-    expect(bookingMarkup).not.toContain('ОПЛАТИТИ ФОКУС')
-    expect(bookingMarkup).not.toContain('Твій підсумок тижня')
+  it('keeps the calendar viewable without Focus and blocks booking mutation', async () => {
+    mockSystemState.zoomAccess = { state: 'NO_ACCESS', isActive: false, hasFocus: false }
+    calendarFixture = [calendarSession({ isMyBooking: false })]
+    const dom = await mountCalendar()
+    expect(dom.textContent).toContain('Майбутня практика')
+    expect(dom.textContent).toContain('АКТИВУВАТИ ДОСТУП І ЗАПИСАТИСЯ')
+    expect(mockRegisterAttendee).not.toHaveBeenCalled()
+    await clickButton(dom, 'АКТИВУВАТИ ДОСТУП І ЗАПИСАТИСЯ')
+    expect(mockRegisterAttendee).not.toHaveBeenCalled()
+    expect(mockOpenPayment).toHaveBeenCalled()
   })
 
   it('uses the existing booking mutation with the exact real session id and refetches once', async () => {
@@ -973,91 +943,22 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
     })
   })
 
-  it('does not show the empty participants copy on the non-booking hub when the current week session already has myQuestion', () => {
-    const previousSessions = [...mockCurrentWeekSessions]
-
-    mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, {
-      ...previousSessions[0],
-      isMyBooking: true,
-      questionPreviews: [],
-      questionsCount: 1,
-      remainingQuestionsCount: 0,
-      myQuestion: {
-        text: 'Як не зірвати ритм після Zoom?',
-        position: 1,
-      },
-    } as ZoomWeekOverview['sessions'][number])
-
-    const markup = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ['/miniapp/zoom-calendar'] },
-        createElement(
-          Routes,
-          undefined,
-          createElement(Route, {
-            path: '/miniapp/zoom-calendar',
-            element: createElement(CleanMiniAppZoomCalendar),
-          }),
-        ),
-      ),
-    )
-
-    mockCurrentWeekSessions.splice(0, mockCurrentWeekSessions.length, ...previousSessions)
-
-    expect(markup).not.toContain('Учасники ще не залишили питання до цієї практики.')
-    expect(markup).toContain('ТВОЄ ПИТАННЯ')
-    expect(markup).toContain('«Як не зірвати ритм після Zoom?»')
-    expect(markup).toContain('№1 У ЧЕРЗІ')
+  it('opens the booked session details with the own question', async () => {
+    calendarFixture = [calendarSession({ myQuestion: { text: 'Моє власне питання', position: 1 } })]
+    const dom = await mountCalendar('/miniapp/zoom-calendar')
+    await openHistoryRow(dom, 'Майбутня практика')
+    expect(dom.textContent).toContain('Твоє питання: Моє власне питання')
+    expect(dom.textContent).toContain('№1 у черзі')
+    expect(dom.textContent).not.toContain('Учасники ще не залишили питання до цієї практики.')
   })
 
-  it('shows only the current user question in booking entry even when questionPreviews is empty', () => {
-    const previousUpcomingSession = mockUpcomingSessionData
-
-    mockUpcomingSessionData = {
-      id: 'zoom-live',
-      expertId: null,
-      scheduledAt: '2026-08-17T16:00:00.000Z',
-      topic: 'Live Zoom',
-      status: 'SCHEDULED',
-      requests: [],
-      postSessionReport: null,
-      createdAt: '2026-08-10T08:00:00.000Z',
-      updatedAt: '2026-08-10T08:00:00.000Z',
-      attendeesCount: 1,
-      questionPreviews: [],
-      questionsCount: 1,
-      remainingQuestionsCount: 0,
-      isMyBooking: true,
-      myQuestion: {
-        text: 'Хочу розібрати, чому я постійно розпорошуюсь між різними задачами й не можу втримати фокус на одній головній цілі.',
-        position: 1,
-      },
-    } as any
-
-    const markup = renderToStaticMarkup(
-      createElement(
-        MemoryRouter,
-        { initialEntries: ['/miniapp/zoom-calendar?intent=booking'] },
-        createElement(
-          Routes,
-          undefined,
-          createElement(Route, {
-            path: '/miniapp/zoom-calendar',
-            element: createElement(CleanMiniAppZoomCalendar),
-          }),
-        ),
-      ),
-    )
-
-    mockUpcomingSessionData = previousUpcomingSession
-
-    expect(markup).toContain('ТВОЄ ПИТАННЯ')
-    expect(markup).toContain(
-      'Хочу розібрати, чому я постійно розпорошуюсь між різними задачами й не можу втримати фокус на одній головній цілі.',
-    )
-    expect(markup).toContain('№1 У ЧЕРЗІ')
-    expect(markup).not.toContain('Учасники ще не залишили питання')
+  it('shows only the own question from the canonical USER DTO in details', async () => {
+    calendarFixture = [calendarSession({ myQuestion: { text: 'Моє приватне питання', position: 1 }, questionPreviews: [] })]
+    const dom = await mountCalendar()
+    await openHistoryRow(dom, 'Майбутня практика')
+    expect(dom.textContent).toContain('Моє приватне питання')
+    expect(dom.textContent).not.toContain('Чуже приватне питання')
+    expect(calendarFixture[0].questionPreviews).toEqual([])
   })
 
   it('hides ended sessions and returns an honest empty state when nothing upcoming remains', () => {
@@ -1181,7 +1082,7 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
         '2026-08-03T15:00:00.000Z',
         new Date('2026-08-03T13:00:00.000Z'),
       ),
-    ).toBe('Сьогодні · 18:00')
+    ).toBe('Сьогодні · 18:00 (час за Києвом)')
   })
 
   it('formats a next-day nearest session as tomorrow in Kyiv time', () => {
@@ -1190,7 +1091,7 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
         '2026-08-04T15:00:00.000Z',
         new Date('2026-08-03T13:00:00.000Z'),
       ),
-    ).toBe('Завтра · 18:00')
+    ).toBe('Завтра · 18:00 (час за Києвом)')
   })
 
   it('formats a later nearest session as an absolute Kyiv date and time', () => {
@@ -1199,7 +1100,7 @@ expect(mockRegisterAttendee).not.toHaveBeenCalled()
         '2026-08-06T15:00:00.000Z',
         new Date('2026-08-03T13:00:00.000Z'),
       ),
-    ).toBe('6 серпня · 18:00')
+    ).toBe('6 серпня · 18:00 (час за Києвом)')
   })
 
   it('keeps an active session as nearest until its effective end', () => {

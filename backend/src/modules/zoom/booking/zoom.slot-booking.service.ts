@@ -136,20 +136,57 @@ export async function unbookSlot(
   sessionId: string,
   userId: string
 ): Promise<void> {
-  const session = await prisma.zoomSession.findUniqueOrThrow({
-    where: { id: sessionId },
+  const cancelled = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT 1
+      FROM "ZoomSession"
+      WHERE id = ${sessionId}
+      FOR UPDATE
+    `
+    const session = await tx.zoomSession.findUniqueOrThrow({ where: { id: sessionId } })
+    const cutoff = new Date(session.scheduledAt.getTime() - 24 * 60 * 60 * 1000)
+    if (new Date() >= cutoff) throw new Error('too_late')
+
+    const attendee = await tx.zoomSessionAttendee.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+      select: { id: true },
+    })
+    if (!attendee) return false
+
+    // Event is the existing durable, user-scoped audit owner.  It has no
+    // delivery rows, so this fact cannot enqueue or replay a notification.
+    await tx.event.create({
+      data: {
+        id: `zoom-booking-cancelled:${attendee.id}`,
+        userId,
+        type: 'ZOOM_BOOKING_CANCELLED',
+        source: 'zoom-booking',
+        state: 'RECORDED',
+        payload: {
+          attendeeId: attendee.id,
+          sessionId: session.id,
+          scheduledAt: session.scheduledAt.toISOString(),
+          topic: session.topic,
+          type: session.type,
+        },
+      },
+    })
+    await tx.zoomSessionAttendee.delete({ where: { id: attendee.id } })
+
+    const meta = (session.requests as Record<string, unknown>) ?? {}
+    await tx.zoomSession.update({
+      where: { id: sessionId },
+      data: {
+        requests: {
+          ...meta,
+          slotStatus: 'available',
+        } as Prisma.InputJsonValue,
+      },
+    })
+    return true
   })
 
-  const cutoff = new Date(session.scheduledAt.getTime() - 24 * 60 * 60 * 1000)
-  if (new Date() >= cutoff) throw new Error('too_late')
-
-  await prisma.zoomSessionAttendee.deleteMany({ where: { sessionId, userId } })
-
-  const meta = (session.requests as Record<string, unknown>) ?? {}
-  await patchSessionRequests(sessionId, {
-    ...meta,
-    slotStatus: 'available',
-  } as unknown as Prisma.InputJsonValue)
+  if (!cancelled) return
 
   void afterZoomOperation(bot, {
     operation: 'unbook',

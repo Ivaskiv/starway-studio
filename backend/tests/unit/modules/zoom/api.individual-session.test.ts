@@ -23,11 +23,24 @@ const mockGetIndividualCheckoutUrl = vi.fn()
 const mockCreateUserIndividualRequest = vi.fn()
 const mockNotifyPrivateSessionRequest = vi.fn()
 const mockPrismaCheckoutSessionFindFirst = vi.fn()
+const mockPrismaEventFindMany = vi.fn()
 const mockGetIndividualAvailabilityForScheduledAt = vi.fn()
 const mockGetIndividualAvailabilitySummary = vi.fn()
 const mockGetAvailability = vi.fn()
 const mockGetAvailabilityWeek = vi.fn()
 const mockSaveAvailabilityWeek = vi.fn()
+const mockDeleteFreeIndividualSlot = vi.fn()
+const mockGetEligibleBattleOpponents = vi.fn()
+const mockAppendFile = vi.fn()
+const mockLoggerInfo = vi.fn()
+
+vi.mock('node:fs/promises', () => ({
+  appendFile: (...args: unknown[]) => mockAppendFile(...args),
+}))
+
+vi.mock('../../../../src/utils/logger.js', () => ({
+  logger: { info: (...args: unknown[]) => mockLoggerInfo(...args) },
+}))
 
 vi.mock('../../../../src/db/client.js', () => ({
   prisma: {
@@ -45,6 +58,9 @@ vi.mock('../../../../src/db/client.js', () => ({
     checkoutSession: {
       findFirst: (...args: unknown[]) => mockPrismaCheckoutSessionFindFirst(...args),
     },
+    event: {
+      findMany: (...args: unknown[]) => mockPrismaEventFindMany(...args),
+    },
   },
 }))
 
@@ -58,9 +74,14 @@ vi.mock('../../../../src/modules/zoom/core/zoom.operations.service.js', () => ({
   afterZoomOperation: (...args: unknown[]) => mockAfterZoomOperation(...args),
 }))
 
+vi.mock('../../../../src/modules/zoom/core/zoom.session.service.js', () => ({
+  deleteFreeIndividualSlot: (...args: unknown[]) => mockDeleteFreeIndividualSlot(...args),
+}))
+
 vi.mock('../../../../src/modules/zoom/commerce/zoom.commerce-request.service.js', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../../../src/modules/zoom/commerce/zoom.commerce-request.service.js')>(),
   getCommerceCheckoutUrl: (...args: unknown[]) => mockGetIndividualCheckoutUrl(...args),
+  getExistingIndividualCheckoutUrl: (...args: unknown[]) => mockGetIndividualCheckoutUrl(...args),
   createRequest: (...args: unknown[]) => mockCreateCommerceRequest(...args),
   createUserIndividualRequest: (...args: unknown[]) => mockCreateUserIndividualRequest(...args),
   approveRequest: (...args: unknown[]) => mockApproveCommerceRequest(...args),
@@ -93,12 +114,19 @@ vi.mock('../../../../src/modules/zoom/index.js', () => ({
   createFullSession: (...args: unknown[]) => mockCreateFullSession(...args),
   registerAttendee: (...args: unknown[]) => mockRegisterAttendee(...args),
   updateSession: (...args: unknown[]) => mockUpdateSession(...args),
-  getCalendarSessions: (...args: unknown[]) => mockGetCalendarSessions(...args),
+  getCalendarSessions: async (...args: unknown[]) => {
+    const rows = await mockGetCalendarSessions(...args)
+    const input = args[0] as { role?: string; expertId?: string }
+    return input.role === 'coach' && Array.isArray(rows)
+      ? rows.map((row) => ({ expertId: input.expertId, ...row }))
+      : rows
+  },
 }))
 
 vi.mock('../../../../src/modules/zoom/battle/battle.service.js', () => ({
   acceptBattle: vi.fn(),
   declineBattle: vi.fn(),
+  getEligibleBattleOpponents: (...args: unknown[]) => mockGetEligibleBattleOpponents(...args),
   logBattleProgress: (...args: unknown[]) => mockLogBattleProgress(...args),
   notifyBattleCreatedByCoach: (...args: unknown[]) => mockNotifyBattleCreatedByCoach(...args),
   recordBattleResult: vi.fn(),
@@ -107,10 +135,13 @@ vi.mock('../../../../src/modules/zoom/battle/battle.service.js', () => ({
 
 import {
   handleCreateSession,
+  handleDeleteFreeIndividualSlot,
   handleCreateUserIndividualRequest,
+  handleApproveCommerceRequest,
   handleGetCalendarSessions,
   handleGetIndividualAvailabilitySummary,
   handleGetAvailabilityWeek,
+  handleInitiateBattle,
   handleLogBattleProgress,
   handleSetBattleGoal,
   handleSaveAvailabilityWeek,
@@ -118,10 +149,21 @@ import {
 } from '../../../../src/modules/zoom/api/zoom.admin.handler.js'
 
 function createResponse() {
-  return {
-    status: vi.fn().mockReturnThis(),
+  const finishListeners = new Map<string, () => void>()
+  const response = {
+    statusCode: 200,
+    status: vi.fn((statusCode: number) => {
+      response.statusCode = statusCode
+      return response
+    }),
     json: vi.fn().mockReturnThis(),
+    once: vi.fn((event: string, listener: () => void) => {
+      finishListeners.set(event, listener)
+      return response
+    }),
+    finish: () => finishListeners.get('finish')?.(),
   }
+  return response
 }
 
 function createRequest(body: Record<string, unknown> = {}) {
@@ -145,6 +187,7 @@ describe('zoom session participant contract', () => {
     mockCreateCommerceRequest.mockResolvedValue({ id: 'commerce-1', status: 'REQUESTED' })
     mockGetCommerceCalendarRequests.mockResolvedValue([])
     mockGetUserCalendarRequestsForWindow.mockResolvedValue([])
+    mockPrismaEventFindMany.mockResolvedValue([])
     mockCreateUserIndividualRequest.mockResolvedValue({
       request: { id: 'commerce-1', status: 'REQUESTED' },
       session: { id: 'session-1' },
@@ -166,6 +209,64 @@ describe('zoom session participant contract', () => {
     }])
     mockGetAvailabilityWeek.mockResolvedValue([])
     mockSaveAvailabilityWeek.mockResolvedValue(undefined)
+    mockDeleteFreeIndividualSlot.mockResolvedValue({ id: 'free-slot-1' })
+    mockGetEligibleBattleOpponents.mockResolvedValue([])
+    mockAppendFile.mockResolvedValue(undefined)
+  })
+
+  it('binds group questions to attendee user IDs only for the owning coach and hides other questions from users', async () => {
+    const row = { id: 'group-owned', expertId: 'expert-1', scheduledAt: new Date('2099-11-02T17:00:00Z'), topic: 'Практика', status: 'SCHEDULED', requests: { type: 'group_practice' }, attendees: [
+      { userId: 'a', user: { firstName: 'А', lastName: null, email: null }, goalText: null, progress: [] },
+      { userId: 'b', user: { firstName: 'Б', lastName: null, email: null }, goalText: null, progress: [] },
+      { userId: 'c', user: { firstName: 'В', lastName: null, email: null }, goalText: null, progress: [] },
+    ], _count: { attendees: 3 } }
+    mockGetCalendarSessions.mockResolvedValue([row])
+    mockGetQuestionSummariesBySessionId.mockResolvedValue(new Map([['group-owned', { questionPreviews: ['питання B', 'питання A'], questionsCount: 2, remainingQuestionsCount: 0, myQuestion: { text: 'питання A', position: 1 }, questionsByUser: new Map([['a', 'питання A'], ['b', 'питання B']]) }]]))
+    const request = (role: string, id: string) => ({ user: { id }, query: { from: '2099-11-01T00:00:00Z', to: '2099-11-30T00:00:00Z', role } })
+    const coach = createResponse()
+    await handleGetCalendarSessions(request('coach', 'coach-user-1') as never, coach as never, vi.fn())
+    expect(coach.json.mock.calls[0][0][0].attendees).toEqual([
+      expect.objectContaining({ userId: 'a', question: 'питання A' }),
+      expect.objectContaining({ userId: 'b', question: 'питання B' }),
+      expect.objectContaining({ userId: 'c', question: null }),
+    ])
+    const user = createResponse()
+    await handleGetCalendarSessions(request('user', 'a') as never, user as never, vi.fn())
+    expect(JSON.stringify(user.json.mock.calls[0][0])).not.toContain('питання B')
+    const foreignCoach = createResponse()
+    mockPrismaUserFindUnique.mockResolvedValue({ expertId: 'expert-2' })
+    await handleGetCalendarSessions(request('coach', 'foreign') as never, foreignCoach as never, vi.fn())
+    expect(JSON.stringify(foreignCoach.json.mock.calls[0][0])).not.toContain('питання A')
+    expect(foreignCoach.json.mock.calls[0][0]).toEqual([])
+  })
+
+  it('preserves approval conflict responses and emits a redacted development diagnostic', async () => {
+    const response = createResponse()
+    const next = vi.fn()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'development'
+    mockApproveCommerceRequest.mockRejectedValue(new Error('COMMERCE_SLOT_OCCUPIED'))
+
+    try {
+      await handleApproveCommerceRequest(createRequest({}) as never, response as never, next)
+
+      expect(response.status).toHaveBeenCalledWith(409)
+      expect(response.json).toHaveBeenCalledWith({ error: 'COMMERCE_SLOT_OCCUPIED' })
+      expect(next).not.toHaveBeenCalled()
+      expect(consoleError).toHaveBeenCalledWith(
+        '[ZOOM_COMMERCE_APPROVAL_FAILED]',
+        expect.stringContaining('"errorCode":"COMMERCE_SLOT_OCCUPIED"'),
+      )
+      expect(mockAppendFile).toHaveBeenCalledWith(
+        '/tmp/starway-zoom-commerce-approval-error.log',
+        expect.stringContaining('"httpStatus":409'),
+        'utf8',
+      )
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv
+      consoleError.mockRestore()
+    }
   })
 
   it('serves one bounded individual availability summary for the authenticated expert', async () => {
@@ -208,6 +309,52 @@ describe('zoom session participant contract', () => {
     )
     expect(mockSaveAvailabilityWeek).toHaveBeenCalledWith({ expertId: 'expert-1', from: '2026-09-28', days: [change] })
     expect(saveResponse.status).toHaveBeenCalledWith(200)
+  })
+
+  it('lets only an authenticated coach delete a free individual slot through the canonical boundary', async () => {
+    const response = createResponse()
+
+    await handleDeleteFreeIndividualSlot(
+      { user: { id: 'coach-user-1' }, params: { id: 'free-slot-1' } } as never,
+      response as never,
+      vi.fn(),
+    )
+
+    expect(mockDeleteFreeIndividualSlot).toHaveBeenCalledWith({
+      sessionId: 'free-slot-1', expertId: 'expert-1',
+    })
+    expect(response.status).toHaveBeenCalledWith(200)
+    expect(response.json).toHaveBeenCalledWith({ id: 'free-slot-1' })
+
+    const nonCoachResponse = createResponse()
+    mockPrismaUserFindUnique.mockResolvedValueOnce({ expertId: null })
+    await handleDeleteFreeIndividualSlot(
+      { user: { id: 'user-1' }, params: { id: 'free-slot-1' } } as never,
+      nonCoachResponse as never,
+      vi.fn(),
+    )
+    expect(nonCoachResponse.status).toHaveBeenCalledWith(403)
+    expect(nonCoachResponse.json).toHaveBeenCalledWith({ error: 'forbidden' })
+    expect(mockDeleteFreeIndividualSlot).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an initiation target outside the canonical eligible-opponents result', async () => {
+    const response = createResponse()
+
+    await handleInitiateBattle(
+      {
+        user: { id: 'user-1' },
+        body: { challengerId: 'user-1', opponentId: 'user-2' },
+      } as never,
+      response as never,
+      vi.fn(),
+    )
+
+    expect(mockGetEligibleBattleOpponents).toHaveBeenCalledWith({
+      userId: 'user-1', expertId: 'expert-1',
+    })
+    expect(response.status).toHaveBeenCalledWith(403)
+    expect(response.json).toHaveBeenCalledWith({ error: 'opponent_not_eligible' })
   })
 
   it('rejects an individual session without exactly one selected user', async () => {
@@ -906,6 +1053,137 @@ describe('zoom session participant contract', () => {
     ])
   })
 
+  it('projects a registered user\'s saved group-practice question after a calendar reload', async () => {
+    mockGetCalendarSessions.mockResolvedValue([
+      {
+        id: 'group-session-1',
+        scheduledAt: new Date('2026-10-26T17:00:00.000Z'),
+        topic: 'ФОКУС · Zoom-практика',
+        status: 'SCHEDULED',
+        requests: { type: 'group_practice' },
+        attendees: [{ userId: 'user-1', goalText: null, progress: [] }],
+        _count: { attendees: 1 },
+        isMyBooking: true,
+      },
+    ])
+    mockGetQuestionSummariesBySessionId.mockResolvedValue(new Map([
+      ['group-session-1', {
+        questionPreviews: ['Як підготуватися?'],
+        questionsCount: 1,
+        remainingQuestionsCount: 0,
+        myQuestion: { text: 'Як підготуватися?', position: 1 },
+      }],
+    ]))
+    const response = createResponse()
+
+    await handleGetCalendarSessions(
+      {
+        user: { id: 'user-1' },
+        query: {
+          from: '2026-10-20T00:00:00.000Z',
+          to: '2026-10-31T23:59:59.000Z',
+          role: 'user',
+        },
+      } as never,
+      response as never,
+      vi.fn(),
+    )
+
+    expect(mockGetQuestionSummariesBySessionId).toHaveBeenCalledWith(
+      ['group-session-1'],
+      'user-1',
+    )
+    expect(response.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'group-session-1',
+        isMyBooking: true,
+        myQuestion: { text: 'Як підготуватися?', position: 1 },
+      }),
+    ])
+  })
+
+  it('projects reschedule history only for the owning coach while keeping distinct sessions', async () => {
+    mockGetCalendarSessions.mockResolvedValue([
+      { id: 'moved', expertId: 'expert-1', scheduledAt: new Date('2026-10-27T17:00:00Z'), topic: 'Практика', status: 'SCHEDULED', requests: { type: 'group_practice', previousScheduledAt: '2026-11-02T17:00:00.000Z' }, attendees: [], _count: { attendees: 0 } },
+      { id: 'ordinary', expertId: 'expert-1', scheduledAt: new Date('2026-10-26T17:00:00Z'), topic: 'Практика', status: 'SCHEDULED', requests: { type: 'group_practice' }, attendees: [], _count: { attendees: 0 } },
+      { id: 'foreign', expertId: 'expert-2', scheduledAt: new Date('2026-10-28T17:00:00Z'), topic: 'Практика', status: 'SCHEDULED', requests: { type: 'group_practice', previousScheduledAt: '2026-11-03T17:00:00.000Z' }, attendees: [], _count: { attendees: 0 } },
+    ])
+    mockPrismaEventFindMany.mockResolvedValue([{ id: `zoom-group-practice-rescheduled:moved:${new Date('2026-11-02T17:00:00.000Z').getTime()}:${new Date('2026-10-27T17:00:00Z').getTime()}`, createdAt: new Date('2026-10-27T14:52:56.000Z') }])
+    const response = createResponse()
+    await handleGetCalendarSessions({ user: { id: 'coach-user-1' }, query: { from: '2026-10-01T00:00:00Z', to: '2026-11-30T23:59:59Z', role: 'coach' } } as never, response as never, vi.fn())
+    const byId = new Map((response.json.mock.calls[0]?.[0] as Array<Record<string, unknown>>).map((session) => [session.id, session]))
+    expect(byId.size).toBe(2)
+    expect(byId.get('moved')).toMatchObject({ previousScheduledAt: '2026-11-02T17:00:00.000Z', rescheduledAt: '2026-10-27T14:52:56.000Z' })
+    expect(byId.get('ordinary')).not.toHaveProperty('previousScheduledAt')
+    expect(byId.has('foreign')).toBe(false)
+    mockPrismaEventFindMany.mockResolvedValue([])
+    const missingAudit = createResponse()
+    await handleGetCalendarSessions({ user: { id: 'coach-user-1' }, query: { from: '2026-10-01T00:00:00Z', to: '2026-11-30T23:59:59Z', role: 'coach' } } as never, missingAudit as never, vi.fn())
+    expect(missingAudit.json.mock.calls[0][0][0]).toMatchObject({ previousScheduledAt: '2026-11-02T17:00:00.000Z', rescheduledAt: null })
+  })
+
+  it('projects only the immediate prior time of an enrolled USER\'s future rescheduled Group Practice', async () => {
+    mockGetCalendarSessions.mockResolvedValue([
+      {
+        id: 'own-rescheduled-group', scheduledAt: new Date('2026-11-02T18:00:00.000Z'), topic: 'ФОКУС',
+        status: 'SCHEDULED', requests: { type: 'group_practice', previousScheduledAt: '2026-10-26T18:00:00.000Z' },
+        attendees: [{ userId: 'user-1', goalText: null, progress: [] }], _count: { attendees: 1 }, isMyBooking: true,
+      },
+      {
+        id: 'foreign-rescheduled-group', scheduledAt: new Date('2026-11-02T18:00:00.000Z'), topic: 'ФОКУС',
+        status: 'SCHEDULED', requests: { type: 'group_practice', previousScheduledAt: '2026-10-26T18:00:00.000Z' },
+        attendees: [{ userId: 'user-2', goalText: null, progress: [] }], _count: { attendees: 1 }, isMyBooking: false,
+      },
+      {
+        id: 'twice-rescheduled-group', scheduledAt: new Date('2026-11-09T18:00:00.000Z'), topic: 'ФОКУС',
+        status: 'SCHEDULED', requests: {
+          type: 'group_practice',
+          previousScheduledAt: '2026-11-02T18:00:00.000Z',
+          rescheduleHistory: [
+            { oldScheduledAt: '2026-10-26T18:00:00.000Z', newScheduledAt: '2026-11-02T18:00:00.000Z' },
+            { oldScheduledAt: '2026-11-02T18:00:00.000Z', newScheduledAt: '2026-11-09T18:00:00.000Z' },
+          ],
+        },
+        attendees: [{ userId: 'user-1', goalText: null, progress: [] }], _count: { attendees: 1 }, isMyBooking: true,
+      },
+      {
+        id: 'individual-with-history', scheduledAt: new Date('2026-11-02T18:00:00.000Z'), topic: 'Індивідуальна',
+        status: 'SCHEDULED', requests: { type: 'individual', previousScheduledAt: '2026-10-26T18:00:00.000Z' },
+        attendees: [{ userId: 'user-1', goalText: null, progress: [] }], _count: { attendees: 1 }, isMyBooking: true,
+      },
+      {
+        id: 'group-without-history', scheduledAt: new Date('2026-11-02T18:00:00.000Z'), topic: 'ФОКУС',
+        status: 'SCHEDULED', requests: { type: 'group_practice' },
+        attendees: [{ userId: 'user-1', goalText: null, progress: [] }], _count: { attendees: 1 }, isMyBooking: true,
+      },
+      {
+        id: 'cancelled-commerce-history', scheduledAt: new Date('2026-11-02T18:00:00.000Z'), topic: 'Скасований запит',
+        status: 'SCHEDULED', requests: { type: 'individual' },
+        attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+    ])
+    mockGetUserCalendarRequestsForWindow.mockResolvedValue([
+      { id: 'cancelled-request', zoomSessionId: 'cancelled-commerce-history', requesterUserId: 'user-1', status: 'CANCELLED', amount: 1, currency: 'UAH' },
+    ])
+    const response = createResponse()
+
+    await handleGetCalendarSessions({
+      user: { id: 'user-1' },
+      query: { from: '2026-10-01T00:00:00.000Z', to: '2026-11-30T23:59:59.000Z', role: 'user' },
+    } as never, response as never, vi.fn())
+
+    const byId = new Map((response.json.mock.calls[0]?.[0] as Array<Record<string, unknown>>).map((session) => [session.id, session]))
+    expect(byId.get('own-rescheduled-group')).toMatchObject({ previousScheduledAt: '2026-10-26T18:00:00.000Z' })
+    expect(byId.get('twice-rescheduled-group')).toMatchObject({ previousScheduledAt: '2026-11-02T18:00:00.000Z' })
+    expect(byId.get('foreign-rescheduled-group')).not.toHaveProperty('previousScheduledAt')
+    expect(byId.get('individual-with-history')).not.toHaveProperty('previousScheduledAt')
+    expect(byId.get('group-without-history')).not.toHaveProperty('previousScheduledAt')
+    expect(byId.get('cancelled-commerce-history')).toMatchObject({
+      commerceRequestId: 'cancelled-request',
+      commerceStatus: 'CANCELLED',
+    })
+  })
+
   it.each([
     ['user', 'REQUESTED', '🟡 Очікує підтвердження'],
     ['user', 'APPROVED_PENDING_PAYMENT', '🟠 Очікує оплати'],
@@ -998,6 +1276,57 @@ describe('zoom session participant contract', () => {
     )
   })
 
+  it('projects the persisted submitted question into the USER requested individual calendar DTO', async () => {
+    mockGetCalendarSessions.mockResolvedValue([{
+      id: 'requested-session',
+      scheduledAt: new Date('2026-09-10T10:00:00.000Z'),
+      topic: 'Індивідуальна сесія',
+      status: 'SCHEDULED',
+      requests: { type: 'individual', maxSlots: 1 },
+      attendees: [],
+      _count: { attendees: 0 },
+      isMyBooking: false,
+    }])
+    mockGetUserCalendarRequestsForWindow.mockResolvedValue([{
+      id: 'requested-commerce-1',
+      zoomSessionId: 'requested-session',
+      requesterUserId: 'user-1',
+      status: 'REQUESTED',
+      amount: 1,
+      currency: 'UAH',
+    }])
+    mockPrismaEventFindMany.mockResolvedValue([{
+      id: 'zoom-context:requested-commerce-1',
+      payload: { requestId: 'requested-commerce-1', questionText: 'Як вибудувати наступний крок?' },
+    }])
+    const response = createResponse()
+
+    await handleGetCalendarSessions({
+      user: { id: 'user-1' },
+      query: {
+        from: '2026-09-01T00:00:00.000Z',
+        to: '2026-09-30T23:59:59.000Z',
+        role: 'user',
+      },
+    } as never, response as never, vi.fn())
+
+    expect(mockPrismaEventFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: { in: ['zoom-context:requested-commerce-1'] },
+        userId: 'user-1',
+        type: 'ZOOM_COMMERCE_CONTEXT',
+      }),
+    }))
+    expect(response.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        goalText: 'Як вибудувати наступний крок?',
+        commerceStatus: 'REQUESTED',
+        checkoutUrl: null,
+        isMyPendingPayment: false,
+      }),
+    ])
+  })
+
   it('projects the existing expert relation as real coach identity and preserves null when absent', async () => {
     mockGetCalendarSessions.mockResolvedValue([
       {
@@ -1082,6 +1411,113 @@ describe('zoom session participant contract', () => {
     ])
   })
 
+  it('projects disposable individual inventory from persisted commitment history, not from time or title', async () => {
+    mockGetCalendarSessions.mockResolvedValue([
+      {
+        id: 'empty-slot', scheduledAt: new Date('2026-09-08T08:00:00.000Z'), topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', requests: { type: 'individual', maxSlots: 1 }, attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+      {
+        id: 'pending-request', scheduledAt: new Date('2026-09-08T09:00:00.000Z'), topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', requests: { type: 'individual', maxSlots: 1 }, attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+      {
+        id: 'cancelled-commitment', scheduledAt: new Date('2026-09-08T10:00:00.000Z'), topic: 'Індивідуальна сесія',
+        status: 'CANCELLED', requests: { type: 'individual', maxSlots: 1 }, attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+      {
+        id: 'cancelled-empty-slot', scheduledAt: new Date('2026-09-08T10:30:00.000Z'), topic: 'Індивідуальна сесія',
+        status: 'CANCELLED', requests: { type: 'individual', maxSlots: 1 }, attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+      {
+        id: 'completed-session', scheduledAt: new Date('2026-09-08T11:00:00.000Z'), topic: 'Індивідуальна сесія',
+        status: 'COMPLETED', requests: { type: 'individual', maxSlots: 1 }, attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+    ])
+    mockGetCommerceCalendarRequests.mockResolvedValue([
+      { id: 'request-1', zoomSessionId: 'pending-request', requesterUserId: 'user-1', status: 'REQUESTED', amount: 1, currency: 'UAH' },
+      { id: 'request-2', zoomSessionId: 'cancelled-commitment', requesterUserId: 'user-2', status: 'CANCELLED', amount: 1, currency: 'UAH' },
+    ])
+    const response = createResponse()
+
+    await handleGetCalendarSessions({
+      user: { id: 'coach-user-1' },
+      query: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-30T23:59:59.000Z', role: 'coach' },
+    } as never, response as never, vi.fn())
+
+    expect(response.json).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'empty-slot', isDisposableIndividualSlot: true }),
+      expect.objectContaining({ id: 'pending-request', isDisposableIndividualSlot: false }),
+      expect.objectContaining({ id: 'cancelled-commitment', isDisposableIndividualSlot: false }),
+      expect.objectContaining({ id: 'cancelled-empty-slot', isDisposableIndividualSlot: true }),
+      expect.objectContaining({ id: 'completed-session', isDisposableIndividualSlot: false }),
+    ])
+  })
+
+  it('emits the scoped calendar HTTP diagnostic from the final USER response envelope only', async () => {
+    const canonicalUserId = 'e8262934-9454-4926-b734-65d03bca699e'
+    mockGetCalendarSessions.mockResolvedValue([
+      {
+        id: 'cancelled-owned-session', scheduledAt: new Date('2026-09-08T10:00:00.000Z'), topic: 'Індивідуальна сесія',
+        status: 'SCHEDULED', requests: { type: 'individual', maxSlots: 1 }, attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+      {
+        id: 'cancelled-unowned-session', scheduledAt: new Date('2026-09-08T11:00:00.000Z'), topic: 'Індивідуальна сесія',
+        status: 'CANCELLED', requests: { type: 'individual', maxSlots: 1 }, attendees: [], _count: { attendees: 0 }, isMyBooking: false,
+      },
+    ])
+    mockGetUserCalendarRequestsForWindow.mockResolvedValue([
+      { id: 'owned1234-request', zoomSessionId: 'cancelled-owned-session', requesterUserId: canonicalUserId, status: 'CANCELLED', amount: 1, currency: 'UAH' },
+    ])
+    const response = createResponse()
+    const request = {
+      user: { id: canonicalUserId },
+      originalUrl: '/api/zoom/sessions/calendar?from=private&to=private',
+      query: { from: '2026-09-01T00:00:00.000Z', to: '2026-09-30T23:59:59.000Z', role: 'user' },
+    }
+
+    await handleGetCalendarSessions(request as never, response as never, vi.fn())
+
+    const responseEnvelope = response.json.mock.calls[0]?.[0]
+    expect(response.status).toHaveBeenCalledWith(200)
+    expect(responseEnvelope).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'cancelled-owned-session',
+        commerceRequestId: 'owned1234-request',
+        commerceStatus: 'CANCELLED',
+        status: 'SCHEDULED',
+      }),
+      expect.objectContaining({ id: 'cancelled-unowned-session', commerceRequestId: null }),
+    ]))
+    response.finish()
+
+    expect(mockLoggerInfo).toHaveBeenCalledTimes(1)
+    const diagnostic = String(mockLoggerInfo.mock.calls[0]?.[0])
+    expect(diagnostic).toContain('ZOOM_CALENDAR_HTTP_DIAG_236')
+    expect(diagnostic).toContain('\"finalHttpStatus\":200')
+    expect(diagnostic).toContain('\"calendarRecordsCount\":2')
+    expect(diagnostic).toContain('\"userOwnedCancelledCount\":1')
+    expect(diagnostic).toContain('\"cancelledRequestPrefixes\":[\"owned123\"]')
+    expect(diagnostic).not.toContain(canonicalUserId)
+    expect(diagnostic).not.toContain('private')
+    expect(diagnostic).not.toContain('Authorization')
+
+    const otherUserResponse = createResponse()
+    await handleGetCalendarSessions({
+      user: { id: 'other-user' },
+      query: request.query,
+    } as never, otherUserResponse as never, vi.fn())
+    otherUserResponse.finish()
+    const coachResponse = createResponse()
+    await handleGetCalendarSessions({
+      user: { id: canonicalUserId },
+      query: { ...request.query, role: 'coach' },
+    } as never, coachResponse as never, vi.fn())
+    coachResponse.finish()
+
+    expect(mockLoggerInfo).toHaveBeenCalledTimes(1)
+  })
+
   it('exposes completed outcome and recording capability for coach calendar DTO', async () => {
     mockGetCalendarSessions.mockResolvedValue([
       {
@@ -1151,7 +1587,13 @@ describe('zoom session participant contract', () => {
         topic: 'Групова практика',
         status: 'COMPLETED',
         requests: { type: 'group_practice' },
-        postSessionReport: { audioUrl: 'https://zoom.us/rec/1', recordingAvailable: true },
+        postSessionReport: {
+          audioUrl: 'https://zoom.us/rec/1',
+          recordingAvailable: true,
+          actualAttendeeCount: 3,
+          topic: 'Закрита тема практики',
+          summary: 'Підсумок для зареєстрованих учасників.',
+        },
         attendees: [],
         _count: { attendees: 3 },
         isMyBooking: false,
@@ -1162,8 +1604,21 @@ describe('zoom session participant contract', () => {
         topic: 'Групова практика',
         status: 'COMPLETED',
         requests: { type: 'group_practice' },
-        postSessionReport: { audioUrl: 'https://zoom.us/rec/2', recordingAvailable: true },
-        attendees: [],
+        postSessionReport: {
+          audioUrl: 'https://zoom.us/rec/2',
+          recordingAvailable: true,
+          actualAttendeeCount: 5,
+          topic: 'Причини відкладень дій',
+          summary: 'Всі пройшли практику успішно',
+        },
+        attendees: [
+          {
+            userId: 'user-1', goalText: null, progress: [], attended: true,
+            selfReportedAttended: true, selfReportedAt: new Date('2026-09-10T12:00:00.000Z'),
+            user: { firstName: 'Vira', lastName: null, email: 'vira@example.com' },
+          },
+          { userId: 'user-2', goalText: null, progress: [], attended: true, user: { firstName: 'Anna', lastName: null, email: 'anna@example.com' } },
+        ],
         _count: { attendees: 3 },
         isMyBooking: true,
       },
@@ -1185,8 +1640,38 @@ describe('zoom session participant contract', () => {
 
     expect(response.status).toHaveBeenCalledWith(200)
     expect(response.json).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'session-1', canViewRecording: false }),
-      expect.objectContaining({ id: 'session-2', canViewRecording: true }),
+      expect.objectContaining({ id: 'session-1', canViewRecording: false, recordingUrl: null }),
+      expect.objectContaining({
+        id: 'session-2',
+        canViewRecording: true,
+        recordingUrl: 'https://zoom.us/rec/2',
+        isMyAttendanceConfirmed: true,
+        canSelfReportAttendance: true,
+        selfReportedAttended: true,
+        selfReportedAt: '2026-09-10T12:00:00.000Z',
+        actualAttendeeCount: 5,
+        outcomeTopic: 'Причини відкладень дій',
+        summary: 'Всі пройшли практику успішно',
+        attendees: [{ userId: 'user-1', name: 'Vira', attended: true }],
+      }),
+    ])
+
+    const result = response.json.mock.calls[0]?.[0] as Array<Record<string, unknown>>
+    const publicCompletedGroup = result.find((session) => session.id === 'session-1')!
+    const completedUserGroup = result.find((session) => session.id === 'session-2')!
+    expect(publicCompletedGroup).not.toHaveProperty('actualAttendeeCount')
+    expect(publicCompletedGroup).not.toHaveProperty('outcomeTopic')
+    expect(publicCompletedGroup).not.toHaveProperty('summary')
+    expect(completedUserGroup).toMatchObject({
+      actualAttendeeCount: 5,
+      outcomeTopic: 'Причини відкладень дій',
+      summary: 'Всі пройшли практику успішно',
+      canSelfReportAttendance: true,
+      selfReportedAttended: true,
+      selfReportedAt: '2026-09-10T12:00:00.000Z',
+    })
+    expect(completedUserGroup.attendees).toEqual([
+      { userId: 'user-1', name: 'Vira', attended: true },
     ])
   })
 

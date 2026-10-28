@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockZoomSessionFindMany = vi.fn()
+const mockZoomSessionFindUnique = vi.fn()
+const mockUserFindMany = vi.fn()
 const mockNotificationJobFindFirst = vi.fn()
 const mockNotificationFindFirst = vi.fn()
 const mockNotificationSchedule = vi.fn()
 const mockSendTelegramMessage = vi.fn()
+const mockExpireDueIndividualPaymentWindows = vi.fn()
+const mockProcessZoomPaymentLifecycleNotifications = vi.fn()
 
 const queuedKeys = new Set<string>()
 const deliveredKeys = new Set<string>()
@@ -13,6 +17,10 @@ vi.mock('../../../../src/db/client.ts', () => ({
   prisma: {
     zoomSession: {
       findMany: (...args: unknown[]) => mockZoomSessionFindMany(...args),
+      findUnique: (...args: unknown[]) => mockZoomSessionFindUnique(...args),
+    },
+    user: {
+      findMany: (...args: unknown[]) => mockUserFindMany(...args),
     },
     notificationJob: {
       findFirst: (...args: unknown[]) => mockNotificationJobFindFirst(...args),
@@ -28,6 +36,18 @@ vi.mock('../../../../src/services/notifications/NotificationService.ts', () => (
   notificationService: {
     schedule: (...args: unknown[]) => mockNotificationSchedule(...args),
   },
+}))
+
+vi.mock('../../../../src/modules/zoom/commerce/zoom.commerce-request.service.ts', () => ({
+  expireDueIndividualPaymentWindows: (...args: unknown[]) => mockExpireDueIndividualPaymentWindows(...args),
+  processZoomPaymentLifecycleNotifications: (...args: unknown[]) => mockProcessZoomPaymentLifecycleNotifications(...args),
+  getCommerceCheckoutUrl: vi.fn(),
+  hasPaidIndividualParticipation: vi.fn(),
+  isLegacyIndividualSession: vi.fn(() => false),
+}))
+
+vi.mock('../../../../src/modules/zoom/commerce/zoom.commerce-telegram.ts', () => ({
+  processZoomPaymentLifecycleNotifications: (...args: unknown[]) => mockProcessZoomPaymentLifecycleNotifications(...args),
 }))
 
 vi.mock('../../../../src/lib/telegram.ts', () => ({
@@ -86,6 +106,15 @@ describe('scanZoomSessionReminders', () => {
       queuedKeys.add(`${userId}:${String(payload.flow_timer_id)}:${String(payload.sessionId)}`)
       return { id: `job-${queuedKeys.size}` }
     })
+    mockZoomSessionFindUnique.mockResolvedValue({
+      status: 'SCHEDULED',
+      type: 'GROUP',
+      expertId: 'expert-1',
+      requests: {},
+    })
+    mockUserFindMany.mockResolvedValue([])
+    mockExpireDueIndividualPaymentWindows.mockResolvedValue(undefined)
+    mockProcessZoomPaymentLifecycleNotifications.mockResolvedValue(undefined)
     mockSendTelegramMessage.mockResolvedValue(undefined)
   })
 

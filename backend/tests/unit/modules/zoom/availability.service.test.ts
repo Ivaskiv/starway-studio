@@ -6,6 +6,7 @@ const mockZoomSessionFindFirst = vi.fn()
 const mockZoomSessionFindMany = vi.fn()
 const mockZoomCommerceRequestFindMany = vi.fn()
 const mockCreateFullSession = vi.fn()
+const mockFindCanonicalMondayGroupPractice = vi.fn()
 const mockAvailabilityOverrideFindUnique = vi.fn()
 const mockAvailabilityOverrideFindMany = vi.fn()
 const mockAvailabilityOverrideUpsert = vi.fn()
@@ -35,8 +36,9 @@ vi.mock('../../../../src/db/client.js', () => ({
   },
 }))
 
-vi.mock('../../../../src/modules/zoom/index.js', () => ({
+vi.mock('../../../../src/modules/zoom/core/zoom.session.service.js', () => ({
   createFullSession: (...args: unknown[]) => mockCreateFullSession(...args),
+  findCanonicalMondayGroupPractice: (...args: unknown[]) => mockFindCanonicalMondayGroupPractice(...args),
 }))
 
 import {
@@ -54,6 +56,7 @@ describe('generateSessionsFromAvailability', () => {
     vi.clearAllMocks()
     mockZoomSessionFindMany.mockResolvedValue([])
     mockZoomCommerceRequestFindMany.mockResolvedValue([])
+    mockFindCanonicalMondayGroupPractice.mockResolvedValue(null)
   })
 
   it('uses slot timezone instead of hardcoded Kyiv offset', async () => {
@@ -180,6 +183,37 @@ describe('generateSessionsFromAvailability', () => {
         notifiedAt2h: null,
       },
     })
+  })
+
+  it('materializes one canonical Monday group practice when availability contains two Monday group slots', async () => {
+    mockExpertFindUnique.mockResolvedValue({
+      zoomAvailability: [
+        {
+          id: 'mon-focus', dayOfWeek: 1, hour: 19, minute: 0,
+          timezone: 'Europe/Kyiv', sessionType: 'group_practice', maxSlots: 50,
+          priceCents: 0, durationMinutes: 60, active: true,
+        },
+        {
+          id: 'legacy-monday-group', dayOfWeek: 1, hour: 20, minute: 0,
+          timezone: 'Europe/Kyiv', sessionType: 'group_practice', maxSlots: 50,
+          priceCents: 0, durationMinutes: 60, active: true,
+        },
+      ],
+    })
+    mockZoomSessionFindFirst.mockResolvedValue(null)
+    mockCreateFullSession.mockResolvedValue({ id: 'canonical-monday-group' })
+
+    await expect(generateSessionsFromAvailability(
+      'expert-1',
+      1,
+      new Date('2026-09-29T09:00:00.000Z'),
+    )).resolves.toEqual({ created: 1, skipped: 1 })
+
+    expect(mockCreateFullSession).toHaveBeenCalledTimes(1)
+    expect(mockCreateFullSession).toHaveBeenCalledWith(expect.objectContaining({
+      scheduledAt: new Date('2026-10-05T16:00:00.000Z'),
+      requests: expect.objectContaining({ type: 'group_practice' }),
+    }), expect.any(Object))
   })
 
   it('adds and materializes the canonical Monday 19:00 Kyiv group practice beside existing individual availability', async () => {

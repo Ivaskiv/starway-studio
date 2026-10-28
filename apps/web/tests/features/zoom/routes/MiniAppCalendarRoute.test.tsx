@@ -55,8 +55,8 @@ vi.mock('@/features/auth/hooks/useSystemState', () => ({
 }))
 
 vi.mock('@/features/zoom/CoachZoomPanel', () => ({
-  CoachZoomPanel: ({ expertId }: { expertId: string | null }) =>
-    createElement('section', undefined, `COACH_ZOOM_PANEL:${expertId ?? 'null'}`),
+  CoachZoomPanel: ({ expertId, requestId }: { expertId: string | null; requestId?: string | null }) =>
+    createElement('section', undefined, `COACH_ZOOM_PANEL:${expertId ?? 'null'}:${requestId ?? 'none'}`),
 }))
 
 vi.mock('@/features/zoom/UserZoomPanel', () => ({
@@ -113,7 +113,7 @@ describe('MiniAppCalendarRoute', () => {
 
     const markup = await renderMiniAppCalendarRoute()
 
-    expect(markup).toContain('COACH_ZOOM_PANEL:expert-1')
+    expect(markup).toContain('COACH_ZOOM_PANEL:expert-1:none')
     expect(markup).not.toContain('COACH calendar')
     expect(markup).not.toContain('USER calendar')
     expect(markup).toContain('data-miniapp-nav-variant="coach"')
@@ -165,6 +165,23 @@ describe('MiniAppCalendarRoute', () => {
     expect(userCalendarController.calls).toBe(0)
   })
 
+  it('keeps USER bottom-navigation clearance owned by MiniAppLayout', async () => {
+    routeState.auth.user = {
+      id: 'user-1',
+      role: 'USER',
+      activeRole: 'USER',
+    }
+    routeState.auth.role = 'USER'
+
+    const markup = await renderMiniAppCalendarRoute()
+
+    expect(markup).toContain(
+      '<div class="min-w-0 flex-1 overflow-y-auto pb-32"><main class="mx-auto w-full max-w-6xl px-4 py-4 pb-28"><section>USER_ZOOM_PANEL:user-1</section></main></div>',
+    )
+    expect(markup).toContain('data-miniapp-nav-variant="user"')
+    expect(markup.match(/miniapp-bottomnav-shell/g)).toHaveLength(1)
+  })
+
   it('derives the active Battle tab from the existing coach section URL', async () => {
     routeState.auth.user = {
       id: 'expert-user',
@@ -181,6 +198,22 @@ describe('MiniAppCalendarRoute', () => {
     expect(buttons[2]).toContain('aria-current="page"')
     expect(buttons[2]).toContain('Battle')
     expect(buttons[0]).not.toContain('aria-current="page"')
+  })
+
+  it('passes a requestId only into the authenticated Coach calendar', async () => {
+    routeState.auth.user = {
+      id: 'expert-user',
+      role: 'EXPERT',
+      activeRole: 'EXPERT',
+      expertId: 'expert-1',
+    }
+    routeState.auth.role = 'EXPERT'
+
+    const markup = await renderMiniAppCalendarRoute(
+      '/miniapp/zoom-calendar?zoomRole=coach&requestId=request-42',
+    )
+
+    expect(markup).toContain('COACH_ZOOM_PANEL:expert-1:request-42')
   })
 
   it('keeps every Coach nav item on a concrete calendar section route', () => {
@@ -259,12 +292,34 @@ describe('MiniAppCalendarRoute', () => {
     expect(markup).not.toContain('Спробувати ще раз')
   })
 
-  it('keeps Telegram session restoration owned by the calendar route for an unauthenticated direct open', () => {
+  it('leaves automatic Telegram session restoration to the session orchestrator', () => {
     const source = readFileSync(
       new URL('../../../../src/features/zoom/routes/MiniAppCalendarRoute.tsx', import.meta.url),
       'utf8',
     )
 
-    expect(source).toContain("if (!user?.id) void restoreSession('manual')")
+    expect(source).not.toContain("if (!user?.id) void restoreSession('manual')")
+  })
+
+  it('does not restart an authenticated Telegram session on repeated focus, load, or visibility events', async () => {
+    const { shouldRetryTelegramSessionRestore } = await vi.importActual<
+      typeof import('@/features/auth/context/SessionOrchestratorContext')
+    >('@/features/auth/context/SessionOrchestratorContext')
+    const authenticatedSession = {
+      isTelegramAuthContext: true,
+      visibilityState: 'visible' as DocumentVisibilityState,
+      isAuthenticated: true,
+      authRestoreStatus: 'ready' as const,
+    }
+
+    for (const event of ['focus', 'load', 'visibilitychange']) {
+      expect(shouldRetryTelegramSessionRestore(authenticatedSession), event).toBe(false)
+    }
+
+    expect(shouldRetryTelegramSessionRestore({
+      ...authenticatedSession,
+      isAuthenticated: false,
+      authRestoreStatus: 'failed',
+    })).toBe(true)
   })
 })

@@ -12,6 +12,7 @@ export {
   buildCanonicalFocusPaymentPreviewBlocks,
   resolveCanonicalFocusPaymentView,
   handleFocusPaymentAction,
+  handleTrialZoomPaymentAction,
   handleFocusPaymentIssue,
   handlePendingFocusPaymentEvidenceText,
   handlePendingFocusPaymentEvidenceAttachment,

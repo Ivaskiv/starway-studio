@@ -177,3 +177,34 @@ describe('TelegramDeliveryAdapter', () => {
     )
   })
 })
+
+describe('Focus DOJIM background delivery', () => {
+  it('routes a DOJIM block through the shared conversation renderer', async () => {
+    vi.resetModules()
+    const renderOutboundMock = vi.fn().mockResolvedValue(true)
+    vi.doMock('../../../../../../src/services/notifications/NotificationService.foundation.ts', () => ({
+      getConversationRenderer: () => ({ renderOutbound: renderOutboundMock }),
+    }))
+    vi.doMock('../../../../../../src/services/notifications/NotificationService.foundation.js', () => ({
+      getConversationRenderer: () => ({ renderOutbound: renderOutboundMock }),
+    }))
+
+    const { sendFocusDojimBlockMessage } = await import('../../../../../../src/services/notifications/NotificationService.telegram.ts')
+
+    await sendFocusDojimBlockMessage({
+      chatId: '777',
+      block: { type: 'text', text: 'Нагадування' },
+    })
+
+    expect(renderOutboundMock).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: '777' }),
+      expect.objectContaining({
+        cards: [expect.objectContaining({
+          kind: 'message',
+          text: 'Нагадування',
+          parseMode: 'HTML',
+        })],
+      }),
+    )
+  })
+})

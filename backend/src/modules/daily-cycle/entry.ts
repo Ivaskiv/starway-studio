@@ -191,7 +191,8 @@ export class DailyService {
    1. Daily entry helpers used by controllers
 ════════════════════════════════════════════════════════════════════════════ */
 
-export async function getOrCreateTodayEntry(userId: string, expertId: string): Promise<DailyEntryRow> {
+// Legacy name is retained for the service façade; this read must not create a row.
+export async function getOrCreateTodayEntry(userId: string, _expertId?: string): Promise<DailyEntryRow | null> {
   const cachedEntry = await getCachedTodayEntry(userId)
   if (cachedEntry) return cachedEntry as DailyEntryRow
 
@@ -207,24 +208,7 @@ export async function getOrCreateTodayEntry(userId: string, expertId: string): P
     return existing
   }
 
-  const entry = await prisma.dailyEntry.create({
-    data: {
-      userId,
-      expertId,
-      date: getJournalDayAnchor(new Date()),
-      status: DayStatus.PENDING,
-      state: DailyState.NEUTRAL,
-      choice: DailyChoice.PENDING,
-      drain: null,
-      dayFact: null,
-      aiAnalysis: null,
-      microSupport: Prisma.JsonNull,
-      content: Prisma.JsonNull,
-    },
-  })
-  syncUserStateFromEntry(entry)
-  await setCachedTodayEntry(userId, entry as unknown as Record<string, unknown>)
-  return entry
+  return null
 }
 
 export async function getDailyEntryForDate(userId: string, dateInput: string): Promise<DailyEntryRow | null> {

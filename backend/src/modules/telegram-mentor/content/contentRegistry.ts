@@ -37,6 +37,11 @@ export const telegramContentRegistry = {
       'Хочеш записатися на безплатну демо-сесію?',
     ].join('\n'),
     unknownIntent: 'Здається, я не до кінця зрозумів. Можеш переформулювати?',
+    trialZoomCheckout:
+      'Пробний Zoom — 1 грн.\n\nПісля підтвердженої оплати ти зможеш обрати одну групову Zoom-практику.',
+    trialZoomAlreadyUsed: 'Ти вже використала пробний Zoom.',
+    trialZoomCheckoutUnavailable:
+      'Не вдалося відкрити оплату пробного Zoom. Спробуй ще раз.',
   },
   buttons: {
     bookDemo: 'ЗАПИСАТИСЯ НА ДЕМО',
@@ -45,8 +50,26 @@ export const telegramContentRegistry = {
     openAbsystem: 'ВІДКРИТИ ABSYSTEM',
     chooseZoomDay: '🗓️ КАЛЕНДАР ПОДІЙ',
     focusChannel: 'ПЕРЕЙТИ В КАНАЛ ФОКУС',
+    trialZoom: 'ПРОБНИЙ ZOOM — 1 ГРН',
     continueTask: '▶️ ПРОДОВЖИТИ',
     dismissTask: '✕ ЗАКРИТИ',
+  },
+  zoomCommerce: {
+    approvalPendingHeading: '🕒 ОЧІКУЄ ОПЛАТИ',
+    approvalPendingBody:
+      'Коуч погодив твій запит. Сесія буде підтверджена після успішної оплати.',
+    approvalOpsHeading: '✅ ЗАПИТ СХВАЛЕНО',
+    approvalOpsStatus: '🕒 Статус: ОЧІКУЄ ОПЛАТИ',
+    paidHeading: '✅ ОПЛАТУ ПІДТВЕРДЖЕНО',
+    paidStatus: 'Статус: ОПЛАЧЕНО',
+    confirmedBooking: 'Запис підтверджено.',
+    paymentReminderHeading: 'НАГАДУВАННЯ ПРО ОПЛАТУ.',
+    paymentReminderBody: 'Твою індивідуальну Zoom-сесію погоджено, але оплату ще не підтверджено.',
+    paymentReminderKeepSlot: 'Щоб зберегти слот, заверши оплату.',
+    paymentReminderCta: 'ОПЛАТИТИ',
+    expirationBody: 'Час на оплату завершився. Слот звільнено.',
+    expirationChooseTimeCta: 'ОБРАТИ ІНШИЙ ЧАС',
+    paymentSupportCta: 'ПІДТРИМКА ЩОДО ОПЛАТИ',
   },
   system: {
     telegramIntelligenceConversationTitle: 'telegram-intelligence',

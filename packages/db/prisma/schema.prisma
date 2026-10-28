@@ -1487,6 +1487,8 @@ model ZoomSessionAttendee {
   sessionId String
   userId    String
   attended  Boolean     @default(false)
+  selfReportedAttended Boolean?
+  selfReportedAt DateTime?
   goalText  String?
   progress  Json        @default("[]")
   createdAt DateTime    @default(now())
@@ -1880,11 +1882,48 @@ model Event {
   payload   Json     @default("{}")
   createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id])
+  deliveries EventDelivery[]
 
   @@index([userId, createdAt])
   @@index([type, createdAt])
   @@index([source, createdAt])
   @@index([state, createdAt])
+}
+
+/// Per-recipient delivery state for durable business Events.  This is owned by
+/// the parent Event; it does not introduce another notification dispatcher.
+model EventDelivery {
+  id                 String              @id @default(cuid())
+  eventId            String
+  recipient          EventDeliveryRecipient
+  state              EventDeliveryState  @default(PENDING)
+  leaseToken         String?
+  leaseExpiresAt     DateTime?
+  attemptCount       Int                 @default(0)
+  attemptStartedAt   DateTime?
+  deliveredAt        DateTime?
+  telegramMessageId  String?
+  lastError          String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  event              Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, recipient])
+  @@index([state, leaseExpiresAt])
+}
+
+enum EventDeliveryRecipient {
+  USER
+  COACH
+  OPS
+}
+
+enum EventDeliveryState {
+  PENDING
+  SENDING
+  DELIVERED
+  UNKNOWN
+  SKIPPED
 }
 
 model RuntimeOutbox {

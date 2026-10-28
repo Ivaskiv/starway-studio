@@ -34,6 +34,32 @@ const OUTBOX_LOCK_SCOPE = 'runtime_outbox'
 const RUNTIME_OUTBOX_POLL_INTERVAL_MS = 5_000
 let runtimeOutboxPollTimer: NodeJS.Timeout | null = null
 
+function isEventUserForeignKeyError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: unknown; meta?: { field_name?: unknown; constraint?: unknown } }
+  if (candidate.code !== 'P2003') return false
+  const detail = String(candidate.meta?.field_name ?? candidate.meta?.constraint ?? '')
+  return detail === '' || detail.includes('Event_userId_fkey') || detail.includes('userId')
+}
+
+async function failPermanentlyInvalidOutboxUser(item: RuntimeOutboxProcessItem): Promise<void> {
+  await prisma.runtimeOutbox.update({
+    where: { id: item.id },
+    data: {
+      status: 'FAILED',
+      processedAt: new Date(),
+      attempts: { increment: 1 },
+      lastError: 'EVENT_USER_REFERENCE_MISSING',
+    },
+  })
+  console.warn('[RuntimeOutbox] terminal user reference failure', {
+    outboxId: item.id,
+    scope: item.scope,
+    type: item.type,
+    userId: item.userId,
+  })
+}
+
 function buildOutboxDedupeKey(input: RuntimeOutboxItem) {
   const runtime = buildRuntimeTelemetry({
     scope: input.scope,
@@ -133,6 +159,18 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
 
     let processed = 0
     for (const item of due) {
+      if (item.userId) {
+        const user = await prisma.user.findUnique({
+          where: { id: item.userId },
+          select: { id: true },
+        })
+        if (!user) {
+          await failPermanentlyInvalidOutboxUser(item)
+          processed += 1
+          continue
+        }
+      }
+
       const payload = item.payload as Prisma.JsonObject | null
       const runtime = payload?.runtime && typeof payload.runtime === 'object' && !Array.isArray(payload.runtime)
         ? payload.runtime as Record<string, unknown>
@@ -162,15 +200,24 @@ export async function processRuntimeOutbox(limit = 100): Promise<number> {
         continue
       }
 
-      await prisma.event.create({
-        data: {
-          ...(item.userId ? { userId: item.userId } : {}),
-          type: item.type,
-          source: item.source,
-          ...(item.state ? { state: item.state } : {}),
-          payload: payload as Prisma.InputJsonValue,
-        },
-      })
+      try {
+        await prisma.event.create({
+          data: {
+            ...(item.userId ? { userId: item.userId } : {}),
+            type: item.type,
+            source: item.source,
+            ...(item.state ? { state: item.state } : {}),
+            payload: payload as Prisma.InputJsonValue,
+          },
+        })
+      } catch (error) {
+        if (isEventUserForeignKeyError(error)) {
+          await failPermanentlyInvalidOutboxUser(item)
+          processed += 1
+          continue
+        }
+        throw error
+      }
 
       if (item.type === 'ZOOM_AUDIO_UPLOADED') {
         const zoomResult = await processZoomAudioOutboxItem(item, payload)

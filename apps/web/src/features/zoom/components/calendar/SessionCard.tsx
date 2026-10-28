@@ -9,6 +9,7 @@ import {
   useCompleteZoomSessionMutation,
   useLazyGetZoomCompletionDraftQuery,
   useCreateSwapRequestMutation,
+  useSaveSelfReportedAttendanceMutation,
   useUnbookSlotMutation,
 } from '../../zoom.api'
 import type {
@@ -18,6 +19,7 @@ import type {
 } from '../../zoom.types'
 import {
   formatUkrDate,
+  getIndividualPresentation,
   getNormalizedSessionType,
   getRemainingLabel,
   getSessionBadgeClass,
@@ -31,8 +33,11 @@ import {
   isPastDate,
   isPrivateSession,
   isZoomLinkActive,
+  isUserCalendarSession,
+  hasUserZoomCommitment,
   sessionStatusVariant,
 } from '../../zoom.utils'
+import { formatKyivTime, KYIV_TIME_LABEL } from '../../utils/zoomDateTime.utils'
 
 import { BookingStatus } from './BookingStatus'
 import { PRIMARY_BOOKING_BUTTON_CLASS } from './booking-ui'
@@ -75,14 +80,28 @@ export function buildZoomCompletionPayload({
   return payload
 }
 
+function formatCompletedGroupPracticeDateTime(
+  scheduledAt: string,
+  durationMinutes?: number,
+): string {
+  const startLabel = formatUkrDate(scheduledAt).replace(', ', ' · ')
+  if (!durationMinutes || durationMinutes <= 0) return startLabel
+
+  const endTime = formatKyivTime(new Date(new Date(scheduledAt).getTime() + durationMinutes * 60_000))
+  return `${startLabel}–${endTime}`
+}
+
 export function SessionCard({
   session,
   mode,
   userId,
   onClose,
+  showCloseControl = true,
   onEdit,
   onCancel,
+  onDeleteSlot,
   onRequestBooking,
+  onFindAvailableSlots,
   hasFocusAccess,
   onRestrictedGroupAction,
   onAddToCalendar,
@@ -92,9 +111,12 @@ export function SessionCard({
   mode: ZoomCalendarMode;
   userId: string;
   onClose: () => void;
+  showCloseControl?: boolean;
   onEdit?: (id: string) => void;
   onCancel?: (id: string) => void;
+  onDeleteSlot?: (id: string) => void;
   onRequestBooking?: (session: ZoomCalendarSession) => void;
+  onFindAvailableSlots?: () => void;
   hasFocusAccess?: boolean;
   onRestrictedGroupAction?: () => void;
   onAddToCalendar: (session: ZoomCalendarSession) => void;
@@ -109,6 +131,7 @@ export function SessionCard({
   const [createSwapRequest, { isLoading: creatingSwap }] = useCreateSwapRequestMutation();
   const [completeZoomSession, { isLoading: completing }] = useCompleteZoomSessionMutation();
   const [loadCompletionDraft, { isFetching: loadingCompletionDraft }] = useLazyGetZoomCompletionDraftQuery();
+  const [saveSelfReportedAttendance, { isLoading: savingSelfReportedAttendance }] = useSaveSelfReportedAttendanceMutation();
   const initialActualIds = session.attendees?.filter((attendee) => attendee.attended).map((attendee) => attendee.userId) ?? [];
   const [completionOpen, setCompletionOpen] = useState(initialCompletionOpen);
   const [actualParticipantUserIds, setActualParticipantUserIds] = useState<string[]>(initialActualIds);
@@ -119,6 +142,15 @@ export function SessionCard({
   const [completionDraftMessage, setCompletionDraftMessage] = useState<string | null>(null);
   const [completionDraftFailed, setCompletionDraftFailed] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [selfReportedAttended, setSelfReportedAttended] = useState(session.selfReportedAttended === true);
+  const [selfReportedSaved, setSelfReportedSaved] = useState(session.selfReportedAttended !== null && session.selfReportedAttended !== undefined);
+  const [selfReportedError, setSelfReportedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelfReportedAttended(session.selfReportedAttended === true);
+    setSelfReportedSaved(session.selfReportedAttended !== null && session.selfReportedAttended !== undefined);
+    setSelfReportedError(null);
+  }, [session.id, session.selfReportedAttended]);
 
   const maxSlots = (session.remainingSlots !== undefined && session.attendeesCount !== undefined)
     ? session.remainingSlots + session.attendeesCount
@@ -126,8 +158,22 @@ export function SessionCard({
   const isBattleReview = isBattleReviewSession(session);
   const isPrivate = isPrivateSession(session);
   const isGroupPractice = isGroupPracticeSession(session);
+  const isTerminalGroupPractice = isGroupPractice
+    && (session.status === 'COMPLETED' || session.status === 'CANCELLED');
+  const isTerminalCoachGroupPractice = mode === 'coach' && isTerminalGroupPractice;
+  const isCompletedGroupPractice = isGroupPractice && session.status === 'COMPLETED';
+  const isCompletedCoachGroupPractice = isTerminalCoachGroupPractice
+    && session.status === 'COMPLETED';
   const isIndividual = isIndividualSession(session);
   const isIntensive = isIntensiveSession(session);
+  const individualPresentation = getIndividualPresentation(session);
+  const isIndividualSlot = individualPresentation?.kind === 'INDIVIDUAL_SLOT'
+    && !(mode === 'user' && hasUserZoomCommitment(session));
+  const isExpiredIndividualSlot = individualPresentation?.state === 'INDIVIDUAL_SLOT_EXPIRED';
+  const isCancelledIndividualSlot = individualPresentation?.state === 'INDIVIDUAL_SLOT_CANCELLED';
+  const isCoachIndividualPresentation = mode === 'coach' && Boolean(individualPresentation);
+  const individualParticipantName = session.participantNames?.find((name) => Boolean(name?.trim()))
+    ?? session.attendees?.find((attendee) => Boolean(attendee.name?.trim()))?.name
   const statusVariant = sessionStatusVariant(session.battleStatus ?? session.status)
   const showsGroupCapacity = ['group_practice', 'group', 'intensive'].includes(getNormalizedSessionType(session))
   const coachStatusLabel = session.status === 'CANCELLED'
@@ -146,15 +192,48 @@ export function SessionCard({
     && Boolean(session.canEdit)
     && !isPastDate(session.scheduledAt)
     && session.status !== 'COMPLETED'
-    && session.status !== 'CANCELLED';
-  const canComplete = mode === 'coach' && Boolean(session.canEdit) && session.status !== 'COMPLETED' && session.status !== 'CANCELLED' && new Date(session.scheduledAt).getTime() <= Date.now();
-  const hasCompletionOutcome = session.status === 'COMPLETED' && (session.actualAttendeeCount !== undefined || Boolean(session.summary) || Boolean(session.outcomeTopic) || Boolean(session.recordingUrl));
+    && session.status !== 'CANCELLED'
+    && !isIndividualSlot;
+  const canDeleteFreeIndividualSlot = mode === 'coach'
+    && isIndividualSlot
+    && session.isDisposableIndividualSlot === true
+    && (session.status === 'SCHEDULED' || session.status === 'CANCELLED')
+    && !session.commerceRequestId
+  const canComplete = mode === 'coach' && !individualPresentation && Boolean(session.canEdit) && session.status !== 'COMPLETED' && session.status !== 'CANCELLED' && new Date(session.scheduledAt).getTime() <= Date.now();
+  const isCompletedUserGroupPractice = mode === 'user' && isCompletedGroupPractice;
+  const hasCompletionOutcome = !isIndividualSlot
+    && !isCompletedUserGroupPractice
+    && session.status === 'COMPLETED'
+    && (session.actualAttendeeCount !== undefined || Boolean(session.summary) || Boolean(session.outcomeTopic) || Boolean(session.recordingUrl));
   const canLoadCompletionDraft = Boolean(session.recordingAvailable || session.recordingUrl || session.audioFileId);
   const commercePresentation = getUserZoomCommercePresentation(session);
-  const paymentBadgeLabel = mode === 'user' && session.commerceStatus
+  const paymentBadgeLabel = isIndividualSlot
+    ? null
+    : mode === 'user' && session.commerceStatus
     ? commercePresentation.label
     : session.commerceLabel ?? getZoomPaymentBadgeLabel(session);
-  const hasCommerceState = Boolean(session.commerceLabel);
+  const hasCommerceState = !isIndividualSlot && Boolean(session.commerceLabel);
+  const detailTypeBadge = isGroupPractice
+    ? 'ГРУПОВА ПРАКТИКА'
+    : mode === 'user' && (isIndividual || isPrivate)
+    ? 'ІНДИВІДУАЛЬНА СЕСІЯ'
+    : isCoachIndividualPresentation
+    ? isIndividualSlot ? 'ІНДИВІДУАЛЬНИЙ СЛОТ' : 'ІНДИВІДУАЛЬНА'
+    : getSessionMeta(session);
+  const detailStatusBadge = isGroupPractice
+    ? commercePresentation.label
+    : mode === 'user' && (session.status === 'COMPLETED' || session.status === 'CANCELLED')
+      ? coachStatusLabel
+    : isCoachIndividualPresentation || isIndividualSlot
+    ? individualPresentation?.statusLabel ?? coachStatusLabel
+    : mode === 'user' && (isIndividual || isPrivate || isBattleReview)
+      ? commercePresentation.label
+      : coachStatusLabel;
+  const detailTitle = isCoachIndividualPresentation
+    ? individualPresentation?.title
+    : isIndividualSlot
+      ? individualPresentation?.title
+      : session.topic;
   const isOccupiedForUser = session.slotStatus === 'booked' || (session.remainingSlots ?? 1) <= 0;
   const isPendingIndividualPayment =
     mode === 'user'
@@ -165,6 +244,18 @@ export function SessionCard({
     && session.status !== 'COMPLETED'
     && session.status !== 'CANCELLED'
     && Boolean(session.checkoutUrl);
+  const isExpiredIndividualRequest =
+    mode === 'user'
+    && (isIndividual || isPrivate)
+    && session.commerceStatus === 'EXPIRED'
+    && session.status !== 'COMPLETED'
+    && session.status !== 'CANCELLED';
+  const canRepeatExpiredIndividualBooking = isExpiredIndividualRequest
+    && !isPastDate(session.scheduledAt)
+    && !isOccupiedForUser
+    && (session.remainingSlots ?? 1) > 0;
+  const isExpiredIndividualSlotUnavailable = isExpiredIndividualRequest
+    && !canRepeatExpiredIndividualBooking;
 
   const pendingPaymentAmount = session.priceCents !== undefined
     ? `${new Intl.NumberFormat('uk-UA', {
@@ -174,11 +265,7 @@ export function SessionCard({
     : null;
 
   const pendingPaymentDeadlineLabel = session.paymentDeadline
-    ? new Date(session.paymentDeadline).toLocaleTimeString('uk-UA', {
-        timeZone: 'Europe/Kyiv',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+    ? `${formatKyivTime(new Date(session.paymentDeadline))} (${KYIV_TIME_LABEL})`
     : null;
 
   useEffect(() => {
@@ -288,13 +375,26 @@ export function SessionCard({
     }
   };
 
+  const handleSelfReportedAttendanceChange = async (attended: boolean) => {
+    if (!session.canSelfReportAttendance || savingSelfReportedAttendance) return;
+
+    setSelfReportedError(null);
+    try {
+      const result = await saveSelfReportedAttendance({ sessionId: session.id, attended }).unwrap();
+      setSelfReportedAttended(result.selfReportedAttended === true);
+      setSelfReportedSaved(true);
+    } catch {
+      setSelfReportedError('Не вдалося зберегти. Спробуй ще раз.');
+    }
+  };
+
   if (isPendingIndividualPayment) {
     return (
       <div className="rounded-2xl border border-amber-300/25 bg-[#0d1117] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.38)]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-300">
-              ЗАПИТ СТВОРЕНО
+              {commercePresentation.label}
             </p>
             <h3 className="mt-1 truncate text-[16px] font-semibold text-white">
               {session.topic || 'Zoom-сесія'}
@@ -319,7 +419,7 @@ export function SessionCard({
         <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-400/[0.08] p-3">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[12px] font-semibold text-amber-200">
-              ОЧІКУЄ ОПЛАТИ
+              Оплата
             </span>
 
             {pendingPaymentAmount && (
@@ -381,57 +481,87 @@ export function SessionCard({
     );
   }
 
+  if (mode === 'user' && !isUserCalendarSession(session)) return null;
+
   return (
     <div className={['mt-2 rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]', statusVariant.surfaceClass].join(' ')}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getSessionBadgeClass(session)}`}>
-            {getSessionMeta(session)}
-          </span>
-          <span className={`ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusVariant.badgeClass}`}>
-            {mode === 'user' && (isIndividual || isPrivate || isBattleReview)
-              ? commercePresentation.label
-              : coachStatusLabel}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getSessionBadgeClass(session)}`}>
+              {detailTypeBadge}
+            </span>
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusVariant.badgeClass}`}>
+              {detailStatusBadge}
+            </span>
+          </div>
           <h3 className={['mt-2 text-[15px] font-semibold leading-snug', statusVariant.textClass].join(' ')}>
-            {session.topic}
+            {detailTitle}
           </h3>
-          <p className="text-[12px] text-white/50 mt-0.5">{formatUkrDate(session.scheduledAt)}</p>
-          {session.durationMinutes && (
+          <p className="text-[12px] text-white/50 mt-0.5">
+            {isCompletedGroupPractice
+              ? formatCompletedGroupPracticeDateTime(session.scheduledAt, session.durationMinutes)
+              : formatUkrDate(session.scheduledAt)}
+          </p>
+          {mode === 'coach' && isGroupPracticeSession(session) && session.previousScheduledAt && (
+            <div className="mt-1 text-[11px] font-semibold text-sky-200"><p>ПЕРЕНЕСЕНО · Було: {formatUkrDate(session.previousScheduledAt)}</p><p>Перенесено: {session.rescheduledAt ? formatUkrDate(session.rescheduledAt) : 'недоступно'}</p></div>
+          )}
+          {session.durationMinutes && !isCompletedGroupPractice && (
             <p className="text-[11px] text-white/30 mt-0.5">{session.durationMinutes} хв</p>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="text-white/30 hover:text-white/60 text-lg leading-none flex-shrink-0"
-        >
-          ×
-        </button>
+        {showCloseControl && (
+          <button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/60 text-lg leading-none flex-shrink-0"
+          >
+            ×
+          </button>
+        )}
       </div>
+
+      {mode === 'coach' && isGroupPracticeSession(session) && (
+        <div className="mb-3 space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/75">
+          <p className="font-semibold">Учасники</p>
+          {session.attendees?.length ? session.attendees.map((attendee) => (
+            <div key={attendee.userId}><p>{attendee.name?.trim() || 'Учасник'} · ЗАПИСАНИЙ</p><p>{attendee.question?.trim() || 'БЕЗ ПИТАННЯ'}</p></div>
+          )) : <p>Немає записаних учасників</p>}
+        </div>
+      )}
 
       {mode === 'coach' && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {(isIndividual || isPrivate) && (
+          {(isIndividual || isPrivate) && !isIndividualSlot && individualParticipantName && (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/50">
-              Учасник: {session.participantNames?.[0] ?? 'Учасник не призначений'}
+              Учасник: {individualParticipantName}
             </span>
           )}
-          {showsGroupCapacity && session.attendeesCount !== undefined && maxSlots !== undefined && (
+          {showsGroupCapacity && !isTerminalCoachGroupPractice && session.attendeesCount !== undefined && maxSlots !== undefined && (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/50">
               {session.attendeesCount} / {maxSlots} заброньовано
             </span>
           )}
-          {paymentBadgeLabel && (
+          {paymentBadgeLabel && !isTerminalCoachGroupPractice && (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/70">
               {paymentBadgeLabel}
             </span>
           )}
-          {session.notifiedAt24h && (
+          {individualPresentation?.kind === 'INDIVIDUAL_SESSION' && session.commerceStatus === 'PAID' && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-200">
+              Оплата: Оплачено
+            </span>
+          )}
+          {individualPresentation?.kind === 'INDIVIDUAL_SESSION' && session.zoomLink && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-100">
+              Zoom: Посилання готове
+            </span>
+          )}
+          {session.notifiedAt24h && !isTerminalCoachGroupPractice && (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400/80">
               ✓ 24h надіслано
             </span>
           )}
-          {session.notifiedAt2h && (
+          {session.notifiedAt2h && !isTerminalCoachGroupPractice && (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400/80">
               ✓ 2h надіслано
             </span>
@@ -445,9 +575,149 @@ export function SessionCard({
         </p>
       )}
 
+      {mode === 'user' && (isIndividual || isPrivate) && commercePresentation.detail && (
+        <div className="mb-3 rounded-xl border border-sky-300/20 bg-sky-500/[0.08] px-3 py-2 text-[12px] leading-snug text-sky-100">
+          {commercePresentation.detail}
+        </div>
+      )}
+
+      {isExpiredIndividualSlotUnavailable && (
+        <div className="mb-3 rounded-xl border border-rose-300/20 bg-rose-500/[0.08] px-3 py-2 text-[12px] leading-snug text-rose-100">
+          <p className="font-semibold">СЛОТ НЕДОСТУПНИЙ</p>
+          <p className="mt-1 text-rose-100/80">Обери інший доступний час для нового запиту.</p>
+        </div>
+      )}
+
+      {mode === 'coach' && isIndividualSlot && (
+        <div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-[12px] leading-snug text-white/70">
+          <p className="font-semibold text-white/90">{isCancelledIndividualSlot ? 'Скасований слот' : isExpiredIndividualSlot ? 'Слот завершився' : 'Вільний слот'}</p>
+          {isCancelledIndividualSlot ? (
+            <>
+              <p className="mt-1">Слот було скасовано.</p>
+              <p className="mt-1">Він не має записів, оплат чи історії участі.</p>
+            </>
+          ) : isExpiredIndividualSlot ? (
+            <>
+              <p className="mt-1">На цей час ніхто не записався.</p>
+              <p className="mt-1">Слот автоматично завершився.</p>
+              <p className="mt-1">Додаткових дій не потрібно.</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1">Це вільний слот у твоїй доступності.</p>
+              <p className="mt-1">Користувач ще не записався.</p>
+            </>
+          )}
+          {session.topic && session.topic !== 'Індивідуальна сесія' && (
+            <p className="mt-2 text-white/50">Тема: {session.topic}</p>
+          )}
+        </div>
+      )}
+
+      {mode === 'coach' && individualPresentation?.kind === 'INDIVIDUAL_SESSION' && (
+        <div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-[12px] leading-snug text-white/70">
+          {individualParticipantName && <p>Учасник: {individualParticipantName}</p>}
+          {session.topic && <p className={individualParticipantName ? 'mt-1' : ''}>Тема: {session.topic}</p>}
+          {individualPresentation.state === 'INDIVIDUAL_SESSION_PASSED' && (
+            <>
+              <p className="mt-2 font-semibold text-white/90">Сесію завершено</p>
+            </>
+          )}
+        </div>
+      )}
+
       {cancelError && <p role="alert" className="mb-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-100">{cancelError}</p>}
 
-      {hasCompletionOutcome && (
+      {isCompletedCoachGroupPractice && hasCompletionOutcome && (
+        <div className="mb-3 rounded-xl border border-emerald-400/15 bg-emerald-500/[0.06] px-3 py-3 text-[12px] leading-snug text-white/70">
+          {session.actualAttendeeCount !== undefined && (
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">УЧАСНИКИ</p>
+              <p className="mt-1 text-white/90">{session.actualAttendeeCount} були присутні</p>
+            </section>
+          )}
+          {session.outcomeTopic && (
+            <section className={session.actualAttendeeCount !== undefined ? 'mt-3' : ''}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">ТЕМА</p>
+              <p className="mt-1 text-white/90">{session.outcomeTopic}</p>
+            </section>
+          )}
+          {session.summary && (
+            <section className={(session.actualAttendeeCount !== undefined || session.outcomeTopic) ? 'mt-3' : ''}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">ПІДСУМОК</p>
+              <p className="mt-1 text-white/90">{session.summary}</p>
+            </section>
+          )}
+          {session.recordingUrl && session.canViewRecording && (
+            <a
+              href={session.recordingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex rounded-lg border border-sky-300/25 bg-sky-500/15 px-2.5 py-1 font-semibold text-sky-100 transition hover:bg-sky-500/25"
+            >
+              Відкрити запис
+            </a>
+          )}
+        </div>
+      )}
+
+      {isCompletedUserGroupPractice && (
+        <div className="mb-3 rounded-xl border border-emerald-400/15 bg-emerald-500/[0.06] px-3 py-3 text-[12px] leading-snug text-white/70">
+          <p className="font-semibold text-emerald-200">Практика завершена</p>
+          {session.isMyAttendanceConfirmed && (
+            <p className="mt-1">Твоя присутність підтверджена</p>
+          )}
+          {session.canSelfReportAttendance && (
+            <section className="mt-3 border-t border-emerald-300/15 pt-3">
+              <label className="flex cursor-pointer items-center gap-2 text-white/90">
+                <input
+                  type="checkbox"
+                  checked={selfReportedAttended}
+                  disabled={savingSelfReportedAttendance}
+                  onChange={(event) => void handleSelfReportedAttendanceChange(event.target.checked)}
+                  className="h-4 w-4 rounded border-white/35 bg-[#0b1424] text-emerald-400 focus:ring-emerald-300"
+                />
+                <span className="font-semibold">ПІДТВЕРДЖУЮ СВОЮ УЧАСТЬ У ПРАКТИЦІ</span>
+              </label>
+              {savingSelfReportedAttendance && <p className="mt-1 text-white/55">Зберігаємо…</p>}
+              {selfReportedError && <p role="alert" className="mt-1 text-red-200">{selfReportedError}</p>}
+              {selfReportedSaved && !savingSelfReportedAttendance && !selfReportedError && (
+                <p role="status" className="mt-1 text-emerald-200">Збережено</p>
+              )}
+            </section>
+          )}
+          {session.actualAttendeeCount !== undefined && (
+            <section className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">УЧАСНИКИ</p>
+              <p className="mt-1 text-white/90">{session.actualAttendeeCount} були присутні</p>
+            </section>
+          )}
+          {session.outcomeTopic && (
+            <section className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">ТЕМА</p>
+              <p className="mt-1 text-white/90">{session.outcomeTopic}</p>
+            </section>
+          )}
+          {session.summary && (
+            <section className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">ПІДСУМОК</p>
+              <p className="mt-1 text-white/90">{session.summary}</p>
+            </section>
+          )}
+          {session.recordingUrl && session.canViewRecording && (
+            <a
+              href={session.recordingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex rounded-lg border border-sky-300/25 bg-sky-500/15 px-2.5 py-1 font-semibold text-sky-100 transition hover:bg-sky-500/25"
+            >
+              Відкрити запис
+            </a>
+          )}
+        </div>
+      )}
+
+      {!isCompletedCoachGroupPractice && hasCompletionOutcome && (
         <div className="mb-3 rounded-xl border border-emerald-400/15 bg-emerald-500/[0.06] px-3 py-2 text-[12px] leading-snug text-white/70">
           <p className="font-semibold text-emerald-200">ЗАВЕРШЕНО</p>
           {session.actualAttendeeCount !== undefined && (
@@ -483,7 +753,8 @@ export function SessionCard({
       )}
 
       {/* Booking UI — user mode only */}
-      {mode === 'user' && !isPastDate(session.scheduledAt) && !isBattleReview && (
+      {mode === 'user' && (!isPastDate(session.scheduledAt) || isExpiredIndividualRequest) && !isBattleReview && !isTerminalGroupPractice
+        && !((isIndividual || isPrivate) && (session.status === 'COMPLETED' || session.status === 'CANCELLED')) && (
         <div className="mb-3">
           {isPrivate && (
             <div className="flex flex-col gap-2">
@@ -553,7 +824,7 @@ export function SessionCard({
               >
                 {hasFocusAccess === false
                   ? 'АКТИВУВАТИ ДОСТУП'
-                  : booking ? 'Додаємо...' : 'Записатися'}
+                  : booking ? 'Додаємо...' : 'ЗАПИСАТИСЯ НА ПРАКТИКУ'}
               </button>
             )
           )}
@@ -576,6 +847,25 @@ export function SessionCard({
                   unbookDisabled={!canUnbook || unbooking || cancelingPrivate}
                   unbookLoading={unbooking || cancelingPrivate}
                 />
+              ) : canRepeatExpiredIndividualBooking ? (
+                <button
+                  type="button"
+                  onClick={() => onRequestBooking?.(session)}
+                  className={`self-start text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
+                >
+                  ЗАБРОНЮВАТИ ЗНОВУ
+                </button>
+              ) : isExpiredIndividualRequest ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onFindAvailableSlots?.();
+                  }}
+                  className={`self-start text-[13px] transition-all ${PRIMARY_BOOKING_BUTTON_CLASS}`}
+                >
+                  ОБРАТИ ІНШИЙ ЧАС
+                </button>
               ) : !(session.isMyPendingPayment || hasCommerceState) && (
                 isOccupiedForUser ? (
                   <span className="text-[12px] px-2 py-1 rounded-full bg-white/[0.05] text-white/30 self-start">
@@ -727,45 +1017,52 @@ export function SessionCard({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {session.zoomLink ? (
-          <a
-            href={linkActive ? session.zoomLink : undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-disabled={!linkActive}
-            className={[
-              'flex-1 text-center text-[13px] font-semibold py-2 rounded-lg border transition-all',
-              linkActive
-                ? 'bg-[rgba(var(--accent-rgb),0.12)] border-[rgba(var(--accent-rgb),0.3)] text-[rgb(var(--accent-rgb))] hover:bg-[rgba(var(--accent-rgb),0.2)]'
-                : 'border-white/10 text-white/25 cursor-not-allowed pointer-events-none',
-            ].join(' ')}
-          >
-            ▶ Zoom
-          </a>
-        ) : (
-          <span className="flex-1 text-center text-xs text-white/60 mt-1 py-2">
-            Після запису ти отримаєш доступ до Zoom
-          </span>
-        )}
+      {!isTerminalGroupPractice && (
+        <div className="flex flex-wrap gap-2">
+          {session.zoomLink ? (
+            <a
+              href={linkActive ? session.zoomLink : undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-disabled={!linkActive}
+              className={[
+                'flex-1 text-center text-[13px] font-semibold py-2 rounded-lg border transition-all',
+                linkActive
+                  ? 'bg-[rgba(var(--accent-rgb),0.12)] border-[rgba(var(--accent-rgb),0.3)] text-[rgb(var(--accent-rgb))] hover:bg-[rgba(var(--accent-rgb),0.2)]'
+                  : 'border-white/10 text-white/25 cursor-not-allowed pointer-events-none',
+              ].join(' ')}
+            >
+              ▶ Zoom
+            </a>
+          ) : null}
 
-        {canCancelCoachSession && (
-          <>
+          {canCancelCoachSession && (
+            <>
+              <button
+                onClick={() => onEdit?.(session.id)}
+                className="px-3 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-[12px] text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all"
+              >
+                Редагувати
+              </button>
+              <button
+                onClick={() => onCancel?.(session.id)}
+                className="px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/[0.05] text-[12px] text-red-400/70 hover:bg-red-500/[0.1] transition-all"
+              >
+                СКАСУВАТИ СЕСІЮ
+              </button>
+            </>
+          )}
+          {canDeleteFreeIndividualSlot && (
             <button
-              onClick={() => onEdit?.(session.id)}
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-[12px] text-white/60 hover:text-white/90 hover:bg-white/[0.08] transition-all"
+              type="button"
+              onClick={() => onDeleteSlot?.(session.id)}
+              className="px-3 py-2 rounded-lg border border-rose-400/35 bg-rose-500/[0.08] text-[12px] font-semibold text-rose-100 hover:bg-rose-500/[0.16] transition-all"
             >
-              Редагувати
+              ВИДАЛИТИ СЛОТ
             </button>
-            <button
-              onClick={() => onCancel?.(session.id)}
-              className="px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/[0.05] text-[12px] text-red-400/70 hover:bg-red-500/[0.1] transition-all"
-            >
-              СКАСУВАТИ СЕСІЮ
-            </button>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

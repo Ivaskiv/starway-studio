@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import {
   assertCanonicalDbOperationAllowed,
@@ -32,9 +35,22 @@ test('canonical DB permits normal runtime and reviewed migrate deploy', () => {
   assert.doesNotThrow(() => assertPrismaCommandAllowed(['generate'], canonicalEnv))
 })
 
-test('local mode keeps destructive development commands available', () => {
-  for (const operation of ['migrate-dev', 'migrate-reset', 'db-push', 'seed', 'reset-user']) {
-    assert.doesNotThrow(() => assertCanonicalDbOperationAllowed(operation, { CANONICAL_DB: 'false' }))
+test('isolated local mode keeps destructive development commands available', async () => {
+  const isolatedRoot = mkdtempSync(join(tmpdir(), 'canonical-db-guard-'))
+  const isolatedGuardPath = join(isolatedRoot, 'scripts', 'canonical-db-guard.mjs')
+
+  try {
+    mkdirSync(dirname(isolatedGuardPath), { recursive: true })
+    copyFileSync(guardPath, isolatedGuardPath)
+    const { assertCanonicalDbOperationAllowed: assertIsolatedOperationAllowed } = await import(
+      pathToFileURL(isolatedGuardPath).href,
+    )
+
+    for (const operation of ['migrate-dev', 'migrate-reset', 'db-push', 'seed', 'reset-user']) {
+      assert.doesNotThrow(() => assertIsolatedOperationAllowed(operation, { CANONICAL_DB: 'false' }))
+    }
+  } finally {
+    rmSync(isolatedRoot, { recursive: true, force: true })
   }
 })
 

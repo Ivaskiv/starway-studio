@@ -25,12 +25,12 @@ const zoomApiSource =
 
 const routeSource =
   readSource(
-    'src/features/zoom/routes/CleanMiniAppZoomCalendar.tsx',
+    'src/features/zoom/routes/MiniAppCalendarRoute.tsx',
   )
 
-const controllerSource =
+const sessionOrchestratorSource =
   readSource(
-    'src/features/zoom/hooks/useCleanMiniAppZoomCalendar.ts',
+    'src/features/auth/context/SessionOrchestratorContext.tsx',
   )
 
 describe('zoom miniapp runtime ownership', () => {
@@ -40,7 +40,7 @@ describe('zoom miniapp runtime ownership', () => {
     )
 
     expect(appRouterSource).toContain(
-      'element={<CleanMiniAppZoomCalendar />}',
+      'element={<MiniAppCalendarRoute />}',
     )
 
     expect(routeConfigSource).toContain(
@@ -48,7 +48,7 @@ describe('zoom miniapp runtime ownership', () => {
     )
 
     expect(routeConfigSource).toContain(
-      'element: <Navigate to="/miniapp/zoom-calendar" replace />',
+      'element: <ZoomCalendarPage />',
     )
 
     expect(miniAppPageSource).not.toContain(
@@ -60,7 +60,7 @@ describe('zoom miniapp runtime ownership', () => {
     )
   })
 
-  it('keeps telegram auth in the canonical zoom controller only', () => {
+  it('keeps Telegram auth restoration in the shared session orchestrator', () => {
     expect(miniAppLayoutSource).not.toContain(
       'useTelegramMiniAppAuthMutation',
     )
@@ -69,28 +69,20 @@ describe('zoom miniapp runtime ownership', () => {
       'telegramMiniAppAuth({ initData',
     )
 
-    expect(controllerSource).toContain(
-      'useTelegramMiniAppAuthMutation',
-    )
-
-    expect(controllerSource).toContain(
-      'telegramMiniAppAuth({ initData: nextInitData })',
-    )
-
-    expect(controllerSource).not.toContain(
-      'dispatch(setLoading())',
+    expect(sessionOrchestratorSource).toContain(
+      'const restoreSession = useCallback',
     )
 
     expect(routeSource).not.toContain(
-      'dispatch(setLoading())',
+      'useTelegramMiniAppAuthMutation',
     )
 
     expect(routeSource).toContain(
-      'useCleanMiniAppZoomCalendar',
+      'useSessionOrchestrator',
     )
 
     expect(routeSource).toContain(
-      'CleanMiniAppZoomCalendarView',
+      'const { authRestoreStatus, restoreSession } = useSessionOrchestrator()',
     )
   })
 

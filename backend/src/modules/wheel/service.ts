@@ -48,6 +48,7 @@ const APP_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173'
 const processedWheelWorkflowIds = new Set<string>()
 
 const SCORE_ERROR = 'wheel_invalid_spheres_set'
+const SCORE_VALUE_ERROR = 'wheel_invalid_score'
 
 export function validateScores(scores: WheelScore[]) {
   if (scores.length !== FIXED_SPHERES.length) {
@@ -57,6 +58,10 @@ export function validateScores(scores: WheelScore[]) {
   const ids = new Set(scores.map(s => s.categoryId))
   for (const id of FIXED_SPHERES) {
     if (!ids.has(id)) throw new Error(SCORE_ERROR)
+  }
+
+  if (scores.some(({ score }) => !Number.isFinite(score) || score < 0 || score > 10)) {
+    throw new Error(SCORE_VALUE_ERROR)
   }
 }
 

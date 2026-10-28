@@ -2,34 +2,20 @@ import type { Context } from 'telegraf'
 
 import { AB_TEST_ACTIONS } from '@/packages/abTestActions.js'
 import { BLOCK10_FOCUS } from '@/products/ab-system/content/abTest.results.js'
-import { resolveCanonicalFocusPaymentView } from '@/products/ab-system/telegram/flow.js'
 import { renderTelegramContentMessage } from '@/products/ab-system/telegram/views.js'
 import { buildFaqKeyboard } from '@/products/ab-system/content/abTest.faq.js'
 import {
-  buildAbTestProgressPatch,
-  resolveAbTestNextQuestion,
-  resolveAbTestQuestionOrder,
-} from '@/core/state-machine/abTestFoundation.js'
-import { getAbTestQuestion } from '@/products/ab-system/content/abTest.questions.js'
-import {
   escapeHtml,
-  formatMobileAnswerButtonText,
-  formatMobileAnswerListForMessage,
   formatSubscriptionDate,
-  isTestPaymentEnabled,
 } from '@/products/ab-system/telegram/helpers.js'
-import { loadAbTestProgress, saveAbTestProgress } from '@/products/ab-system/telegram/progress.js'
+import { loadAbTestProgress } from '@/products/ab-system/telegram/progress.js'
 import {
-  FOCUS_ALREADY_ACTIVE_MSG,
   FOCUS_RESEND_MISSING_USER_MSG,
   FOCUS_RESEND_NO_SUB_MSG,
   FOCUS_RESEND_SUCCESS_MSG,
 } from '@/products/ab-system/content/abTest.focus.js'
-import { buildEcosystemPaymentCheckoutSession } from '@/modules/subscriptions/payments/business/checkout.js'
 import { hasActiveFocusSubscription } from '@/modules/subscriptions/payments/focus-access.js'
 import { prisma } from '@/db/client.js'
-import { trackEvent } from '@/modules/events/service.js'
-import { scheduleFollowups } from '@/products/ab-system/telegram/scheduler.js'
 import { buildAbsystemStatusFlow, buildAbTestQuestionFlow } from '@/core/flow-builder/flowBuilder.js'
 import type { TelegramFlow } from '@/core/flow-builder/flowTemplates.js'
 import { composeTelegramUx } from '@/core/rendering/uxComposition.js'
@@ -39,7 +25,6 @@ import { resolveBehavioralContinuity, type BehavioralContinuityResolution } from
 import { absystemContent } from '@/products/absystem/config/content.js'
 import { createOnceInviteLink } from '@/products/focus/payments/inviteLink.js'
 import { markAbTestPaymentSuccess } from '@/products/ab-system/telegram/markers.js'
-import { getDevTestPaymentButton } from '../../keyboards.js'
 import type { IAgentGateway } from '../../../ai/gateway/index.js'
 import type { TelegramTextRoute } from '../../router/messageRouter.js'
 import { buildIntelligenceConversationResponse } from './intelligenceScenario.js'
@@ -106,29 +91,6 @@ function createResponseFromTelegramFlow(flow: TelegramFlow): ConversationRespons
   })
 }
 
-function buildAbTestQuestionResponse(questionId: string, revision: number): ConversationResponse {
-  const question = getAbTestQuestion(questionId as never)
-  const questionOrder = resolveAbTestQuestionOrder()
-  const questionNumber = questionOrder.indexOf(question.question_id) + 1
-
-  return createConversationResponse({
-    text: `<b>Питання ${questionNumber} з ${questionOrder.length}</b>\n\n<b>${escapeHtml(question.prompt)}</b>\n\n${escapeHtml(formatMobileAnswerListForMessage(question.answers))}`,
-    buttons: question.answers.map((answer) => ({
-      kind: 'callback',
-      label: formatMobileAnswerButtonText(answer.text),
-      value: `ab_test_answer:${question.question_id}:${answer.id}:${revision}`,
-    })),
-    telemetry: {
-      scenario: 'start_test',
-    },
-    analytics: {
-      intent: 'start_test',
-      questionId,
-      revision,
-    },
-  })
-}
-
 function buildFocusInfoResponse(): ConversationResponse {
   return createConversationResponse({
     text: renderTelegramContentMessage('', [...BLOCK10_FOCUS.blocks]).trim(),
@@ -157,44 +119,11 @@ async function buildStartTestResponse(context: TelegramConversationScenarioConte
     })
   }
 
-  const current = await loadAbTestProgress(context.userId)
-  const now = new Date()
-  const nextQuestionFromState =
-    resolveAbTestNextQuestion(current)?.question_id ?? 'q1'
-  const next =
-    current.status === 'completed' && current.result_key
-      ? (() => {
-          const cloned = { ...current }
-          cloned.started_at = now.toISOString()
-          return cloned
-        })()
-      : current.status === 'active' &&
-          (current.current_question_id || current.answers.length > 0)
-        ? buildAbTestProgressPatch(current, {
-            current_question_id:
-              current.current_question_id ?? nextQuestionFromState,
-            stage: 'S2_TEST_QUESTIONS',
-            last_callback_key: 'ab_test:start',
-            last_event_at: now.toISOString(),
-          })
-        : buildAbTestProgressPatch(current, {
-            status: 'idle',
-            stage: 'S1_TEST_STARTED',
-            current_question_id: 'q1',
-            started_at: current.started_at ?? now.toISOString(),
-            revision: current.revision + 1,
-            questions_shown: current.questions_shown.includes('q1')
-              ? current.questions_shown
-              : [...current.questions_shown, 'q1'],
-            last_callback_key: 'ab_test:start',
-            last_message_key: 'TEST_RESULT_STATE',
-            last_event_at: now.toISOString(),
-          })
-
-  await saveAbTestProgress(context.userId, next)
-
-  const questionIdToOpen = next.current_question_id ?? nextQuestionFromState
-  return buildAbTestQuestionResponse(questionIdToOpen, next.revision)
+  return createConversationResponse({
+    nextActions: [{ type: 'ab_test_callback', action: AB_TEST_ACTIONS.START }],
+    telemetry: { handled: true, scenario: 'start_test', owner: 'ab_test_callback' },
+    analytics: { intent: 'start_test' },
+  })
 }
 
 function buildOpenFaqResponse(): ConversationResponse {
@@ -207,73 +136,16 @@ function buildOpenFaqResponse(): ConversationResponse {
 }
 
 async function buildFocusPaymentResponse(context: TelegramConversationScenarioContext): Promise<ConversationResponse> {
-  const resolvedUserId = context.userId
-  if (!resolvedUserId) {
+  if (!context.userId) {
     return createConversationResponse({
       telemetry: { handled: true, scenario: 'focus_payment', reason: 'missing_user' },
       analytics: {},
     })
   }
 
-  const hasActive = await hasActiveFocusSubscription(resolvedUserId)
-  if (hasActive) {
-    const inviteUrl = String(process.env.FOCUS_TELEGRAM_CHANNEL_INVITE_LINK ?? '').trim()
-    return createConversationResponse({
-      text: FOCUS_ALREADY_ACTIVE_MSG(inviteUrl),
-      buttons: [
-        ...(inviteUrl ? [{ kind: 'url' as const, label: '🔗 ПЕРЕЙТИ В КАНАЛ ФОКУС', value: inviteUrl }] : []),
-        { kind: 'callback', label: '🔄 ВІДНОВИТИ ДОСТУП', value: 'resend_focus_block12' },
-        { kind: 'callback', label: '📋 МОЯ ПІДПИСКА', value: 'ab_test:subscription' },
-        { kind: 'callback', label: '← МЕНЮ', value: 'ab_test:menu' },
-      ],
-      cards: [],
-      media: [],
-      nextActions: [],
-      telemetry: { scenario: 'focus_payment', state: 'already_active' },
-      analytics: { intent: 'focus_payment' },
-    })
-  }
-
-  const [session1m, session3m] = await Promise.all([
-    buildEcosystemPaymentCheckoutSession('focus', '1month', resolvedUserId, 'telegram'),
-    buildEcosystemPaymentCheckoutSession('focus', '3month', resolvedUserId, 'telegram'),
-  ])
-
-  const progressForCheckout = await loadAbTestProgress(resolvedUserId).catch(() => null)
-  const { blocks: paymentBlocks } = await resolveCanonicalFocusPaymentView(resolvedUserId)
-  const paymentText = renderTelegramContentMessage('', paymentBlocks).trim()
-
-  const testPaymentButton = isTestPaymentEnabled()
-    ? getDevTestPaymentButton()
-    : null
-
-  if (progressForCheckout) {
-    await scheduleFollowups(resolvedUserId, progressForCheckout, 'S4_FOCUS_INVITE').catch(() => undefined)
-  }
-
-  await trackEvent({
-    userId: resolvedUserId,
-    type: 'PAYMENT_OPENED',
-    source: 'telegram',
-    state: 'S5_PAYMENT',
-    productId: 'focus',
-    payload: {
-      checkout_urls: [session1m.checkoutUrl, session3m.checkoutUrl],
-      source_action: 'open_focus_payment',
-    },
-  }).catch(() => undefined)
-
   return createConversationResponse({
-    text: paymentText,
-    buttons: [
-      { kind: 'url', label: BLOCK10_FOCUS.cta_1m, value: session1m.checkoutUrl },
-      { kind: 'url', label: BLOCK10_FOCUS.cta_3m, value: session3m.checkoutUrl },
-      ...(testPaymentButton
-        ? [{ kind: 'url' as const, label: testPaymentButton.text, value: testPaymentButton.url }]
-        : []),
-      { kind: 'callback', label: '⚠️ ПРОБЛЕМА З ОПЛАТОЮ', value: 'focus:payment_issue' },
-    ],
-    telemetry: { scenario: 'focus_payment' },
+    nextActions: [{ type: 'ab_test_callback', action: AB_TEST_ACTIONS.FOCUS_PAY }],
+    telemetry: { handled: true, scenario: 'focus_payment', owner: 'ab_test_callback' },
     analytics: { intent: 'focus_payment' },
   })
 }

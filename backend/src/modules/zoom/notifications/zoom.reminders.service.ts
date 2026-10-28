@@ -4,6 +4,7 @@ import { prisma } from '../../../db/client.js'
 import { buildZoomCalendarUrl } from '../urls.js'
 import { NotificationEvent } from '../../../services/notifications/NotificationEvent.js'
 import { notificationService } from '../../../services/notifications/NotificationService.js'
+import { isGroupPracticeRequest } from '../shared/zoom.session-selection.js'
 
 type ZoomReminderWindowId = 'ZOOM_REMINDER_2H' | 'ZOOM_REMINDER_5M'
 type ZoomReminderSession = {
@@ -38,10 +39,12 @@ function resolveReminderCtaUrl(windowId: ZoomReminderWindowId, session: ZoomRemi
 function resolveReminderMessageBody(
   windowId: ZoomReminderWindowId,
   session: ZoomReminderSession,
+  isGroupPractice: boolean,
 ): string {
   const requests = asSessionRequests(session.requests)
   const zoomLink = String(requests.zoomLink ?? '').trim()
-  const topic = session.topic?.trim() || 'Індивідуальна Zoom-сесія'
+  const topic = session.topic?.trim() || (isGroupPractice ? 'Групова Zoom-практика' : 'Індивідуальна Zoom-сесія')
+  const sessionLabel = isGroupPractice ? '🟣 ГРУПОВА ПРАКТИКА' : '🟣 Індивідуальна сесія'
 
   if (windowId === 'ZOOM_REMINDER_2H') {
     return [
@@ -49,7 +52,7 @@ function resolveReminderMessageBody(
       '',
       'Твоя Zoom-сесія розпочнеться через 2 години.',
       '',
-      '🟣 Індивідуальна сесія',
+      sessionLabel,
       `💬 ${topic}`,
       '',
       zoomLink
@@ -63,7 +66,7 @@ function resolveReminderMessageBody(
     '',
     'Твоя Zoom-сесія починається зовсім скоро.',
     '',
-    '🟣 Індивідуальна сесія',
+    sessionLabel,
     `💬 ${topic}`,
     '',
     zoomLink
@@ -177,7 +180,7 @@ async function enqueueReminderWindow(
         cta_text: 'ОПЛАТИТИ',
         payment_url: paymentUrl,
       } : {
-        message_body: resolveReminderMessageBody(windowId, session),
+        message_body: resolveReminderMessageBody(windowId, session, storedSession.type === 'GROUP' && isGroupPracticeRequest(storedSession.requests)),
         cta_text: resolveReminderCtaText(windowId, session),
       }),
       sessionId: session.id,
@@ -265,6 +268,58 @@ export async function rescheduleReminders(
 ): Promise<void> {
   await cancelExistingReminders(userId, session.id)
   await scheduleReminders(userId, session)
+}
+
+function formatKyivDateTime(value: Date): string {
+  return new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(value)
+}
+
+/**
+ * Group Practice keeps the same attendee records on reschedule.  This owner
+ * invalidates only pending reminder jobs for the old time, builds the existing
+ * reminder cadence for the new time, then queues one durable announcement per
+ * attendee.  It never sends Telegram directly.
+ */
+export async function rescheduleGroupPracticeNotifications(input: {
+  session: ZoomReminderSession
+  attendeeUserIds: string[]
+  oldScheduledAt: Date
+}): Promise<void> {
+  const recipientIds = [...new Set(input.attendeeUserIds)]
+  const newTime = formatKyivDateTime(input.session.scheduledAt)
+  const oldTime = formatKyivDateTime(input.oldScheduledAt)
+  const calendarUrl = buildZoomCalendarUrl({ zoomRole: 'user' })
+
+  for (const userId of recipientIds) {
+    await rescheduleReminders(userId, input.session)
+    await notificationService.schedule(
+      NotificationEvent.AB_TEST_FOLLOWUP,
+      userId,
+      new Date(),
+      {
+        flow_timer_id: 'ZOOM_GROUP_PRACTICE_RESCHEDULED',
+        message_title: 'ПРАКТИКУ ПЕРЕНЕСЕНО',
+        message_body: [
+          input.session.topic,
+          `Новий час: ${newTime}`,
+          `Було: ${oldTime}`,
+          'Час за Києвом',
+        ].join('\n'),
+        cta_text: 'ВІДКРИТИ МОЇ СЕСІЇ',
+        cta_url: calendarUrl,
+        sessionId: input.session.id,
+        request_fingerprint: `zoom-group-practice-rescheduled:${input.session.id}:${input.oldScheduledAt.getTime()}:${input.session.scheduledAt.getTime()}:${userId}`,
+      },
+    )
+  }
 }
 
 export async function enqueueDueReminderWindow(

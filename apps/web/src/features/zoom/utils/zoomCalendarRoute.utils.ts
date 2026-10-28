@@ -1,7 +1,9 @@
 import type { ZoomWeekOverview } from '@/features/zoom/types/zoom.types'
 import {
   addKyivDays,
+  formatKyivTime,
   getKyivDateKey,
+  KYIV_TIME_LABEL,
   KYIV_TIMEZONE,
 } from './zoomDateTime.utils'
 
@@ -35,11 +37,7 @@ export function resolveNearestSessionDateLabel(
   const todayKey = getKyivDateKey(now)
   const tomorrowKey = addKyivDays(todayKey, 1)
 
-  const timeLabel = sessionDate.toLocaleTimeString('uk-UA', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: KYIV_TIMEZONE,
-  })
+  const timeLabel = `${formatKyivTime(sessionDate)} (${KYIV_TIME_LABEL})`
 
   if (sessionDateKey === todayKey) {
     return `Сьогодні · ${timeLabel}`

@@ -192,6 +192,7 @@ describe('buildHomeScreen — /start funnel regression', () => {
         { text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' },
         { text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_GOAL' },
       ],
+      [{ text: 'ПРОБНИЙ ZOOM — 1 ГРН', callback_data: 'trial_zoom' }],
     ])
     const buttonLabels = screen.reply_markup.inline_keyboard.flat().map((button) => button.text)
     expect(buttonLabels).not.toContain('ЗАПИСАТИСЯ')
@@ -220,6 +221,27 @@ describe('buildHomeScreen — /start funnel regression', () => {
     expect(screen.text).toContain('<b>ТВІЙ ZOOM-КАЛЕНДАР</b>')
     expect(screen.text).not.toContain('&lt;Віра&gt;')
     expect(screen.text).not.toContain('28 вересня о 19:00 за Києвом')
+  })
+
+  it('keeps the trial Zoom CTA out of the production home screen', async () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    mockLoadAbTestProgress.mockResolvedValue({
+      status: 'completed',
+      result_key: 'goal',
+    })
+
+    try {
+      const screen = await buildHomeScreen(
+        makeSnapshot({ lifecycleState: 'TEST_DONE', testResultType: 'goal' }),
+        fakeCtx,
+      )
+
+      expect(screen.reply_markup.inline_keyboard.flat().map((button) => button.text))
+        .not.toContain('ПРОБНИЙ ZOOM — 1 ГРН')
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv
+    }
   })
 
   it('OFFER_SHOWN keeps offer CTA separate from TEST_DONE', async () => {

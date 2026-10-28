@@ -132,6 +132,16 @@ function makeFakeCtx(overrides: Partial<{
   return { ctx: ctx as any, reply, sendMessage }
 }
 
+function expectLegacyReplyKeyboardRemoved(reply: ReturnType<typeof vi.fn>) {
+  expect(reply).toHaveBeenCalledWith(
+    '\u2060',
+    expect.objectContaining({
+      parse_mode: 'HTML',
+      reply_markup: { remove_keyboard: true },
+    }),
+  )
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockPlanMessage.mockResolvedValue({ message_id: 1 })
@@ -159,7 +169,7 @@ beforeEach(() => {
 })
 
 describe('handleStart — targeted home screen routing', () => {
-  it('TEST_DONE state now renders conversational returning home with canonical no-access CTA', async () => {
+  it('TEST_DONE state renders the canonical no-access calendar home', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-state')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -182,32 +192,26 @@ describe('handleStart — targeted home screen routing', () => {
     const { ctx, reply, sendMessage } = makeFakeCtx({ chatId: 113, fromId: 113, updateId: 1013 })
     await handleStart(ctx)
 
-    expect(reply).not.toHaveBeenCalled()
+    expectLegacyReplyKeyboardRemoved(reply)
     expect(sendMessage).not.toHaveBeenCalled()
     expect(mockSendResultSnapshot).not.toHaveBeenCalled()
     expect(mockPlanMessage).toHaveBeenCalledTimes(1)
     const [, , transition, text, replyMarkup] = mockPlanMessage.mock.calls[0]
     expect(transition).toBe('start_home_screen')
-    expect(text).toContain('Тестова, рада бачити тебе знову.')
-    expect(text).toContain('Минулого разу твій тест показав <b>СТАН</b>:')
+    expect(text).toContain('Тестова\n\n<b>ТВІЙ ZOOM-КАЛЕНДАР</b>')
     expect(text).not.toContain('\n\n\n')
     expect(mockPlanMessage.mock.calls[0][5]).toBe('HTML')
-    expect(text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
-    expect(text).toContain('Зараз активного доступу до Zoom-практик немає.')
-    expect(text).toContain('Найближча групова Zoom-практика ще не запланована.')
-    expect(replyMarkup).toEqual({
-      inline_keyboard: [
-        [{ text: 'ОБРАТИ ФОРМАТ У ФОКУСІ', callback_data: 'open_focus_payment' }],
-        [{ text: 'ПРО ПРОГРАМУ', callback_data: 'show_inside_STATE' }],
-      ],
-    })
+    expect(text).toContain('Щоб записатися на Zoom-сесію, активуй доступ.')
+    expect(JSON.stringify(replyMarkup)).toMatch(/ZOOM КАЛЕНДАР/)
+    expect(JSON.stringify(replyMarkup)).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
+    expect(JSON.stringify(replyMarkup)).toMatch(/show_inside_STATE/)
     expect(JSON.stringify(replyMarkup)).not.toContain('ЗАГЛЯНУТИ')
     expect(JSON.stringify(replyMarkup)).not.toContain('ЗАПИСАТИСЯ НА ZOOM')
-    expect(JSON.stringify(replyMarkup)).not.toContain('zoom-calendar')
+    expect(JSON.stringify(replyMarkup)).toContain('zoom-calendar?zoomRole=user')
     expect(mockSyncAccessAwareChatEntryPoints).toHaveBeenCalledWith('113', 'user-state')
   })
 
-  it('TEST_DONE + NO_ACCESS uses conversational returning home instead of result replay', async () => {
+  it('TEST_DONE + NO_ACCESS uses calendar home instead of result replay', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-1')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -230,19 +234,18 @@ describe('handleStart — targeted home screen routing', () => {
     const { ctx, reply } = makeFakeCtx()
     await handleStart(ctx)
 
-    expect(reply).not.toHaveBeenCalled()
+    expectLegacyReplyKeyboardRemoved(reply)
     expect(mockPlanMessage).toHaveBeenCalledTimes(1)
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
     expect(mockSendResultSnapshot).not.toHaveBeenCalled()
     const [, , transition, text, replyMarkup] = mockPlanMessage.mock.calls[0]
     expect(transition).toBe('start_home_screen')
-    expect(text).toContain('Минулого разу твій тест показав <b>ДІЯ</b>:')
-    expect(text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
-    expect(text).toContain('Зараз активного доступу до Zoom-практик немає.')
+    expect(text).toContain('<b>ТВІЙ ZOOM-КАЛЕНДАР</b>')
+    expect(text).toContain('Щоб записатися на Zoom-сесію, активуй доступ.')
     expect(JSON.stringify(replyMarkup)).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
   })
 
-  it('FOCUS_PAID + completed progress + plain start uses conversational returning home', async () => {
+  it('FOCUS_PAID + completed progress + plain start uses calendar home', async () => {
     mockResolveLinkedUserId.mockResolvedValue('user-focus-1')
     mockLoadAbTestProgress.mockResolvedValue({
       status: 'completed',
@@ -279,7 +282,7 @@ describe('handleStart — targeted home screen routing', () => {
     const { ctx, reply } = makeFakeCtx({ chatId: 120, fromId: 120, updateId: 1007 })
     await handleStart(ctx)
 
-    expect(reply).not.toHaveBeenCalled()
+    expectLegacyReplyKeyboardRemoved(reply)
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
     expect(mockPlanMessage).toHaveBeenCalledTimes(1)
     expect(mockSendResultSnapshot).not.toHaveBeenCalled()
@@ -290,7 +293,7 @@ describe('handleStart — targeted home screen routing', () => {
     expect(text).toContain('Ти вже перейшла від результату до Zoom-практики і зараз можеш обрати найближчу зустріч.')
     expect(text).toContain('Зараз у тебе активна підписка ФОКУС до 15 листопада 2026 р.')
     expect(text).toContain('Найближча групова Zoom-практика — 3 серпня о 19:00 за Києвом.')
-    expect(JSON.stringify(options)).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
+    expect(JSON.stringify(options)).toMatch(/ZOOM КАЛЕНДАР/)
     expect(JSON.stringify(options)).toMatch(/ПРО ПРОГРАМУ/)
     expect(mockSyncAccessAwareChatEntryPoints).toHaveBeenCalledWith('120', 'user-focus-1')
   })
@@ -325,12 +328,12 @@ describe('handleStart — targeted home screen routing', () => {
     const { ctx, reply } = makeFakeCtx({ chatId: 121, fromId: 121, updateId: 1011 })
     await handleStart(ctx)
 
-    expect(reply).not.toHaveBeenCalled()
+    expectLegacyReplyKeyboardRemoved(reply)
     expect(mockPlanMessage).toHaveBeenCalledTimes(1)
     const [, , transition, text, options] = mockPlanMessage.mock.calls[0]
     expect(transition).toBe('start_home_screen')
-    expect(text).toContain('Ти вже побачила свій результат, але до Zoom-практики ще не переходила.')
-    expect(text).toContain('Зараз активного доступу до Zoom-практик немає. Попередній доступ завершився 1 липня 2026 р.')
+    expect(text).toContain('<b>ТВІЙ ZOOM-КАЛЕНДАР</b>')
+    expect(text).toContain('Щоб записатися на Zoom-сесію, активуй доступ.')
     expect(JSON.stringify(options)).toMatch(/ОБРАТИ ФОРМАТ У ФОКУСІ/)
     expect(JSON.stringify(options)).not.toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
   })
@@ -398,11 +401,11 @@ describe('handleStart — targeted home screen routing', () => {
     expect(mockPlanMessage).toHaveBeenCalledTimes(2)
 
     const firstCall = mockPlanMessage.mock.calls[0]
-    expect(firstCall[3]).toContain('Зараз активного доступу до Zoom-практик немає.')
+    expect(firstCall[3]).toContain('Щоб записатися на Zoom-сесію, активуй доступ.')
 
     const secondCall = mockPlanMessage.mock.calls[1]
     expect(secondCall[3]).toContain('Зараз у тебе активна підписка ФОКУС до 15 листопада 2026 р.')
-    expect(JSON.stringify(secondCall[4])).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
+    expect(JSON.stringify(secondCall[4])).toMatch(/ZOOM КАЛЕНДАР/)
   })
 
   it('completed test without access does not fall back to intro', async () => {
@@ -427,13 +430,13 @@ describe('handleStart — targeted home screen routing', () => {
     const { ctx, reply } = makeFakeCtx({ chatId: 101, fromId: 101, updateId: 1001 })
     await handleStart(ctx)
 
-    expect(reply).not.toHaveBeenCalled()
+    expectLegacyReplyKeyboardRemoved(reply)
     expect(mockPlanMessage).toHaveBeenCalledTimes(1)
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
     expect(mockSendResultSnapshot).not.toHaveBeenCalled()
     const [, , transition, text] = mockPlanMessage.mock.calls[0]
     expect(transition).toBe('start_home_screen')
-    expect(text).toContain('Минулого разу твій тест показав <b>ДІЯ</b>:')
+    expect(text).toContain('<b>ТВІЙ ZOOM-КАЛЕНДАР</b>')
   })
 
   it('completed test with magic-link payload keeps payload route priority', async () => {
@@ -460,7 +463,7 @@ describe('handleStart — targeted home screen routing', () => {
     const { ctx, reply } = makeFakeCtx({ chatId: 112, fromId: 112, updateId: 1006 })
     await handleStart(ctx)
 
-    expect(reply).not.toHaveBeenCalled()
+    expectLegacyReplyKeyboardRemoved(reply)
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
     expect(generateMagicLink).toHaveBeenCalledWith('user-ml')
     expect(mockPlanMessage).toHaveBeenCalledTimes(1)
@@ -506,7 +509,7 @@ describe('handleStart — targeted home screen routing', () => {
     const { ctx, reply } = makeFakeCtx({ chatId: 202, fromId: 202, updateId: 1002 })
     await handleStart(ctx)
 
-    expect(reply).not.toHaveBeenCalled()
+    expectLegacyReplyKeyboardRemoved(reply)
     expect(mockRenderCurrentView).not.toHaveBeenCalled()
     expect(mockSendResultSnapshot).not.toHaveBeenCalled()
     const [, , , text, options] = mockPlanMessage.mock.calls[0]
@@ -514,7 +517,7 @@ describe('handleStart — targeted home screen routing', () => {
     expect(text).toContain('Минулого разу твій тест показав <b>РІШЕННЯ</b>:')
     expect(text).toContain('Зараз у тебе активна підписка ФОКУС до 15 листопада 2026 р.')
     const flat = JSON.stringify(options)
-    expect(flat).toMatch(/ОБРАТИ ZOOM-ПРАКТИКУ/)
+    expect(flat).toMatch(/ZOOM КАЛЕНДАР/)
   })
 
   it('new user without first_name asks for name first', async () => {

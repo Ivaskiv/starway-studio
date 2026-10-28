@@ -2,6 +2,7 @@ import { Prisma, ZoomStatus } from '@starway/db/prisma-client'
 import { prisma } from '../../../db/client.js'
 import { activateAbsystemTrialAfterFirstZoom } from '../../access/service.js'
 import type { ZoomAttendeeWithUser, ZoomSession, ZoomSessionAttendee } from '../types.js'
+import { isGroupPracticeRequest } from '../shared/zoom.session-selection.js'
 
 export type ZoomCompletionSource = 'manual' | 'zoom'
 
@@ -128,6 +129,41 @@ export async function markAttended(
     })
 
     return attendee
+  })
+}
+
+/**
+ * A participant-owned historical checkpoint. It deliberately never writes the
+ * coach/Zoom-verified `attended` field and has no entitlement or reward side
+ * effects.
+ */
+export async function saveSelfReportedAttendance(input: {
+  userId: string
+  sessionId: string
+  attended: boolean
+}) {
+  return prisma.$transaction(async (tx) => {
+    const attendee = await tx.zoomSessionAttendee.findUnique({
+      where: { sessionId_userId: { sessionId: input.sessionId, userId: input.userId } },
+      include: { session: { select: { scheduledAt: true, status: true, type: true, requests: true } } },
+    })
+    if (!attendee) throw new Error('ATTENDANCE_CHECKPOINT_FORBIDDEN')
+
+    const session = attendee.session
+    const eligibleGroupPractice = session.type === 'GROUP' || isGroupPracticeRequest(session.requests)
+    if (!eligibleGroupPractice || session.status !== ZoomStatus.COMPLETED || session.scheduledAt >= new Date()) {
+      throw new Error('ATTENDANCE_CHECKPOINT_INELIGIBLE')
+    }
+
+    if (attendee.selfReportedAttended === input.attended) {
+      return { attendee, idempotent: true }
+    }
+
+    const updated = await tx.zoomSessionAttendee.update({
+      where: { id: attendee.id },
+      data: { selfReportedAttended: input.attended, selfReportedAt: new Date() },
+    })
+    return { attendee: updated, idempotent: false }
   })
 }
 

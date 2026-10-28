@@ -253,13 +253,17 @@ describe('persisted commerce approval core', () => {
     expect(expiredCheckoutPage.status).toBe(410)
     expect(expiredCheckoutPage.html).toContain('Час оплати вичерпано')
     expect(expiredCheckoutPage.html).not.toContain('Commerce checkout expired or unavailable')
+    await owner.expireDueIndividualPaymentWindows(new Date(), db)
     expect((await owner.getPendingForCoach(expertId, db)).some(row => row.id === approved.id)).toBe(false)
+    expect((await db.zoomCommerceRequest.findUniqueOrThrow({ where: { id: approved.id } })).status).toBe('EXPIRED')
+    expect((await db.checkoutSession.findUniqueOrThrow({ where: { id: checkout.id } })).status).toBe('EXPIRED')
+    await expect(owner.markRequestPaid({ ...payment(approved), userId: approved.requesterUserId }, db))
+      .rejects.toThrow('COMMERCE_ILLEGAL_TRANSITION')
     const fresh = await create({ requesterUserId: approved.requesterUserId })
     expect(fresh.id).not.toBe(approvedRequest.id)
     expect(fresh.id).not.toBe(rejectedRequest.id)
     const { request } = await owner.approveRequest(fresh.id, expertId, db)
     expect(request.status).toBe('APPROVED_PENDING_PAYMENT')
-    expect((await db.zoomCommerceRequest.findUniqueOrThrow({ where: { id: approved.id } })).status).toBe('EXPIRED')
     expect((await owner.resolveByPaymentReference(request.checkoutOrderReference!, db))?.id).toBe(fresh.id)
     const otherRequesterId = request.requesterUserId === userId ? otherId : userId
     for (const wrong of [{ userId: otherRequesterId }, { zoomSessionId: randomUUID() }, { amount: 59 }, { currency: 'EUR' }, { paymentKind: 'focus' }]) {

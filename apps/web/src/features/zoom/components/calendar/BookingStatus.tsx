@@ -13,19 +13,28 @@ export function BookingStatus({
   unbookDisabled?: boolean;
   unbookLoading?: boolean;
 }) {
+  const canAddToCalendar = session.isMyBooking === true
+    && session.status === 'SCHEDULED'
+    && new Date(session.scheduledAt).getTime() > Date.now()
+    && session.commerceStatus !== 'EXPIRED'
+    && session.commerceStatus !== 'CANCELLED'
+    && session.commerceStatus !== 'REJECTED'
+
   return (
     <div className="flex flex-col gap-2 mt-2">
       <div className="text-green-400 text-sm font-semibold">
         Ти записана
       </div>
 
-      <button
-        className="bg-white/10 hover:bg-white/20 text-white text-sm px-3 py-2 rounded-lg"
-        onClick={() => onAddToCalendar(session)}
-        type="button"
+      {canAddToCalendar && (
+        <button
+          className="bg-white/10 hover:bg-white/20 text-white text-sm px-3 py-2 rounded-lg"
+          onClick={() => onAddToCalendar(session)}
+          type="button"
         >
-        Додати в календар
-      </button>
+          Додати в календар
+        </button>
+      )}
 
       {onUnbook ? (
         <button

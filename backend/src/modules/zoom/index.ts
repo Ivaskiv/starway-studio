@@ -40,6 +40,7 @@ export {
 
 export {
   markAttended,
+  saveSelfReportedAttendance,
   completeZoomSession,
   savePostSessionReport,
   getSessionAttendees,

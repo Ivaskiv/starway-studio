@@ -57,12 +57,12 @@ describe('calendar source ownership', () => {
     expect(render({ from, to, sessions: [] })).toBe('<div></div>')
   })
 
-  it.each(['start', 'end'] as const)('uses its own query when the source misses the week %s', boundary => {
+  it.each(['start', 'end'] as const)('keeps the parent source authoritative when it misses the week %s', boundary => {
     expect(render({
       from: boundary === 'start' ? new Date(Date.parse(from) + 1).toISOString() : from,
       to: boundary === 'end' ? new Date(Date.parse(to) - 1).toISOString() : to,
       sessions: [session],
-    })).toBe('<div>own-query-session</div>')
+    })).toBe('<div>parent-session</div>')
   })
 
   it('retains the standalone calendar query', () => {

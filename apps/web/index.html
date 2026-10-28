@@ -80,6 +80,27 @@
 
 <script id="telegram-ngrok-app-loader">
   (function () {
+    function renderTelegramBundleBootstrapFailure() {
+      var root = document.getElementById('root');
+      if (!root) return;
+
+      root.innerHTML =
+        '<main role="alert" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#07111f;color:#f8fafc;font-family:system-ui,-apple-system,sans-serif;text-align:center">' +
+          '<section style="max-width:360px;border:1px solid rgba(148,163,184,.24);border-radius:16px;padding:24px;background:#0f1b2d">' +
+            '<h1 style="margin:0;font-size:18px">Не вдалося завантажити застосунок</h1>' +
+            '<p style="margin:12px 0 0;color:#cbd5e1;font-size:14px;line-height:1.5">Перевірте з’єднання та спробуйте ще раз.</p>' +
+            '<button id="telegram-bundle-bootstrap-retry" type="button" style="margin-top:20px;border:1px solid #38bdf8;border-radius:10px;padding:10px 16px;background:#0284c7;color:#fff;font-weight:700">СПРОБУВАТИ ЩЕ РАЗ</button>' +
+          '</section>' +
+        '</main>';
+
+      var retryButton = document.getElementById('telegram-bundle-bootstrap-retry');
+      if (retryButton) {
+        retryButton.addEventListener('click', function () {
+          window.location.reload();
+        });
+      }
+    }
+
     var params = new URLSearchParams(window.location.search);
     var version = params.get('v') || String(Date.now());
 
@@ -128,6 +149,7 @@
           console.error(
             '[TELEGRAM_CLASSIC_APP_LOAD_FAILED]'
           );
+          renderTelegramBundleBootstrapFailure();
         };
 
         document.body.appendChild(script);
@@ -137,6 +159,7 @@
           '[TELEGRAM_NGROK_BOOT_FAILED]',
           error
         );
+        renderTelegramBundleBootstrapFailure();
       });
   })();
 </script>

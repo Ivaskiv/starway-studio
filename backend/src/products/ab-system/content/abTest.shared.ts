@@ -265,6 +265,13 @@ const FOCUS_INCLUDED_ITEMS = [
   'Записи всіх Zoom-розборів',
 ] as const
 
+const FOCUS_INCLUDED_STATE_ITEMS = [
+  '4 живі Zoom-розбори  щомісяця;',
+  'закритий Telegram-чат;',
+  'мою підтримку і підтримку учасниць;',
+  'записи всіх Zoom-розборів.',
+] as const
+
 const FOCUS_PRICE_COPY = {
   oneMonth: '1 місяць — 33 €',
   threeMonths: '3 місяці — 69 € (23 € на місяць)',
@@ -345,6 +352,8 @@ export const AB_TEST_FOCUS_INCLUDED_TEXT =
   `**${AB_TEST_FOCUS_INCLUDED_HEADER}**\n\n${AB_TEST_FOCUS_INCLUDED_LINES.join('\n')}`
 export const AB_TEST_FOCUS_INCLUDED_STANDARD_TEXT =
   `**У ФОКУС ти отримуєш:**\n${formatFocusListItems(FOCUS_INCLUDED_ITEMS, '•').join('\n')}\nЯкщо між Zoom-розборами виникне питання або складна ситуація, ти завжди можеш написати в чат.`
+export const AB_TEST_FOCUS_INCLUDED_STATE_TEXT =
+  `**У ФОКУС ти отримуєш:**\n${FOCUS_INCLUDED_STATE_ITEMS.map(item => `**• ${item}**`).join('\n')}\nТобі не потрібно чекати наступної зустрічі, якщо з'явилося запитання або складна ситуація. Ти завжди можеш написати в чат.`
 export const AB_TEST_FOCUS_PRICING_TEXT =
   `**Найближчий Zoom-розбір** уже цього тижня.\n\n${AB_TEST_FOCUS_TITLE}.\n\n${FOCUS_PRICE_COPY.oneMonth}.\n${FOCUS_PRICE_COPY.threeMonths}.\n${FOCUS_PRICE_COPY.oneYear}.\n\n↩ Якщо після першого Zoom-розбору зрозумієш, що тобі не підходить, **я поверну гроші**.`
 export const AB_TEST_FOCUS_PROOF_PRICING_TEXT =
